@@ -1,234 +1,179 @@
-# Repository summary — `Pacco.APIGateway`
+---
+title: "Repository Summary — Pacco.APIGateway"
+project_key: "Common Architecture"
+project_name: "Common Architecture"
+stage: "architecture_discovery"
+repository: "Pacco.APIGateway"
+status: "evidence-based inventory"
+---
 
-**Repository:** `Pacco.APIGateway` (workspace clone path: `hianshul100_Pacco.APIGateway`)
-**Deployable:** `api-gateway` (also known as: `Pacco.APIGateway`, the Pacco API Gateway, image `devmentors/pacco.apigateway`). **Repository: `Pacco.APIGateway`, path: `src/Pacco.APIGateway`.**
-**Upstream URL:** https://github.com/hianshul100/Pacco.APIGateway
-**Base ref analysed:** `feature/12915/aidlc`
+# Pacco.APIGateway
+
+**Primary name:** `Pacco.APIGateway` (aliases used in this file: `api-gateway` — the Docker Compose service name and the Jaeger `serviceName`; `api` — the app name in `services.yml` / `prod-services.yml`).
+Repository: `Pacco.APIGateway`, path: `hianshul100_Pacco.APIGateway/`
+Deployable project: `Pacco.APIGateway`, path: `hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/Pacco.APIGateway.csproj`
 
 ---
 
-## 1. Primary purpose of the repo
+## 1. Primary purpose
 
-The single public entry point for the Pacco platform. It is a **configuration-driven API gateway** built on the `Ntrada` library: routes, authentication, CORS, tracing, and Swagger are declared in YAML rather than in code. It fronts all ten backend services, terminates JWT authentication, and — in its asynchronous profile — converts write requests into RabbitMQ messages instead of proxying them downstream.
+The single public entry point for the platform. It terminates client HTTP calls, validates JWTs, and either proxies the request to a downstream service or publishes it to RabbitMQ. Routing is entirely declarative: there are no controllers, only YAML.
 
-**Evidence:** `src/Pacco.APIGateway/Program.cs`, `src/Pacco.APIGateway/ntrada.yml`, `src/Pacco.APIGateway/ntrada-async.yml`, `README.md`.
+Evidence: `src/Pacco.APIGateway/ntrada.yml`, `src/Pacco.APIGateway/ntrada-async.yml`, `src/Pacco.APIGateway/Program.cs`.
 
-## 2. Main runtime/service type
+## 2. Runtime / service type
 
-ASP.NET Core (`netcoreapp3.1`) HTTP service. Listens on port `5000` locally and on container port `80`. It has no domain layer, no database, and no `Application`/`Core`/`Infrastructure` project split — a single `.csproj` plus four small infrastructure classes.
+ASP.NET Core `netcoreapp3.1` process hosting **Ntrada** `0.4.*`, a YAML-configured API gateway. Long-running HTTP server, listening on `http://*:80` in the container and `5000` on the host.
 
-**Evidence:** `src/Pacco.APIGateway/Pacco.APIGateway.csproj` (`<TargetFramework>netcoreapp3.1</TargetFramework>`), `Dockerfile` (`ENV ASPNETCORE_URLS http://*:80`), `compose/services.yml` in the `Pacco` repository (`5000:80`).
+Evidence: `src/Pacco.APIGateway/Pacco.APIGateway.csproj`, `Dockerfile`.
 
-## 3. Key entrypoints
+## 3. Entrypoints
 
-| Entrypoint | File | Notes |
-|---|---|---|
-| `Program.Main` | `src/Pacco.APIGateway/Program.cs` | Reads the config file name from the `NTRADA_CONFIG` environment variable, else the first CLI argument, else defaults to `ntrada.yml`; calls `AddNtrada(...)` with the correlation/span/hook builders, `AddConvey().AddMetrics().AddSecurity()`, then `app.UseNtrada()` and `.UseLogging()` |
-| `ntrada.yml` | `src/Pacco.APIGateway/ntrada.yml` | **Synchronous profile** — all routes proxy downstream over HTTP (`use: downstream`) |
-| `ntrada-async.yml` | `src/Pacco.APIGateway/ntrada-async.yml` | **Asynchronous profile** — write routes publish to RabbitMQ (`use: rabbitmq`) |
-| `ntrada.docker.yml`, `ntrada-async.docker.yml` | same directory | Container variants (hostnames point at container names instead of `localhost`) |
-| `scripts/start.sh`, `scripts/start-async.sh` | `scripts/` | Select the sync or async profile when running locally |
-| `Dockerfile` | repo root | `ENTRYPOINT dotnet Pacco.APIGateway.dll`, `ENV NTRADA_CONFIG ntrada.docker` |
+| Entrypoint | Path |
+|---|---|
+| `Program.cs` (`Main` → `CreateWebHostBuilder` → `UseNtrada()`) | `src/Pacco.APIGateway/Program.cs` |
+| Container entrypoint `dotnet Pacco.APIGateway.dll` | `Dockerfile` |
+| `scripts/start.sh` (synchronous mode) | `scripts/start.sh` |
+| `scripts/start-async.sh` (asynchronous mode) | `scripts/start-async.sh` |
+| `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh` | `scripts/` |
 
-The environment variable `NTRADA_CONFIG` is the **single most important runtime switch in the platform** — it decides whether writes are synchronous HTTP or asynchronous messages. `compose/services.yml` (in the `Pacco` repository) sets it to `ntrada-async.docker.yml`.
+## 4. Modules / packages
 
-## 4. Important modules/packages
+Single project. Source folders: `Infrastructure/` containing `CorrelationContext.cs`, `CorrelationContextBuilder.cs`, `HttpRequestHook.cs`, `SpanContextBuilder.cs`.
 
-- `Program.cs` — composition root (≈40 lines; the whole gateway).
-- `Infrastructure/CorrelationContext.cs`, `Infrastructure/CorrelationContextBuilder.cs` — build the `Correlation-Context` value (correlation id, user id, resource id, trace id, span context, connection id, name, created-at) attached to every forwarded request and published message.
-- `Infrastructure/SpanContextBuilder.cs` — extracts the Jaeger span context so downstream services join the same trace.
-- `Infrastructure/HttpRequestHook.cs` — hook invoked per proxied request.
-- `certs/localhost.cer` — the public certificate used to validate JWTs in the container profile.
-- `Pacco.rest`, `Pacco-sample-scenario.rest` — REST Client scratch files; `Pacco-sample-scenario.rest` is the end-to-end happy-path walkthrough the root README points readers at.
-
-**NuGet packages** (`Pacco.APIGateway.csproj`): `Ntrada 0.4.*`, `Ntrada.Extensions.Cors`, `Ntrada.Extensions.CustomErrors`, `Ntrada.Extensions.Jwt`, `Ntrada.Extensions.RabbitMq`, `Ntrada.Extensions.Swagger`, `Ntrada.Extensions.Tracing` (all `0.4.*`), `Convey.Logging`, `Convey.Metrics.AppMetrics`, `Convey.Security`, `NetEscapades.Configuration.Yaml 2.0.0`.
+NuGet packages (`Pacco.APIGateway.csproj`): `Ntrada 0.4.*`, `Ntrada.Extensions.Cors 0.4.*`, `Ntrada.Extensions.CustomErrors 0.4.*`, `Ntrada.Extensions.Jwt 0.4.*`, `Ntrada.Extensions.RabbitMq 0.4.*`, `Ntrada.Extensions.Swagger 0.4.*`, `Ntrada.Extensions.Tracing 0.4.*`, `Convey.Logging 0.4.*`, `Convey.Metrics.AppMetrics 0.4.*`, `Convey.Security 0.4.*`, `NetEscapades.Configuration.Yaml 2.0.0`.
 
 ## 5. External integrations
 
-| Integration | How | Evidence |
+- **RabbitMQ** — in async mode only (`ntrada-async.yml`, `extensions.rabbitmq`).
+- **Jaeger** — `extensions.tracing`, `serviceName: api-gateway`, `udpHost: localhost`, `udpPort: 6831`, `sampler: const`.
+- **Prometheus** — via `Convey.Metrics.AppMetrics`, `appsettings.json` `metrics` block.
+- **Fabio load balancer** — `loadBalancer.enabled: false`, `url: localhost:9999` (present but switched off in the committed configuration).
+- **All ten downstream services** — reached by `localUrl` `localhost:5001` … `localhost:5009`.
+
+## 6. Data stores / state
+
+None. The gateway is stateless: no database, no ORM, no migration tool, no collections or tables, no cache. There is therefore no cross-domain foreign-key coupling to report.
+
+Evidence: `appsettings.json` contains only a `metrics` block; the project references no persistence package.
+
+## 7. Messaging / async / events
+
+**System:** RabbitMQ, enabled only in the asynchronous configuration `ntrada-async.yml` / `ntrada-async.docker.yml`.
+
+Settings: `connectionName: api-gateway`, `hostnames: localhost`, `port: 5672`, `virtualHost: /`, `username: guest`, `password: guest`, `exchange.type: topic`, `messageContext.enabled: true` with `header: message_context`, `spanContextHeader: span_context`.
+
+Exchanges published to, taken from the `config.exchange` value on each write route: `availability`, `customers`, `deliveries`, `identity`, `orders`, `parcels`, `vehicles`.
+
+**Payloads:** the gateway does not define message payload classes. It forwards the request body, adding route-bound values declared per route — for example `bind: customerId:@user_id` and generated identifiers such as `resourceId: {property: orderId, generate: true}`. The concrete field set of each published message is owned by the receiving service. The exact wire payload the gateway emits is **unknown — requires runtime capture**.
+
+## 8. APIs exposed / consumed
+
+Exposed modules and routes (`ntrada.yml`; the async file mirrors the same paths):
+
+| Module | Path prefix | Routes |
 |---|---|---|
-| Ten backend services over HTTP | `use: downstream` with `service:` + `localUrl:` per module | `ntrada.yml` modules block |
-| RabbitMQ | `extensions.rabbitmq` — `connectionName: api-gateway`, `hostnames: [localhost]`, port `5672`, vhost `/`, `exchange.type: topic`, `messageContext.enabled: true` (header `message_context`), `spanContextHeader: span_context` | `ntrada-async.yml` |
-| Jaeger | `extensions.tracing` — `serviceName: api-gateway`, UDP `localhost:6831`, `sampler: const` | `ntrada.yml` |
-| Seq | `logger.seq.serverUrl: http://localhost:5341` | `appsettings.json` |
-| Prometheus | `metrics.prometheusEnabled: true`, `database: pacco`, `env: local`, 5-second interval; `influxEnabled: false` | `appsettings.json` |
-| Fabio (load balancer) | `loadBalancer.enabled: false`, `url: localhost:9999` — **declared but disabled** in the committed config | `ntrada.yml` |
+| `home` | `/` | `GET /` returns the literal value `Welcome to Pacco API!` |
+| `availability` | `availability` | proxied to `availability-service` |
+| `customers` | `customers` | `GET /` (role `admin`), `GET /me` → `customers-service/customers/@user_id`, `GET /{customerId}` (role `admin`), `GET /{customerId}/state` (role `admin`), `POST /` (binds `customerId:@user_id`, payload `create_customer`, schema `create_customer.schema`), `PUT /{customerId}/state/{state}` (role `admin`) |
+| `deliveries` | `deliveries` | `POST /` with `resourceId: {property: deliveryId, generate: true}` |
+| `identity` | `identity` | `GET /users/{userId}` (role `admin`), `GET /me`, `POST /sign-up` (`auth: false`, generates `userId`), `POST /sign-in` (`auth: false`) |
+| `operations` | `operations` | `GET /{operationId}` with **`auth: false`** |
+| `orders` | `orders` | `GET /` → `orders-service/orders?customerId=@user_id`, `POST /` (binds `customerId:@user_id`, generates `orderId`), `POST`/`DELETE /{orderId}/parcels/{parcelId}`, `POST /{orderId}/vehicles/{vehicleId}` |
+| `parcels` | `parcels` | `GET /` → `parcels-service/parcels?customerId=@user_id`, `GET /volume`, `POST /` (generates `parcelId`, binds `customerId:@user_id`) |
+| `pricing` | `pricing` | `GET /` → `pricing-service/pricing?customerId=@user_id` |
+| `vehicles` | `vehicles` | `GET /` (`onSuccess.data: response.data.items`), `GET /{vehicleId}`, `POST /` (generates `vehicleId`), `PUT /{vehicleId}`, `DELETE /{vehicleId}` |
 
-## 6. Data stores / state handling
+Consumed: the ten service base URLs above. Swagger is published at route prefix `docs` with name `Pacco`, title `Pacco API`, version `v1`.
 
-**None.** The gateway is stateless: no database client, no cache client, no repository code, no ORM, no migration tool, no table or collection names. The only persistent artefact it writes is the rolling log file `logs/logs.txt`.
+Sample request collections are committed at `Pacco.rest` and `Pacco-sample-scenario.rest`.
 
-**Evidence:** `Pacco.APIGateway.csproj` has no persistence package; `appsettings.json` has no connection string.
+## 9. Deployment / runtime clues
 
-## 7. Messaging / async / event mechanisms
+`Dockerfile`: two-stage build from `mcr.microsoft.com/dotnet/core/sdk:3.1` publishing to `mcr.microsoft.com/dotnet/core/aspnet:3.1`, `ENV ASPNETCORE_URLS http://*:80`, `ENV ASPNETCORE_ENVIRONMENT docker`, `ENV NTRADA_CONFIG ntrada.docker`, `ENTRYPOINT dotnet Pacco.APIGateway.dll`.
 
-**System: RabbitMQ**, enabled only in the asynchronous profile (`ntrada-async.yml` / `ntrada-async.docker.yml`).
+CI: `.travis.yml` runs `./scripts/build.sh` then `./scripts/test.sh`, and on success `./scripts/dockerize.sh`, on dotnet `3.1.100`, dist `xenial`, branches `master` and `develop`.
 
-The gateway is **publish-only** — it declares no queues and subscribes to nothing. Each write route sets `use: rabbitmq` and `config.exchange: <exchange>`; Ntrada derives the routing key from the route's `payload`/`routingKey` convention. The exchanges it publishes to, by module:
+Environment-specific settings files: `appsettings.json`, `appsettings.development.json`, `appsettings.docker.json`, `appsettings.local.json`; gateway configurations `ntrada.yml`, `ntrada.docker.yml`, `ntrada-async.yml`, `ntrada-async.docker.yml`.
 
-| Module | Exchange | Routes that publish |
-|---|---|---|
-| `availability` | `availability` | `POST /resources`, `POST /resources/{resourceId}/reservations/{dateTime}`, `DELETE /resources/{resourceId}/reservations/{dateTime}`, `DELETE /resources/{resourceId}` |
-| `customers` | `customers` | `POST /`, `PUT /{customerId}/state/{state}` |
-| `deliveries` | `deliveries` | `POST /`, `POST /{deliveryId}/fail`, `POST /{deliveryId}/complete`, `POST /{deliveryId}/registrations` |
-| `identity` | `identity` | `POST /sign-up` |
-| `orders` | `orders` | `POST /`, `DELETE /{orderId}`, `POST /{orderId}/parcels/{parcelId}`, `DELETE /{orderId}/parcels/{parcelId}`, `POST /{orderId}/vehicles/{vehicleId}` |
-| `parcels` | `parcels` | `POST /`, `DELETE /{parcelId}` |
-| `vehicles` | `vehicles` | `POST /`, `PUT /{vehicleId}`, `DELETE /{vehicleId}` |
+## 10. Security / auth clues
 
-Read routes (`GET`) and `POST /sign-in` remain `use: downstream` HTTP even in the async profile, because they must return data synchronously.
+- JWT bearer validation via `Ntrada.Extensions.Jwt`: `validIssuer: pacco`, `validateIssuer: true`, `validateAudience: false`, `validateLifetime: true`.
+- `auth.enabled: true`, `auth.global: false` — authentication is applied per route, not globally.
+- Role claim type `http://schemas.microsoft.com/ws/2008/06/identity/claims/role`; `admin` role required on the customer administration routes and `identity/users/{userId}`.
+- A certificate is committed at `src/Pacco.APIGateway/certs/localhost.cer`.
 
-**Message payload key fields:** the gateway forwards the HTTP body plus the values bound by `bind:` (notably `customerId:@user_id`) and `resourceId.generate: true`. The concrete command contracts live in the owning service repositories; the canonical name catalogue is `messages.json` in `Pacco.Services.Operations`.
+**Security findings** (reported, not remediated in this stage):
 
-**Correlation/trace propagation:** every published message carries the `message_context` header (built by `CorrelationContextBuilder`) and the `span_context` header.
+1. A symmetric JWT signing key is committed in clear text under `extensions.jwt.issuerSigningKey` in both `ntrada.yml` and `ntrada-async.yml`. Anyone with repository access can mint valid tokens for the whole platform.
+2. CORS is configured with `allowedOrigins: '*'` together with `allowCredentials: true` (`extensions.cors`).
+3. RabbitMQ credentials `guest` / `guest` are committed in `ntrada-async.yml`.
+4. `GET operations/{operationId}` is exposed with `auth: false`, so operation status is readable without a token by anyone who knows or guesses an operation identifier.
 
-## 8. APIs exposed or consumed
+## 11. Observability / logging / tracing
 
-**Exposed — the complete public HTTP surface of the Pacco platform** (upstream path → downstream target, from `ntrada.yml`). `auth: true` unless noted.
+- Distributed tracing to Jaeger, with `generateRequestId` and `generateTraceId` enabled and `Request-ID`, `Resource-ID`, `Trace-ID`, `Total-Count` exposed as CORS response headers.
+- `SpanContextBuilder.cs` and `CorrelationContextBuilder.cs` construct the correlation and span context propagated to downstream services and to RabbitMQ.
+- Logging via `Convey.Logging`.
+- Metrics via `Convey.Metrics.AppMetrics` with `prometheusEnabled: true`, `database: "pacco"`, `env: "local"`, `interval: 5`.
+- HTTP retry policy: `http.retries: 2`, `interval: 2.0`, `exponential: true`.
 
-| Upstream | Method | Downstream | Notes |
-|---|---|---|---|
-| `/` | GET | — | `use: return_value`, "Welcome to Pacco API!" (async profile: "Welcome to Pacco API [async]!"); `auth: false` |
-| `/availability/resources` | GET | `availability-service/resources` | |
-| `/availability/resources/{resourceId}` | GET | `availability-service/resources/{resourceId}` | |
-| `/availability/resources` | POST | `availability-service/resources` | |
-| `/availability/resources/{resourceId}/reservations/{dateTime}` | POST | same | binds `customerId: @user_id` |
-| `/availability/resources/{resourceId}/reservations/{dateTime}` | DELETE | same | |
-| `/availability/resources/{resourceId}` | DELETE | same | |
-| `/customers` | GET | `customers-service/customers` | claim `role: admin` |
-| `/customers/me` | GET | `customers-service/customers/@user_id` | |
-| `/customers/{customerId}` | GET | `customers-service/customers/{customerId}` | claim `role: admin` |
-| `/customers/{customerId}/state` | GET | `customers-service/customers/{customerId}/state` | claim `role: admin` |
-| `/customers` | POST | `customers-service/customers` | binds `customerId: @user_id`; `payload: create_customer`; `schema: create_customer.schema` |
-| `/customers/{customerId}/state/{state}` | PUT | same | claim `role: admin` |
-| `/deliveries/{deliveryId}` | GET/POST(`/fail`,`/complete`,`/registrations`) | `deliveries-service/deliveries/...` | `POST /deliveries` generates `deliveryId` |
-| `/identity/users/{userId}` | GET | `identity-service/users/{userId}` | claim `role: admin` |
-| `/identity/me` | GET | `identity-service/me` | |
-| `/identity/sign-up` | POST | `identity-service/sign-up` | **`auth: false`**, generates `userId` |
-| `/identity/sign-in` | POST | `identity-service/sign-in` | **`auth: false`**, response `content-type: application/json` |
-| `/operations/{operationId}` | GET | `operations-service/operations/{operationId}` | **`auth: false`** |
-| `/orders` | GET | `orders-service/orders?customerId=@user_id` | |
-| `/orders/{orderId}` | GET / DELETE | `orders-service/orders/{orderId}` | |
-| `/orders` | POST | `orders-service/orders` | generates `orderId`, binds `customerId: @user_id` |
-| `/orders/{orderId}/parcels/{parcelId}` | POST / DELETE | same | |
-| `/orders/{orderId}/vehicles/{vehicleId}` | POST | same | |
-| `/parcels` | GET | `parcels-service/parcels?customerId=@user_id` | |
-| `/parcels/volume` | GET | `parcels-service/parcels/volume` | |
-| `/parcels/{parcelId}` | GET / DELETE | `parcels-service/parcels/{parcelId}` | |
-| `/parcels` | POST | `parcels-service/parcels` | generates `parcelId`, binds `customerId: @user_id` |
-| `/pricing` | GET | `pricing-service/pricing?customerId=@user_id` | |
-| `/vehicles` | GET | `vehicles-service/vehicles` | `onSuccess.data: response.data.items` (unwraps the paged result) |
-| `/vehicles/{vehicleId}` | GET / PUT / DELETE | `vehicles-service/vehicles/{vehicleId}` | |
-| `/vehicles` | POST | `vehicles-service/vehicles` | generates `vehicleId` |
-| `/docs` | GET | — | Swagger UI (`extensions.swagger.routePrefix: docs`) |
+## 12. Files carrying major architecture decisions; feature flags
 
-**Consumed:** the ten service HTTP APIs above, addressed by Consul service name (`availability-service` … `vehicles-service`) with `localUrl` fallbacks `localhost:5001`–`localhost:5009`. No service is registered for `ordermaker-service` in `ntrada.yml` — **`Pacco.Services.OrderMaker` is not reachable through the gateway.**
+- `src/Pacco.APIGateway/ntrada.yml` — the synchronous routing contract for the whole platform.
+- `src/Pacco.APIGateway/ntrada-async.yml` — the asynchronous variant that turns writes into RabbitMQ publishes.
+- `src/Pacco.APIGateway/Infrastructure/HttpRequestHook.cs` — request mutation hook.
+- `src/Pacco.APIGateway/Infrastructure/SpanContextBuilder.cs` and `CorrelationContextBuilder.cs` — trace propagation decision.
+- `Dockerfile` — which configuration ships by default.
 
-**Notable API behaviours:** `useLocalUrl: true`, `passQueryString: true`, `forwardRequestHeaders: true`, `forwardResponseHeaders: true`, `generateRequestId: true`, `generateTraceId: true`, `useForwardedHeaders: true`; HTTP retries `2` with exponential backoff; exposed response headers `Request-ID`, `Resource-ID`, `Trace-ID`, `Total-Count`.
-
-## 9. Deployment/runtime clues
-
-- `Dockerfile`: multi-stage, `mcr.microsoft.com/dotnet/core/sdk:3.1` → `mcr.microsoft.com/dotnet/core/aspnet:3.1`; `ENV ASPNETCORE_URLS http://*:80`, `ASPNETCORE_ENVIRONMENT docker`, `NTRADA_CONFIG ntrada.docker`; `ENTRYPOINT ["dotnet", "Pacco.APIGateway.dll"]`.
-- Composed as `api-gateway` on `5000:80` with `NTRADA_CONFIG=ntrada-async.docker.yml` (`Pacco/compose/services.yml`), i.e. **the composed platform runs the asynchronous profile**, overriding the Dockerfile default.
-- CI: `.travis.yml` — `language: csharp`, `mono: none`, `dist: xenial`, `dotnet: 3.1.100`, `branches.only: [master, develop]`, `script: ./scripts/build.sh`, `after_success: ./scripts/dockerize.sh`. **No GitHub Actions workflow exists.**
-- Helper scripts: `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh`, `scripts/start-async.sh`.
-- **No Kubernetes manifests, no Helm chart, no Terraform.**
-
-## 10. Security/auth clues
-
-- **JWT bearer authentication** via `Ntrada.Extensions.Jwt`. `auth.enabled: true`, `auth.global: false` — authentication is opt-in **per route**, so any route that omits `auth: true` is public.
-- `validIssuer: pacco`; role claim type `http://schemas.microsoft.com/ws/2008/06/identity/claims/role`; `validateAudience: false`; `validateLifetime: true`.
-- **A symmetric `issuerSigningKey` literal is committed in `ntrada.yml` and `ntrada-async.yml`.** The identical literal also appears in `Pacco.Services.Identity/src/Pacco.Services.Identity.Api/appsettings.json` (the token issuer) and `Pacco.Services.Operations/src/Pacco.Services.Operations.Api/appsettings.json`. The value is not reproduced here. This is a committed shared signing secret; anyone with repository read access can mint valid platform tokens.
-- `certs/localhost.cer` is committed for the certificate-based validation path.
-- **CORS is fully open:** `extensions.cors.allowedOrigins: ['*']`, with `allowCredentials` and the exposed-header list above.
-- `extensions.customErrors.includeExceptionMessage: true` — exception messages are returned to callers.
-- **Unauthenticated routes:** `GET /`, `POST /identity/sign-up`, `POST /identity/sign-in` (expected), and **`GET /operations/{operationId}` (`auth: false`)** — operation status, including `userId`, `name`, `state`, `code`, and `reason`, is readable by anyone who can guess or observe an operation id.
-- Role-gated routes (`role: admin`): customer listing and lookup, customer state read and write, and `GET /identity/users/{userId}`.
-- `@user_id` binding is used to force `customerId` from the token rather than the request body on customer, order, and parcel creation — a deliberate anti-IDOR measure.
-
-## 11. Observability/logging/tracing
-
-- **Logging:** Convey logging (`.UseLogging()`), `appsettings.json` → console enabled, rolling file `logs/logs.txt` (daily), Seq at `http://localhost:5341` with an API key committed in the file.
-- **Tracing:** Jaeger via `Ntrada.Extensions.Tracing`, `serviceName: api-gateway`, UDP `localhost:6831`, `sampler: const` (sample everything). `SpanContextBuilder` propagates the span downstream; in async mode the span rides on the `span_context` message header.
-- **Correlation:** `CorrelationContextBuilder` emits a `Correlation-Context` structure carrying correlation id, user id, resource id, trace id, connection id and timestamp — the platform's cross-service request identity.
-- **Metrics:** App.Metrics via `Convey.Metrics.AppMetrics`, Prometheus formatter enabled, InfluxDB disabled.
-
-## 12. Files with major architecture decisions; feature flags
-
-| File | Decision |
-|---|---|
-| `src/Pacco.APIGateway/ntrada.yml` | The entire public API contract, per-route authorisation model, and downstream service map |
-| `src/Pacco.APIGateway/ntrada-async.yml` | The decision that writes are fire-and-forget messages rather than synchronous calls — the platform's central CQRS/eventual-consistency choice, expressed in configuration |
-| `src/Pacco.APIGateway/Program.cs` | Config-file selection precedence: `NTRADA_CONFIG` → argv[0] → `ntrada.yml` |
-| `src/Pacco.APIGateway/Infrastructure/CorrelationContextBuilder.cs` | The shape of cross-service correlation identity |
-| `Dockerfile` | Default profile is the **synchronous** one; compose overrides it to async |
-
-**Feature flag system: none.** No LaunchDarkly / Unleash / Flagsmith / Split / OpenFeature dependency or configuration. The nearest equivalents are static YAML/JSON switches evaluated once at startup: `auth.enabled`, `auth.global`, `loadBalancer.enabled`, `extensions.<name>.enabled` (`cors`, `customErrors`, `jwt`, `rabbitmq`, `swagger`, `tracing`), `metrics.enabled`, `metrics.prometheusEnabled`, `metrics.influxEnabled`, `logger.console.enabled`, `logger.file.enabled`, `logger.seq.enabled`. Plus the `NTRADA_CONFIG` environment variable, which behaves as a deployment-time profile switch. None of these can be toggled at runtime.
+**Feature-flag system: none.** No flag provider package is referenced. The only switches are configuration booleans such as `auth.enabled`, `auth.global`, `loadBalancer.enabled`, `extensions.rabbitmq.enabled`, `messageContext.enabled`, `useLocalUrl`, `passQueryString`, `useForwardedHeaders`, `forwardRequestHeaders`, `forwardResponseHeaders`, `generateRequestId`, `generateTraceId`, `metrics.prometheusEnabled`. These are deployment configuration, not runtime feature flags.
 
 ## 13. Open questions / ambiguities
 
-- **Async response contract is undefined here.** In the async profile a write returns immediately; the caller is expected to poll `GET /operations/{operationId}` or subscribe to the Operations SignalR hub. Nothing in this repository documents that contract. **Needs validation.**
-- **`loadBalancer.enabled: false`** while the rest of the platform registers with Consul and expects Fabio on `9999`. Whether Fabio is meant to sit in front of, or behind, the gateway is **Unknown**.
-- **`ordermaker-service` has no gateway module**, so `POST /orders` at the gateway goes to `orders-service`, not to the saga. How the AI order-maker flow is triggered in a deployed system is **Unknown** — see `repo-summary/Pacco.Services.OrderMaker.md`.
-- `HttpRequestHook.cs` behaviour was not traced end-to-end. **Needs validation.**
-- Differences between `ntrada.yml` and `ntrada.docker.yml` (and their async twins) were confirmed to exist at the hostname level but not diffed route-by-route. **Needs validation** that the four files stay in sync.
-- No tests of any kind exist in this repository (`scripts/test.sh` exists but there is no test project).
+Mirrored in the final section of this file.
 
 ## 14. Frontend stack
 
-**No frontend assets detected — checked:** `public/`, `public/js/`, `src/` (contains only the C# project), `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view templates (`*.cshtml`, `*.razor`, `*.html`). None of these directories exist except `src/`, which holds no web assets. No `package.json`, no bundler configuration. The gateway serves a Swagger UI at `/docs`, which is generated by `Ntrada.Extensions.Swagger` at runtime and is not checked-in frontend code.
+No frontend assets detected — checked: `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view template directories. `src/` holds only the C# project. There is no `package.json`, no bundler configuration, no HTML and no view templates. The only browser-facing surface is the generated Swagger UI at `/docs`.
 
 ---
 
 ## README vs repository
 
-**What the README claims:**
-- The gateway is the Pacco API Gateway built with Ntrada. — **Confirmed** (`Pacco.APIGateway.csproj`, `Program.cs`).
-- Run with `dotnet run` from `/src/Pacco.APIGateway`, or `./scripts/start.sh`, or the Docker image. — **Confirmed**; unlike the ten service repositories, this repo's documented source path is **correct**, because the project directory really is `src/Pacco.APIGateway` (there is no `.Api` suffix here).
-- Available at `http://localhost:5000`. — **Confirmed** against `Pacco/compose/services.yml` (`5000:80`) and `launchSettings.json`.
-- Travis badge and Docker Hub image `devmentors/pacco.apigateway`. — Files exist, but they point at the **upstream `devmentors` organisation**, not the `hianshul100` fork under analysis. **Stale doc.**
+| Claim in the documentation | What the repository shows | Marker |
+|---|---|---|
+| README presents the gateway as the platform's API entry point built on Ntrada | Confirmed by `Program.cs`, the csproj and the YAML routing files | Confirmed |
+| `Dockerfile` sets `NTRADA_CONFIG ntrada.docker` (the **synchronous** configuration) | `hianshul100_Pacco/compose/services.yml` overrides the same variable to `ntrada-async.docker.yml` (the **asynchronous** configuration) | Needs validation — the image default and the compose deployment disagree on the gateway's integration style |
+| `loadBalancer.url: localhost:9999` matches the Fabio container in `compose/infrastructure.yml` | `loadBalancer.enabled: false`, so Fabio is provisioned but not used by the gateway | Stale doc |
+| `.travis.yml` runs `./scripts/test.sh` | There is no test project in this repository, so the step has nothing to execute | Needs validation |
 
-**Components on disk but not in the README:**
-- **The asynchronous profile.** `ntrada-async.yml`, `ntrada-async.docker.yml`, and `scripts/start-async.sh` are not mentioned, even though `Pacco/compose/services.yml` runs the gateway in exactly that mode. This is the most significant documentation gap in the repository: the README describes a synchronous proxy, and the composed system runs an asynchronous publisher.
-- `Infrastructure/CorrelationContextBuilder.cs`, `SpanContextBuilder.cs`, `HttpRequestHook.cs`, `CorrelationContext.cs` — the correlation and tracing model is undocumented.
-- `certs/localhost.cer` — undocumented.
-- `Pacco.rest` and `Pacco-sample-scenario.rest` — the root `Pacco` README points at `Pacco-sample-scenario.rest`, but this repository's own README does not mention either file.
-- The `NTRADA_CONFIG` environment variable — undocumented, despite being the switch that changes the platform's integration style.
-
-**README claims not reflected in the clone — Stale doc:**
-- All links and badges resolve to `github.com/devmentors/Pacco.APIGateway` and `api.travis-ci.org/devmentors/...`; the analysed clone is `hianshul100/Pacco.APIGateway` on `feature/12915/aidlc`, where Travis is not configured to run. **Stale doc.**
-
-**Unknown (neither pass yielded proof):**
-- Whether the four `ntrada*.yml` files are kept consistent with one another.
-- Whether the async profile's `operationId` correlation is actually surfaced to clients.
+**Docs-only claims:** none beyond the above.
+**Disk-only components:** `Pacco-sample-scenario.rest`, `appsettings.local.json`, `certs/localhost.cer`, `Properties/launchSettings.json` — present on disk, not described in the README.
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This section lists what we assumed, what is blocking us, and what we still need to find out. Everything here is written in plain words so anyone can read it.
 
 ### Assumptions
 
-| # | Assumption | Rationale | Impact if Wrong | Validation Path |
-|---|------------|-----------|-----------------|-----------------|
-| A1 | The asynchronous profile (`ntrada-async.docker.yml`) is the intended production behaviour, not an experiment. | `Pacco/compose/services.yml` explicitly sets `NTRADA_CONFIG=ntrada-async.docker.yml` for the composed platform, overriding the Dockerfile's synchronous default. | Every conclusion about eventual consistency, operation polling, and the role of `operations-service` would be inverted; the platform would actually be a synchronous request/response system. | Confirm with the platform owner which profile production runs, and record the answer next to the `NTRADA_CONFIG` default in the Dockerfile. |
-| A2 | Routes in `ntrada.yml` without an explicit `auth: true` are genuinely intended to be public. | `auth.global: false` makes authentication opt-in per route, and `POST /sign-in` / `POST /sign-up` are correctly public, so the pattern looks deliberate. | `GET /operations/{operationId}` would be an unintended information-disclosure hole exposing operation state and user ids. | A security owner reviews every route lacking `auth: true` and confirms or corrects each one. |
-| A3 | `ntrada.docker.yml` and `ntrada-async.docker.yml` differ from their non-`docker` twins only in hostnames and URLs. | Spot-checking showed the module and route structure to be the same shape, with `localhost` replaced by container names. | A route could be authenticated in one profile and public in another, so a security review of one file would not cover what actually runs. | Diff the four YAML files route-by-route and add a check that fails the build when their route sets diverge. |
+| ID | Assumption | Why we made it |
+|---|---|---|
+| A1 | The asynchronous configuration is the one actually used, because the shared Compose file selects it. | The Compose file overrides the image's own default, and an override is normally deliberate. |
+| A2 | The `localhost:500X` addresses in the routing files are for running everything on one developer machine, not for container deployment. | The container-specific files with the `.docker` suffix exist separately for that purpose. |
 
 ### Blockers
 
-| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
-|---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** A shared JWT signing secret is committed in plain text in `ntrada.yml` and `ntrada-async.yml`, and the same value appears in the Identity and Operations service settings. Anyone who can read the repository can issue tokens that the whole platform accepts. | Any deployment to an environment reachable by untrusted users; also any security sign-off on the authentication design. | Security owner / platform owner | Move the signing key into Vault (the platform already runs Vault and every service already has a `vault` config block), rotate the current value, and remove it from all four files and from git history. | TBD |
-| B2 | **[ACTION NOW]** `GET /operations/{operationId}` is configured with `auth: false`, exposing operation state and the associated `userId` to unauthenticated callers. Nobody has confirmed whether this is deliberate. | Security review of the public API surface; any decision about exposing the gateway outside a trusted network. | Security owner | Decide whether operation status must stay anonymous (because the client polls before it has a token) or should require the bearer token; change `ntrada.yml`, `ntrada-async.yml`, and both `.docker.yml` variants accordingly. | TBD |
+| ID | Blocker | Owner and next step |
+|---|---|---|
+| B1 | A token signing key is stored in clear text in the routing files, so anyone with repository access can create valid logins for every service. | **[ACTION NOW]** Report to the security owner of the platform; this stage records the location but does not change any file. |
 
 ### Open Questions
 
-| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
-|---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** When a write is published to RabbitMQ instead of proxied, what does the client get back, and how is it told the work finished? | Without a documented answer, every API consumer has to guess, and the contract between the gateway, `operations-service`, and the client is undefined. | The client appears to poll `GET /operations/{operationId}` or listen on the Operations SignalR hub, but nothing in this repository states it. | API owner |
-| Q2 | **[ACTION NOW]** Is `ordermaker-service` meant to be reachable through the gateway? It has no module in any `ntrada*.yml`, so `POST /orders` reaches `orders-service` directly and the saga is bypassed. | It determines whether the AI order-maker flow is live, dead code, or triggered by some path not visible in these repositories. | Unknown — no evidence either way in the gateway configuration. | Platform owner |
-| Q3 | **[handled later by architecture_evolution_generation]** Should CORS remain `allowedOrigins: ['*']`, and should `includeExceptionMessage: true` stay on outside development? | Both are development-friendly settings that leak information or widen the attack surface when exposed publicly. | Restrict origins to the known web client and disable exception passthrough for non-development environments. | Security owner |
-| Q4 | **[ACTION NOW]** Should Fabio sit in front of the gateway or behind it? The gateway has `loadBalancer.enabled: false` while every backend service registers with Consul and configures a Fabio URL. | It changes the network topology diagram and where TLS terminates. | Unknown from the repositories. | Platform owner |
+| ID | Question | Owner and next step |
+|---|---|---|
+| Q1 | Should the gateway run in synchronous or asynchronous mode? The container image and the shared Compose file choose differently. | **[ACTION NOW]** Confirm with the requesting team, because the answer changes how every write request reaches the services. |
+| Q2 | Why can operation status be read without logging in? | **[handled later by the ADR authoring stage]** Decide whether this is intentional for the demo user interface or an oversight, and record the decision. |
+| Q3 | Is the Fabio load balancer meant to be used by the gateway? It is started by the shared stack but switched off here. | **[handled later by the ADR authoring stage]** Record whether load balancing sits in front of the gateway or is unused. |

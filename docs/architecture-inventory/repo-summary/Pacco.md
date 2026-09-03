@@ -1,192 +1,154 @@
-# Repository summary — `Pacco`
+---
+title: "Repository Summary — Pacco"
+project_key: "Common Architecture"
+project_name: "Common Architecture"
+stage: "architecture_discovery"
+repository: "Pacco"
+status: "evidence-based inventory"
+---
 
-**Repository:** `Pacco` (workspace clone path: `hianshul100_Pacco`, also known as: Pacco root repository, Pacco solution repository)
-**Upstream URL:** https://github.com/hianshul100/Pacco
-**Base ref analysed:** `feature/12915/aidlc`
-**Classification:** Infrastructure / composition repository — **contains no application source code**.
+# Pacco
+
+**Primary name:** `Pacco` (aliases used in this file: "the umbrella repository", "the root repository", "the orchestration repository").
+Repository: `Pacco`, path: `hianshul100_Pacco/`
+
+> All evidence below is taken from the files on disk in this clone. Where the repository README claims something the tree does not show, the tree wins and the conflict is stated.
 
 ---
 
-## 1. Primary purpose of the repo
+## 1. Primary purpose
 
-Umbrella / composition repository for the Pacco platform. It carries no C# projects of its own; it aggregates the other repositories into a single Visual Studio solution (`Pacco.sln`), and holds the Docker Compose stacks, process-manager manifests, and clone/pull helper scripts used to run the whole platform locally.
+Umbrella / orchestration repository for the Pacco platform. It holds no application source code. It holds the aggregate solution file, the local process manager definitions, the Docker Compose infrastructure stack, the clone/pull helper scripts, and the platform documentation and diagrams.
 
-**Evidence:** `README.md`, `Pacco.sln`, `compose/`, `services.yml`, `prod-services.yml`, `scripts/`, `docker-images.txt`.
+Evidence: `hianshul100_Pacco/README.md`, `hianshul100_Pacco/Pacco.sln`, `hianshul100_Pacco/compose/`, `hianshul100_Pacco/scripts/`, `hianshul100_Pacco/assets/`.
 
-## 2. Main runtime/service type
+## 2. Runtime / service type
 
-**Not a runtime.** No `Program.cs`, no `Dockerfile` producing an application image, no `*.csproj`. The only container images built here are infrastructure sidecars: `compose/prometheus/Dockerfile`, `compose/host-prometheus/Dockerfile`, `compose/rabbitmq/Dockerfile`.
+Not a runtime service. It is a build-and-run harness:
 
-**Evidence:** repository tree contains zero `.csproj` files; `compose/prometheus/Dockerfile`, `compose/rabbitmq/Dockerfile`.
+- `Pacco.sln` — Visual Studio solution aggregating the microservice projects by relative path (`..\Pacco.Services.X\src\...`).
+- `services.yml` and `prod-services.yml` — PM2-style application lists for running services locally.
+- `compose/*.yml` — Docker Compose stacks for infrastructure and for the containerised services.
 
-## 3. Key entrypoints
+## 3. Entrypoints
 
-There is no application entrypoint. The operational entrypoints are:
-
-| Entrypoint | File | What it does |
+| Entrypoint | Path | What it starts |
 |---|---|---|
-| `docker-compose -f infrastructure.yml up -d` | `compose/infrastructure.yml` | Starts Consul, Fabio, Grafana, Jaeger, MongoDB, Prometheus, RabbitMQ, Redis, Seq, Vault on the `pacco-network` bridge |
-| `docker-compose -f services-local.yml up` | `compose/services-local.yml` | Starts the platform services against locally-built images |
-| `docker-compose -f compose/services.yml up` | `compose/services.yml` | Starts the platform services from published `devmentors/pacco.*` images |
-| `services.yml` / `prod-services.yml` | repo root | Process-manager app manifests (`script:`, `cwd:`, `max_restarts:`) that run each service via `dotnet run` (dev) or `dotnet <Service>.dll` (release publish output) |
-| `scripts/git-clone.sh`, `scripts/git-clone-fast.sh`, `scripts/git-clone.ps1`, `scripts/git-pull.sh`, `scripts/git-pull-fast.sh` | `scripts/` | Bulk clone/update of the sibling repositories |
+| `compose/infrastructure.yml` | `hianshul100_Pacco/compose/infrastructure.yml` | Consul, Fabio, Grafana, Jaeger, MongoDB, Prometheus, RabbitMQ, Redis, Seq, Vault |
+| `compose/services.yml` | `hianshul100_Pacco/compose/services.yml` | `api-gateway`, `availability-service`, `customers-service`, `deliveries-service`, `identity-service`, `operations-service` (and further service containers) |
+| `compose/services-local.yml` | `hianshul100_Pacco/compose/services-local.yml` | Local variant of the service stack |
+| `compose/mongo-rabbit-redis.yml` | `hianshul100_Pacco/compose/mongo-rabbit-redis.yml` | Minimal data/broker stack |
+| `compose/consul-fabio-vault.yml` | `hianshul100_Pacco/compose/consul-fabio-vault.yml` | Discovery, load balancing and secrets stack |
+| `compose/grafana-seq-jaeger-prometheus.yml` | `hianshul100_Pacco/compose/grafana-seq-jaeger-prometheus.yml` | Observability stack |
+| `compose/host-infrastructure.yml` | `hianshul100_Pacco/compose/host-infrastructure.yml` | Host-networking variant |
+| `services.yml` | `hianshul100_Pacco/services.yml` | 10 apps run with `dotnet run` |
+| `prod-services.yml` | `hianshul100_Pacco/prod-services.yml` | 10 apps run with `dotnet <Assembly>.dll` from `bin/release/netcoreapp3.1/publish` |
+| `scripts/git-clone.sh`, `scripts/git-clone.ps1`, `scripts/git-clone-fast.sh`, `scripts/git-pull.sh`, `scripts/git-pull-fast.sh` | `hianshul100_Pacco/scripts/` | Clone or refresh all sibling repositories |
 
-**Evidence:** `README.md` ("Open `Pacco/compose` directory and execute…"), `compose/infrastructure.yml`, `compose/services.yml`, `services.yml`, `prod-services.yml`, `scripts/`.
+## 4. Modules / packages
 
-## 4. Important modules/packages
-
-Not a code repository, so there are no packages. The architecturally significant assets are:
-
-- `Pacco.sln` — aggregate solution referencing projects in sibling clones.
-- `compose/infrastructure.yml` — the canonical infrastructure topology.
-- `compose/consul-fabio-vault.yml`, `compose/mongo-rabbit-redis.yml`, `compose/grafana-seq-jaeger-prometheus.yml` — split infrastructure stacks.
-- `compose/host-infrastructure.yml`, `compose/host-prometheus/` — host-networking variants.
-- `compose/prometheus/prometheus.yml`, `compose/host-prometheus/prometheus.yml` — Prometheus scrape configuration.
-- `compose/rabbitmq/Dockerfile`, `compose/rabbitmq/plugins` — custom RabbitMQ image with plugins enabled.
-- `docker-images.txt` — long-form runbook of `docker run` commands and Vault provisioning steps (database secrets engine, PKI engine, policies).
-- `assets/` — `pacco_overview.png`, `infrastructure.png`, `clean_architecture.png`, `pacco_logo.png`.
-
-**Evidence:** repository tree; `docker-images.txt`.
+No compiled modules. Logical groupings on disk: `assets/` (`clean_architecture.png`, `pacco_logo.png`, `infrastructure.png`, `pacco_overview.png`), `compose/` (including `compose/prometheus/`, `compose/host-prometheus/`, `compose/rabbitmq/`), `scripts/`, plus `Pacco.sln`, `services.yml`, `prod-services.yml`, `docker-images.txt`, `LICENSE`.
 
 ## 5. External integrations
 
-All integrations are infrastructure images pulled from public registries, not business integrations:
+Declared in `compose/infrastructure.yml` and `docker-images.txt`: Consul, Fabio, Vault, MongoDB, RabbitMQ, Redis, Jaeger, Seq, Prometheus, Grafana. `docker-images.txt` additionally documents SQL Server 2017, PostgreSQL, InfluxDB, Mongo Express, Elasticsearch 6.4.0, Kibana 6.4.0 and Logstash 6.4.0.
 
-`consul`, `fabiolb/fabio`, `grafana/grafana`, `jaegertracing/all-in-one`, `mongo`, `prom/prometheus`, `rabbitmq:3-management`, `redis`, `datalust/seq`, `vault`. `docker-images.txt` additionally documents (but `compose/infrastructure.yml` does **not** start) SQL Server 2017, PostgreSQL, InfluxDB, Elasticsearch, Kibana, Logstash, Mongo Express.
+**Conflict — documentation vs code:** no service `appsettings.json` in any repository in this workspace references SQL Server, PostgreSQL, InfluxDB, Elasticsearch, Kibana or Logstash. All persistence in the running services is MongoDB plus Redis. Treat those entries in `docker-images.txt` as a catalogue of optional images, not as deployed platform components. **Needs validation.**
 
-**Evidence:** `compose/infrastructure.yml`, `docker-images.txt`.
+## 6. Data stores / state
 
-## 6. Data stores / state handling
+None owned by this repository. It provisions the shared stores used by others:
 
-Declares the shared data-store containers for local runs; owns no schema, no ORM, no migrations.
+- MongoDB container (`compose/infrastructure.yml`, port `27017`, named volume).
+- Redis container (port `6379`, named volume).
+- No ORM, no migration tool and no schema definitions exist anywhere in this repository.
 
-- **MongoDB** — `mongo` service, port `27017`, named volume `mongo:/data/db`. This is the shared physical store; each service uses a **separate logical database** (see `repo-inventory.md`).
-- **Redis** — `redis` service, port `6379`, named volume `redis:/data`.
-- **Migration tooling: none present.** No Alembic / Flyway / Liquibase / EF Core / Doctrine / ActiveRecord artefacts exist anywhere in this clone. Collections are created implicitly by the MongoDB driver at first write.
+## 7. Messaging / async / events
 
-**Evidence:** `compose/infrastructure.yml` (`mongo`, `redis` service definitions and `volumes:` block); absence of any migrations directory in the tree.
+Provisions the broker only: RabbitMQ is built from `compose/rabbitmq/Dockerfile` with a `plugins` file, exposing `5672` (AMQP), `15672` (management UI) and `15692` (Prometheus metrics). This repository declares **no exchanges, no topics and no event payloads** of its own. The platform-wide catalogue of exchange, command and event names lives in `Pacco.Services.Operations` at `src/Pacco.Services.Operations.Api/messages.json`.
 
-## 7. Messaging / async / event mechanisms
+## 8. APIs exposed / consumed
 
-Declares the broker; publishes/consumes nothing itself.
+None. Port allocation for the services it launches is defined in `prod-services.yml` via `ASPNETCORE_URLS`: `api` `5000`, `availability` `5001`, `customers` `5002`, `deliveries` `5003`, `identity` `5004`, `operations` `5005`, `orders` `5006`, `parcels` `5007`, `pricing` `5008`, `vehicles` `5009`.
 
-- **RabbitMQ**, built from `compose/rabbitmq/Dockerfile` with the plugin set in `compose/rabbitmq/plugins`. Ports `5672` (AMQP), `15672` (management UI), `15692` (Prometheus metrics plugin).
-- Event/topic names are owned by the service repos — the authoritative catalogue is `Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json` (reproduced in `repo-inventory.md`).
+## 9. Deployment / runtime clues
 
-**Evidence:** `compose/infrastructure.yml` (`rabbitmq` block), `compose/rabbitmq/Dockerfile`, `compose/rabbitmq/plugins`.
+- Docker Compose network `pacco`, named `pacco-network`.
+- Service images follow `devmentors/pacco.<name>` (for example `devmentors/pacco.apigateway`, `devmentors/pacco.services.availability`), `restart: unless-stopped`.
+- `api-gateway` publishes `5000:80`; each service container publishes `500X:80` matching the port table above.
+- `operations-service` declares `depends_on: availability-service`.
+- `api-gateway` sets `NTRADA_CONFIG=ntrada-async.docker.yml`.
+- No Kubernetes manifests, no Helm charts and no Terraform exist in this repository.
 
-## 8. APIs exposed or consumed
+## 10. Security / auth clues
 
-None. This repository exposes no HTTP, gRPC, or messaging API.
+- Vault runs in dev mode with `VAULT_DEV_ROOT_TOKEN_ID=secret` and `cap_add: IPC_LOCK` (`compose/infrastructure.yml`).
+- `docker-images.txt` contains a worked Vault setup: versioned KV at `secret`, `userpass` auth, a `services` policy, a database secrets engine issuing dynamic MongoDB credentials for `availability-service`, and a PKI engine with `common_name=pacco.io` and roles `availability-service` and `customers-service`.
+- **Security finding:** `docker-images.txt` contains example Vault unseal keys and a root token in plain text, and RabbitMQ is configured with the default `guest` / `guest` credentials. These are development values committed to the repository. **[reported, not remediated in this stage]**
 
-## 9. Deployment/runtime clues
+## 11. Observability / logging / tracing
 
-- **Docker Compose** is the only orchestration mechanism present: `compose/infrastructure.yml`, `compose/services.yml`, `compose/services-local.yml`, `compose/host-infrastructure.yml`, `compose/consul-fabio-vault.yml`, `compose/mongo-rabbit-redis.yml`, `compose/grafana-seq-jaeger-prometheus.yml`.
-- Compose file format `version: "3.7"`; all services attach to an external-style bridge network named `pacco-network`.
-- `compose/services.yml` pins published images `devmentors/pacco.apigateway`, `devmentors/pacco.services.<name>` — i.e. images from the **upstream devmentors organisation**, not from the `hianshul100` forks in this workspace.
-- `compose/services.yml` sets `NTRADA_CONFIG=ntrada-async.docker.yml` on `api-gateway`, selecting the **asynchronous (RabbitMQ-publishing)** gateway profile for the composed stack.
-- `operations-service` declares `depends_on` for availability, customers, deliveries, identity, orders, ordermaker, parcels, vehicles — the only inter-service ordering constraint expressed in compose.
-- `services.yml` / `prod-services.yml` are process-manager manifests (PM2-style `apps:` schema) that reference sibling clone paths such as `../Pacco.Services.Orders/src/Pacco.Services.Orders.Api`, and in the prod variant `.../bin/release/netcoreapp3.1/publish`.
-- **No Kubernetes, Helm, Terraform, or GitHub Actions workflows exist in this repository or anywhere in the workspace.** No CI configuration at all in this repo (no `.travis.yml`).
+- Jaeger container exposes `5775/udp`, `5778`, `6831/udp`, `6832/udp`, `9411`, `14268`, `16686`.
+- Seq container maps `5341:80` with `ACCEPT_EULA=Y`.
+- Prometheus is built from `compose/prometheus/Dockerfile` with `compose/prometheus/prometheus.yml`; a host variant exists at `compose/host-prometheus/`.
+- The Prometheus scrape configuration in `docker-images.txt` defines jobs `prometheus` and `api`, with `metrics_path: '/metrics-text'` against target `docker.for.mac.localhost:5000`.
+- Grafana container on `3000`.
 
-**Evidence:** `compose/services.yml`, `compose/infrastructure.yml`, `services.yml`, `prod-services.yml`.
+## 12. Files carrying major architecture decisions; feature flags
 
-## 10. Security/auth clues
+Decision-bearing files: `Pacco.sln` (which projects form the platform), `compose/infrastructure.yml` (which backing services exist), `compose/services.yml` (container topology and the async gateway selection), `services.yml` and `prod-services.yml` (the local run set), `docker-images.txt` (the infrastructure playbook), `README.md` (stated architecture style).
 
-- **Vault** is started in dev mode with a hard-coded root token: `VAULT_DEV_ROOT_TOKEN_ID=secret` and `cap_add: IPC_LOCK` (`compose/infrastructure.yml`).
-- `docker-images.txt` documents production Vault provisioning: `vault secrets enable database` with a MongoDB plugin and per-service roles (`availability-service`), and `vault secrets enable pki` issuing certificates under `common_name=pacco.io` with per-service roles (`availability-service`, `customers-service`) — this is the origin of the `pki.commonName: <service>.pacco.io` settings seen in each service's `appsettings.json`.
-- `docker-images.txt` contains **example** Vault unseal keys and an example root token in plain text. They are illustrative sample output copied from a Vault init run, not live credentials for this deployment, but they are real-looking secrets committed to the repository.
-- MongoDB, RabbitMQ, and Redis are all started **without authentication** in `compose/infrastructure.yml` (the `MONGO_INITDB_ROOT_*` environment lines are commented out).
-
-**Evidence:** `compose/infrastructure.yml`, `docker-images.txt`.
-
-## 11. Observability/logging/tracing clues
-
-- **Metrics:** Prometheus (`compose/prometheus/Dockerfile` + `prometheus.yml`) scraping `/metrics-text` on the gateway; Grafana on `3000`.
-- **Tracing:** Jaeger all-in-one, UDP `6831`/`6832`, UI `16686`, Zipkin-compatible `9411`, collector `14268`.
-- **Logging:** Seq on host port `5341` (container `80`), `ACCEPT_EULA=Y`.
-- `docker-images.txt` additionally documents an ELK stack (Elasticsearch/Kibana/Logstash) and InfluxDB, neither of which is started by `compose/infrastructure.yml`. Service `appsettings.json` files have `logger.elk.enabled: false` and `metrics.influxEnabled: false`, so ELK/Influx are **Future/Intended State (Not Implemented)** for the default configuration.
-
-**Evidence:** `compose/infrastructure.yml`, `compose/prometheus/prometheus.yml`, `docker-images.txt`.
-
-## 12. Files that appear to contain major architecture decisions
-
-There are **no ADRs and no `docs/` directory** in this repository. The files that carry de-facto architectural decisions are:
-
-| File | Decision it encodes |
-|---|---|
-| `README.md` | Microservices architecture on .NET Core 3.1; event-driven asynchronous integration; cloud-agnostic CNCF tooling; Convey as the framework; clean architecture + DDD "depending on the particular microservice complexity" |
-| `compose/infrastructure.yml` | The canonical infrastructure set: Consul (discovery), Fabio (load balancing), Vault (secrets), RabbitMQ (broker), MongoDB (store), Redis (cache), Jaeger/Prometheus/Grafana/Seq (observability) |
-| `docker-images.txt` | Vault database-secrets and PKI provisioning model; the per-service dynamic Mongo credential pattern |
-| `assets/pacco_overview.png`, `assets/infrastructure.png`, `assets/clean_architecture.png` | Diagram-only architecture statements — **content not machine-readable; Needs validation by a human reviewer** |
-| `compose/services.yml` | Selection of the async gateway profile (`NTRADA_CONFIG=ntrada-async.docker.yml`) for the composed stack |
-
-**Feature flag system: none.** A workspace-wide search for `launchdarkly`, `unleash`, `flagsmith`, `splitio`, `featureflag`, `feature_flag`, `featureToggle` across `*.cs`, `*.json`, `*.yml` returned zero matches. The closest analogues are static boolean config switches (`consul.enabled`, `fabio.enabled`, `vault.enabled`, `outbox.enabled`, `metrics.enabled`, `jaeger.enabled`, `swagger.enabled`, `logger.elk.enabled`) read at startup from `appsettings.json`. There are no runtime-toggleable flag keys.
+**Feature-flag system: none.** No LaunchDarkly, Unleash, Split, Flagsmith or bespoke flag store appears anywhere in this repository. The only toggles are boolean `enabled` keys per infrastructure integration inside each service's `appsettings.json`, which are configuration switches rather than runtime feature flags. There are therefore no flag keys to list.
 
 ## 13. Open questions / ambiguities
 
-- **Q:** `compose/services.yml` pulls `devmentors/pacco.*` images while this workspace holds `hianshul100/*` forks. Which image registry/tag is authoritative for the target deployment? — **Needs validation.**
-- **Q:** Compose is the only deployment mechanism found. Is there a production deployment target (Kubernetes, ECS, VM + process manager) defined outside these repositories? — **Unknown.**
-- **Q:** `assets/*.png` are the only architecture diagrams; their claims could not be verified against code. — **Needs validation.**
-- **Q:** `services.yml` / `prod-services.yml` use an `apps:` schema consistent with PM2, but no process manager is named in the README and no `package.json` exists in the workspace. The intended runner is **Unknown**.
-- **Q:** `README.md` lists 12 repositories to clone and **omits `Pacco.Web`**, which is nonetheless in the task's repository list. Is `Pacco.Web` part of the platform? — **Needs validation** (see `repo-summary/Pacco.Web.md`).
+Mirrored in the final section of this file.
 
 ## 14. Frontend stack
 
-**No frontend assets detected in this repository — checked:** `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view templates (`*.phtml`, `*.blade.php`, `*.erb`, `*.twig`, `*.cshtml`). The `assets/` directory exists but contains only four PNG documentation images (`pacco_logo.png`, `pacco_overview.png`, `infrastructure.png`, `clean_architecture.png`) — no JavaScript, no stylesheets, no templates. No `package.json`, no build tooling, no module-federation or `single-spa` markers anywhere in the clone.
-
-**Evidence:** `assets/` directory listing; workspace-wide `find` for `package.json` returned no results.
+No frontend assets detected — checked: `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view template directories. The `assets/` directory exists but contains only PNG diagrams (`clean_architecture.png`, `pacco_logo.png`, `infrastructure.png`, `pacco_overview.png`), not web assets. There is no `package.json`, no bundler configuration and no HTML in this repository.
 
 ---
 
 ## README vs repository
 
-**What the README claims:**
-- Pacco is a microservices platform on **.NET Core 3.1**, event-driven, using **Convey** and cloud-agnostic CNCF tooling. — **Confirmed** by every service `*.csproj` (`<TargetFramework>netcoreapp3.1</TargetFramework>`, `Convey.* 0.4.*`) and by `compose/infrastructure.yml`.
-- "Clean architecture + DDD… or another style that is the best fit." — **Confirmed and materially important.** Eight services use the four-project `Api`/`Application`/`Core`/`Infrastructure` layering; `Pacco.Services.Pricing` and `Pacco.Services.OrderMaker` are deliberately single-project, and `Pacco.Services.Operations` is a single `Api` project plus a gRPC client. The README's hedge is accurate.
-- `Pacco.sln` "aggregates all the microservices under a single solution". — **Present on disk**, but it references project paths in sibling clones and therefore only loads when all repos are cloned side by side, as the README instructs.
-- Start via `compose/infrastructure.yml` then `services-local.yml`. — **Confirmed**; both files exist.
+| Claim in the documentation | What the repository shows | Marker |
+|---|---|---|
+| README describes ".NET Core 3.1", "microservices architecture", "event-driven", "clean architecture + DDD", built on Convey | Every project on disk targets `netcoreapp3.1`; every service references `Convey.*` `0.4.*`; services are split into `.Api` / `.Application` / `.Core` / `.Infrastructure` | Confirmed |
+| README lists **12** repositories to clone: `Pacco`, `Pacco.APIGateway` and ten `Pacco.Services.*` | The workspace contains **13** in-scope repositories. `Pacco.Web` is present as a clone but is **absent from the README clone list** | Stale doc |
+| README clone list | `Pacco.Services.OrderMaker` is present in the README clone list but is **absent from `services.yml`, `prod-services.yml` and the `compose/services.yml` container set** | Stale doc |
+| `Pacco.sln` enumerates 41 projects | Only 40 project files exist across the workspace. `Pacco.APIGateway.Ocelot` (`..\Pacco.APIGateway.Ocelot\src\Pacco.APIGateway.Ocelot\Pacco.APIGateway.Ocelot.csproj`, `Pacco.sln:152`) has **no repository in this workspace** | Unverifiable — Missing Source Evidence |
+| `docker-images.txt` documents SQL Server, PostgreSQL, InfluxDB and the Elasticsearch/Kibana/Logstash stack | No service configuration references any of them; InfluxDB and the Elastic stack are explicitly disabled in service settings | Stale doc |
+| The Jira backlog item states branch `master` for all repositories | The clones in this workspace are on `feature/12915/aidlc` | Needs validation |
 
-**Components on disk but not in the README:**
-- `prod-services.yml` and `services.yml` (process-manager manifests) — never mentioned.
-- `compose/host-infrastructure.yml`, `compose/consul-fabio-vault.yml`, `compose/mongo-rabbit-redis.yml`, `compose/grafana-seq-jaeger-prometheus.yml`, `compose/host-prometheus/` — the split and host-networking stacks are undocumented.
-- `docker-images.txt` — a substantial infrastructure and Vault-provisioning runbook, unreferenced by the README.
-- `compose/rabbitmq/` and `compose/prometheus/` custom image builds — undocumented.
-
-**README claims not reflected in the clone — Stale doc:**
-- All README links point to `github.com/devmentors/...` and all image references to `devmentors/pacco.*`, whereas this workspace is a `hianshul100` fork on branch `feature/12915/aidlc`. The README was not re-pointed when the fork was taken. **Stale doc.**
-- The README's clone list of 12 repositories **omits `Pacco.Web`**, which the task's repository list includes. **Stale doc / scope gap.**
-- All three architecture images are hot-linked to `raw.githubusercontent.com/devmentors/Pacco/master/assets/...` rather than to the local `assets/` copies that exist in this clone. **Stale doc** (cosmetic, but it means the rendered README depends on the upstream repo remaining public).
-
-**Unknown (neither pass yielded proof):**
-- Whether `compose/services-local.yml` and `compose/services.yml` are kept in sync with the service set — not verified beyond file existence.
-- The intended production runtime. Nothing in either pass establishes one.
+**Docs-only claims:** the SQL Server / PostgreSQL / InfluxDB / ELK stack; the 12-repository clone list.
+**Disk-only components:** `compose/host-infrastructure.yml`, `compose/host-prometheus/`, `compose/services-local.yml`, `scripts/git-clone-fast.sh`, `scripts/git-pull-fast.sh` — present on disk, not described in the README.
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This section lists what we assumed, what is blocking us, and what we still need to find out. Everything here is written in plain words so anyone can read it.
 
 ### Assumptions
 
-| # | Assumption | Rationale | Impact if Wrong | Validation Path |
-|---|------------|-----------|-----------------|-----------------|
-| A1 | `compose/infrastructure.yml` describes the intended infrastructure set for the platform, not just one developer's laptop setup. | It is the only complete infrastructure definition in the workspace, and the README points to it as *the* way to start the solution. | If a different production topology exists (managed MongoDB Atlas, managed RabbitMQ, a service mesh instead of Consul+Fabio), every dependency and failure-mode conclusion drawn from this file is wrong. | Ask the platform owner for the production deployment definition, or confirm that Compose is genuinely the only target. |
-| A2 | The Vault unseal keys and root token printed in `docker-images.txt` are illustrative sample output, not live credentials. | They appear inside a step-by-step tutorial narrative ("You will see the similar output"), and Vault prints exactly this format on `operator init`. | If they are real, a live Vault instance is compromised by a public repository. | A security owner checks whether any Vault instance was ever initialised with these keys, and rotates if so. |
-| A3 | The `apps:` manifests `services.yml` and `prod-services.yml` are consumed by a PM2-style process manager. | The schema (`apps:` with `name`/`script`/`cwd`/`max_restarts`/`env`) matches PM2's ecosystem file format. | Anyone told to "run the platform without Docker" will pick the wrong tool and the manifests will not execute. | Confirm with the maintainer which runner reads these files; the answer belongs in the README. |
+| ID | Assumption | Why we made it |
+|---|---|---|
+| A1 | The Docker Compose files in `compose/` describe how the platform is meant to run locally, not in production. | The files use development passwords, a development Vault token, and host-machine hostnames. |
+| A2 | The extra database and logging images listed in `docker-images.txt` are a reference catalogue, not part of the running platform. | No service configuration file points at any of them. |
+| A3 | The port numbers in `prod-services.yml` are the authoritative port map for the platform. | They are the only place where every service port is listed together, and they match each service's own settings. |
 
 ### Blockers
 
-| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
-|---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** The container images this repo composes (`devmentors/pacco.*`) are published by a third-party organisation that this project does not control, while the source in this workspace is a `hianshul100` fork. Nobody has said which images the target deployment should actually run. | Any deployment or DevOps stage that has to build, tag, and push images; also any statement about what version of the code is actually running. | Platform owner / release engineering | Decide whether to keep consuming upstream `devmentors/*` images or to stand up a registry for the fork, then update `compose/services.yml` accordingly. | TBD |
+| ID | Blocker | Owner and next step |
+|---|---|---|
+| B1 | The solution file points at a project, `Pacco.APIGateway.Ocelot`, whose source code is not in this workspace. Anyone opening the solution will hit a missing-project error. | **[ACTION NOW]** Architecture discovery stage records it as missing source evidence; the requesting team must confirm whether that repository still exists or should be removed from the solution. |
 
 ### Open Questions
 
-| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
-|---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** Is there a production deployment target for Pacco outside Docker Compose (Kubernetes, ECS, VMs)? Nothing in any of the thirteen clones defines one. | If production runs on something else, that definition lives in a system nobody has given us, and every deployment-related conclusion here is incomplete. | No — Compose plus a process manager appears to be the whole story, but this cannot be proven from the repositories. | Platform owner |
-| Q2 | **[handled later by architecture_evolution_generation]** What do `assets/pacco_overview.png`, `assets/infrastructure.png`, and `assets/clean_architecture.png` actually assert, and does any of it contradict the code? | They are the platform's only architecture diagrams; if they disagree with the code, downstream ADRs could inherit a wrong picture. | — | Architecture team |
-| Q3 | **[ACTION NOW]** Should the README be re-pointed from `devmentors/*` to the `hianshul100` fork, and should `Pacco.Web` be added to its clone list? | New joiners following the README will clone the wrong repositories and miss one entirely. | Yes — update the twelve links and add `Pacco.Web`, or explicitly record that `Pacco.Web` is out of scope. | Repository maintainer |
+| ID | Question | Owner and next step |
+|---|---|---|
+| Q1 | Which branch is the real source of truth: the `master` branch named in the work item, or the `feature/12915/aidlc` branch that was actually cloned? | **[ACTION NOW]** Confirm with the requesting team before any later stage quotes line numbers. |
+| Q2 | Why is the order-making service missing from every run list, even though it has working code and a documented port? | **[handled later by the ADR authoring stage]** Decide and record whether it is an optional demo component or a supported service. |
+| Q3 | Is there a production deployment target (Kubernetes, cloud service) anywhere outside these repositories? | **[handled later by the ADR authoring stage]** Only Docker Compose exists here, so the production story cannot be described from this workspace alone. |

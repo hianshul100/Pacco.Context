@@ -1,226 +1,171 @@
-# Repository summary — `Pacco.Services.Parcels`
+---
+title: "Repository Summary — Pacco.Services.Parcels"
+project_key: "Common Architecture"
+project_name: "Common Architecture"
+stage: "architecture_discovery"
+repository: "Pacco.Services.Parcels"
+status: "evidence-based inventory"
+---
 
-**Repository:** `Pacco.Services.Parcels` (workspace clone path: `hianshul100_Pacco.Services.Parcels`)
-**Deployable:** `parcels-service` (also known as: Parcels Service, `Pacco.Services.Parcels.Api`, image `devmentors/pacco.services.parcels`). **Repository: `Pacco.Services.Parcels`, path: `src/Pacco.Services.Parcels.Api`.**
-**Upstream URL:** https://github.com/hianshul100/Pacco.Services.Parcels
-**Base ref analysed:** `feature/12915/aidlc`
+# Pacco.Services.Parcels
+
+**Primary name:** `Pacco.Services.Parcels` (aliases used in this file: `parcels-service` — the value of `app.service`, the Consul registration name, the MongoDB database name and the Compose service name; `parcels` — the RabbitMQ exchange, the Jaeger `serviceName` and the gateway module).
+Repository: `Pacco.Services.Parcels`, path: `hianshul100_Pacco.Services.Parcels/`
 
 ---
 
-## 1. Primary purpose of the repo
+## 1. Primary purpose
 
-Owns the **parcel catalogue** — the individual items a customer wants shipped. A parcel has a variant, size, and calculated volume; parcels are created by a customer, attached to and detached from orders, and deleted. The service also exposes an aggregate `volume` query, which is what lets the platform reason about whether a vehicle can carry a given set of parcels.
+Owns the parcels a customer wants delivered: their size, variant and volume. It is the provider side of the platform's only consumer-driven contract.
 
-**Evidence:** `src/Pacco.Services.Parcels.Core/Entities/Parcel.cs`, `src/Pacco.Services.Parcels.Api/Program.cs`.
+Evidence: `src/Pacco.Services.Parcels.Core/Entities/Parcel.cs`, `Size.cs`, `Variant.cs`, `src/Pacco.Services.Parcels.Core/Services/ParcelsService.cs`.
 
-## 2. Main runtime/service type
+## 2. Runtime / service type
 
-ASP.NET Core (`netcoreapp3.1`) HTTP microservice plus RabbitMQ consumer, in one process, using the canonical four-project clean-architecture layering (`.Api`, `.Application`, `.Core`, `.Infrastructure`) on Convey.
+ASP.NET Core `netcoreapp3.1` HTTP service using Convey dispatcher endpoints, plus a RabbitMQ subscriber. Listens on `5007`. Its host builder is exposed as a public `GetWebHostBuilder` so the provider contract tests can start it in process.
 
-## 3. Key entrypoints
+## 3. Entrypoints
 
-| Entrypoint | File |
+| Entrypoint | Path |
 |---|---|
-| `Program.Main` / `GetWebHostBuilder` | `src/Pacco.Services.Parcels.Api/Program.cs` — `GetWebHostBuilder` is **`public`** specifically so the Pact provider tests can boot the host in-process |
-| RabbitMQ subscriptions | `src/Pacco.Services.Parcels.Infrastructure/Extensions.cs` → `UseInfrastructure` |
-| Container | `Dockerfile` → `ENTRYPOINT dotnet Pacco.Services.Parcels.Api.dll` |
-| Scripts | `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh`, **`scripts/start-test.sh`** (unique to this repository — starts the host for provider verification) |
+| `Program.cs` — `Main` → public `GetWebHostBuilder` | `src/Pacco.Services.Parcels.Api/Program.cs` |
+| Container entrypoint | `Dockerfile` |
+| `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh` | `scripts/` |
+| `scripts/start-test.sh` — starts the service against `appsettings.test.json` | `scripts/start-test.sh` |
 
-## 4. Important modules/packages
+## 4. Modules / packages
 
-**Projects (authoritative list from `Pacco.Services.Parcels.sln`):**
+Four source projects plus one test project: `Pacco.Services.Parcels.Api`, `.Application`, `.Core`, `.Infrastructure`, and `tests/Pacco.Services.Parcels.PactProviderTests`.
 
-| Project | Role |
-|---|---|
-| `src/Pacco.Services.Parcels.Api` | Host, endpoint map, `appsettings.json` |
-| `src/Pacco.Services.Parcels.Application` | `Commands/` (`AddParcel`, `DeleteParcel`) + handlers; `Queries/` (`GetParcel`, `GetParcels`, `GetParcelsVolume`) + handlers; `Events/`, `Events/External/`, `Events/Rejected/`; `DTO/` |
-| `src/Pacco.Services.Parcels.Core` | `Entities/Parcel.cs`, `Entities/Customer.cs`, `Entities/AggregateRoot.cs`, `Events/`, `Exceptions/`, `Repositories/IParcelRepository`, `ICustomerRepository` |
-| `src/Pacco.Services.Parcels.Infrastructure` | `Mongo/Documents/ParcelDocument.cs`, `CustomerDocument.cs`, `Mongo/Repositories/`, `Decorators/` (outbox), `Contexts/`, `Exceptions/ExceptionToResponseMapper.cs` + `ExceptionToMessageMapper.cs`, `Logging/`, `Extensions.cs` |
-| `tests/Pacco.Services.Parcels.PactProviderTests` | **Pactify 1.1.0** provider-side contract verification — `PACT/ParcelsApiPactProviderTests.cs`, plus a `MongoDbFixture` |
-
-**Contract testing:** this repository is the **provider** side of the platform's single Pact pair; `Pacco.Services.Orders` is the consumer. The contract covers `GET /parcels/{parcelId}` only. The other five cross-service HTTP calls in the platform have no contract tests. The provider tests are the only tests in this repository — there are no unit or integration tests for the parcel domain itself.
+- **Core:** `Entities/Parcel.cs`, `Customer.cs`, `Size.cs`, `Variant.cs`; `Services/IParcelsService.cs`, `ParcelsService.cs`; `Repositories/IParcelRepository.cs`, `ICustomerRepository.cs`.
+- **Application:** commands `AddParcel`, `DeleteParcel` with handlers; integration events `ParcelAdded`, `ParcelDeleted`; external events `CustomerCreated`, `OrderCanceled`, `OrderDeleted`, `ParcelAddedToOrder`, `ParcelDeletedFromOrder` with five handlers; rejected events `AddParcelRejected`, `DeleteParcelRejected`; queries `GetParcel`, `GetParcels`, `GetParcelsVolume`.
+- **Infrastructure:** MongoDB documents, repositories and query handlers, plus the shared outbox decorators, event mapper, message broker and exception mappers.
+- **Tests:** `PACT/ParcelsApiPactProviderTests.cs` using `Pactify 1.1.0`, with `Fixtures/MongoDbFixture.cs` and `Fixtures/MongoDbFixtureInitializer.cs`.
 
 ## 5. External integrations
 
-| Integration | Direction | Mechanism |
+MongoDB, RabbitMQ, Redis, Consul, Fabio, Vault, Jaeger, Prometheus. No outbound HTTP service clients are defined.
+
+## 6. Data stores / state
+
+- **Store:** MongoDB, database `parcels-service`. The test configuration uses a separate database, `test-parcels-service`.
+- **Access mechanism:** no ORM. The MongoDB .NET driver behind `Convey.Persistence.MongoDB`, with explicit document classes and hand-written repositories.
+- **Collections:** a parcels collection and a customers collection, plus `inbox` and `outbox`.
+- **Migration tool:** none anywhere in the repository. The test fixture `MongoDbFixtureInitializer.cs` seeds data directly instead.
+- **Cross-domain coupling:** this service keeps its **own copy of the customer**, `Core/Entities/Customer.cs` with `ICustomerRepository`, filled from the `customer_created` event. `Pacco.Services.Orders` keeps a second, independent copy. There are no foreign keys; the three copies of a customer are kept in step only by events. A parcel also carries the order identifier it was added to, updated by reacting to order events.
+- **Cache:** Redis.
+
+## 7. Messaging / async / events
+
+**System:** RabbitMQ, topic exchange `parcels`, snake-case naming, queue template `parcels-service/{{exchange}}.{{message}}`, message context header `message_context`, span context header `span_context`. Transactional outbox and inbox on MongoDB (`inbox`, `outbox`).
+
+**Commands consumed:** `add_parcel`, `delete_parcel`.
+
+**Events published:**
+
+| Event name on the wire | Class | Payload key fields |
 |---|---|---|
-| RabbitMQ | in + out | exchange `parcels`, topic |
-| MongoDB | out | database `parcels-service` |
-| Redis | out | instance prefix `parcels:` |
-| Consul | out | registers `parcels-service` on port `5007` |
-| Fabio | out | `http://localhost:9999` |
-| Vault | out | KV v2 `kv/parcels-service/settings`; PKI role `parcels-service`, CN `parcels-service.pacco.io`; dynamic Mongo credentials |
-| Jaeger / Seq / Prometheus | out | tracing / logs / metrics |
+| `parcel_added` | `Application/Events/ParcelAdded.cs` | parcel identifier, customer identifier |
+| `parcel_deleted` | `Application/Events/ParcelDeleted.cs` | parcel identifier |
 
-`httpClient.services` is **empty** — no outbound HTTP calls to other services. It is called *by* `orders-service` (`GET /parcels/{id}`).
+**Rejected events published:** `add_parcel_rejected`, `delete_parcel_rejected`.
 
-## 6. Data stores / state handling
+**External events consumed** (five, each with a handler in `Application/Events/External/Handlers/`): `customer_created` from `customers`, and `order_canceled`, `order_deleted`, `parcel_added_to_order`, `parcel_deleted_from_order` from `orders`. The order events are how a parcel learns it has been attached to or released from an order.
 
-- **Store:** MongoDB, database `parcels-service`.
-- **Collections — two domain collections:**
-  - `parcels` — `AddMongoRepository<ParcelDocument, Guid>("parcels")`
-  - **`customers`** — `AddMongoRepository<CustomerDocument, Guid>("customers")`
-  - plus `inbox` and `outbox`.
-- **Access mechanism:** Convey `IMongoRepository<>` over `MongoDB.Driver`. **No ORM.**
-- **Migration tool: none.** No Flyway, Liquibase, Alembic, or EF Core migrations.
-- **Document shapes:**
-  - `ParcelDocument` — parcel id, `CustomerId`, variant, size, name, calculated volume, timestamps.
-  - `CustomerDocument` — **`public Guid Id { get; set; }` and nothing else.** An id-only replica, byte-for-byte the same design as the one in `orders-service`.
-- **Cross-domain coupling:** this service maintains a **local `customers` collection replicating customer identity owned by `customers-service`**, populated by the `customer_created` event — the same pattern as `orders-service`. There is no database foreign key (MongoDB, separate logical databases, no relational constraints); the replica is an existence check, storing no customer attributes. If `customer_created` is missed, this service does not recognise the customer and rejects their parcel creation.
-  Parcel documents also carry order-related identifiers by way of the order events they consume, again as logical references with no enforcement.
-- **Outbox:** enabled, `type: sequential`, `expiry: 3600`, `intervalMilliseconds: 2000`, `inboxCollection: inbox`, `outboxCollection: outbox`, `disableTransactions: true`.
+Wire names are confirmed against `hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json`. Exact serialised payload shapes are **unknown — requires runtime capture**.
 
-## 7. Messaging / async / event mechanisms
+## 8. APIs exposed / consumed
 
-**System:** RabbitMQ topic exchange `parcels`; `conventionsCasing: snakeCase`; queue template `parcels-service/{{exchange}}.{{message}}`; retries `3` every `2` seconds; `spanContextHeader: span_context`.
+Exposed (`Program.cs`):
 
-**Consumed — commands:**
-
-| Message | Wire name | Key payload fields |
+| Method | Path | Dispatched type |
 |---|---|---|
-| `AddParcel` | `add_parcel` | `ParcelId`, `CustomerId`, `Variant`, `Size`, `Name` |
-| `DeleteParcel` | `delete_parcel` | `ParcelId` |
+| `GET` | `parcels/volume` | `GetParcelsVolume` |
+| `GET` | `parcels` | `GetParcels` |
+| `GET` | `parcels/{parcelId}` | `GetParcel` |
+| `POST` | `parcels` | `AddParcel`, responds `Created` |
+| `DELETE` | `parcels/{parcelId}` | `DeleteParcel` |
 
-**Consumed — external events (five):**
+Note the route ordering: `parcels/volume` is registered before `parcels/{parcelId}` so that the literal segment is matched first.
 
-| Message | Wire name | Origin | Effect |
-|---|---|---|---|
-| `CustomerCreated` | `customer_created` | `customers-service` | records the customer in the local `customers` replica |
-| `ParcelAddedToOrder` | `parcel_added_to_order` | `orders-service` | marks the parcel as attached to an order |
-| `ParcelDeletedFromOrder` | `parcel_deleted_from_order` | `orders-service` | marks the parcel as detached |
-| `OrderCanceled` | `order_canceled` | `orders-service` | releases the parcels held by that order |
-| `OrderDeleted` | `order_deleted` | `orders-service` | releases the parcels held by that order |
+Called by: `Pacco.APIGateway` (module `parcels`; the list route is rewritten to `parcels-service/parcels?customerId=@user_id`) and by `Pacco.Services.Orders` through its `ParcelsServiceClient`.
 
-**Published — events:**
+This service consumes no other service's HTTP API.
 
-| Event | Wire name | Key payload fields |
-|---|---|---|
-| `ParcelAdded` | `parcel_added` | `ParcelId` |
-| `ParcelDeleted` | `parcel_deleted` | `ParcelId` |
+## 9. Deployment / runtime clues
 
-**Published — rejection events:** `add_parcel_rejected`, `delete_parcel_rejected`, each with `Reason` and `Code`, produced by `Infrastructure/Exceptions/ExceptionToMessageMapper.cs`.
+Container image `devmentors/pacco.services.parcels`, published `5007:80` per the platform port map, `restart: unless-stopped`, network `pacco`. Consul registration on port `5007`.
 
-**Bidirectional relationship with `orders-service`:** this service consumes four order events and publishes `parcel_deleted`, which `orders-service` consumes to remove the parcel from any order holding it. The two services keep a mutual view of parcel-to-order membership through events in both directions, with no shared store and no reconciliation mechanism — a design that works as long as no message is lost, and has no way to detect it if one is.
+Settings files: `appsettings.json`, plus `appsettings.test.json` used by `scripts/start-test.sh` and by the provider contract tests. The test settings point at database `test-parcels-service` and set `consul`, `fabio`, `vault`, `jaeger` and `metrics` all to `enabled: false`, so the tests run without any shared infrastructure.
 
-**Reliability:** outbox/inbox decorators wrap every command and event handler. The `Saga` header is forwarded.
+CI: `.travis.yml` runs `./scripts/build.sh`, `./scripts/test.sh`, then `./scripts/dockerize.sh` on success — and the test step has the provider contract tests to run.
 
-## 8. APIs exposed or consumed
+## 10. Security / auth clues
 
-**Exposed** (`Program.cs`, `UseDispatcherEndpoints`; base URL `http://localhost:5007`, container port `80`):
+- JWT validation following the platform pattern, `validIssuer: pacco`.
+- Vault: KV path `parcels-service/settings`, PKI role for `parcels-service`.
+- The gateway rewrites the parcel list route to filter by the signed-in user, so ownership is enforced at the edge. A caller reaching this service directly on the platform network could list any customer's parcels. **Needs validation.**
+- No caller access-control list is defined here, even though `Pacco.Services.Orders` calls it directly.
 
-| Method | Path | Maps to | Gateway exposure |
-|---|---|---|---|
-| GET | `parcels` | `GetParcels` | `/parcels` → `parcels-service/parcels?customerId=@user_id` — scoped to the caller |
-| GET | `parcels/volume` | `GetParcelsVolume` | `/parcels/volume` |
-| GET | `parcels/{parcelId}` | `GetParcel` | `/parcels/{parcelId}` — **also the Pact-covered contract with `orders-service`** |
-| POST | `parcels` | `AddParcel` | `/parcels` — gateway generates `parcelId`, binds `customerId: @user_id` |
-| DELETE | `parcels/{parcelId}` | `DeleteParcel` | `/parcels/{parcelId}` |
-| GET | `docs`, `ping`, `metrics` | Swagger / health / Prometheus | not routed publicly |
+## 11. Observability / logging / tracing
 
-**Route ordering note:** `GET parcels/volume` is registered **before** `GET parcels/{parcelId}` in `Program.cs`, which is what prevents the literal segment `volume` from being captured as a parcel id.
+Jaeger tracing with `serviceName: parcels`, including RabbitMQ span propagation; structured logging via `Convey.Logging` and `Convey.Logging.CQRS` with a message-to-log-template mapper; Prometheus metrics via `Convey.Metrics.AppMetrics`. All of these are switched off in the test configuration.
 
-**Consumed:** none over HTTP.
+## 12. Files carrying major architecture decisions; feature flags
 
-**Called by:** `orders-service` → `GET /parcels/{id}` (unauthenticated; no caller credential is presented).
+- `tests/Pacco.Services.Parcels.PactProviderTests/PACT/ParcelsApiPactProviderTests.cs` — the provider half of the platform's only consumer-driven contract; paired with `Pacco.Services.Orders`.
+- `src/Pacco.Services.Parcels.Api/Program.cs` — the decision to expose the host builder publicly so tests can run the real service in process.
+- `src/Pacco.Services.Parcels.Api/appsettings.test.json` — the decision to make every shared dependency optional for testing.
+- `src/Pacco.Services.Parcels.Core/Services/ParcelsService.cs` — the parcel sizing and volume rules.
+- `src/Pacco.Services.Parcels.Core/Entities/Customer.cs` — the decision to replicate customer data locally.
 
-**Ownership scoping:** `GET /parcels` is scoped to `@user_id` and `POST /parcels` binds `customerId` from the token. `GET /parcels/{parcelId}` and `DELETE /parcels/{parcelId}` are addressed by id with **no ownership binding at the gateway**; whether the handlers check `CustomerId` is **Needs validation**. `GET /parcels/volume` takes no customer scope at all — whether it returns a platform-wide aggregate to any authenticated caller is **Needs validation**.
-
-## 9. Deployment/runtime clues
-
-- `Dockerfile`: sdk:3.1 → aspnet:3.1; `ASPNETCORE_URLS http://*:80`, `ASPNETCORE_ENVIRONMENT docker`; `ENTRYPOINT dotnet Pacco.Services.Parcels.Api.dll`.
-- Composed as `parcels-service` on `5007:80` (`Pacco/compose/services.yml`); present in `Pacco/services.yml` and `Pacco/prod-services.yml` on `5007`.
-- CI: `.travis.yml` (`dotnet: 3.1.100`, `branches.only: [master, develop]`, `./scripts/build.sh`, `after_success: ./scripts/dockerize.sh`). **No GitHub Actions.**
-- **No Kubernetes, Helm, or Terraform.**
-- `scripts/start-test.sh` exists only here, to start the host for Pact provider verification. Whether CI invokes it, and where the consumer's pact file comes from, is **Unknown** — no pact broker URL appears in either repository.
-
-## 10. Security/auth clues
-
-- **JWT bearer** validation via `certs/localhost.cer`, `validIssuer: pacco`, `validateAudience: false`, `validateIssuer: true`, `validateLifetime: true`.
-- `.AddSecurity()` is registered, but there is **no `security.certificate` block** — this service does not verify client certificates, so the inbound call from `orders-service` is unauthenticated at the application layer.
-- **Vault token `secret`** committed in `appsettings.json` (dev Vault root token).
-- Log redaction via `logger.excludeProperties`.
-- **Authorisation is enforced only at the gateway**, and only for the collection-level routes (§8). Direct access to port `5007` bypasses it entirely.
-
-## 11. Observability/logging/tracing
-
-- **Tracing:** Jaeger (`serviceName: parcels-service`, UDP `localhost:6831`, `sampler: const`) with the RabbitMQ Jaeger plugin.
-- **Logging:** console + rolling file `logs/logs.txt` (daily) + Seq (`http://localhost:5341`); ELK sink present but `enabled: false`. `excludePaths: ["/", "/ping", "/metrics"]`. Handler logging via `.AddHandlersLogging()`.
-- **Correlation:** `Correlation-Context` header; `Saga` header forwarded.
-- **Metrics:** App.Metrics + Prometheus at `/metrics`. No custom metrics.
-
-## 12. Files with major architecture decisions; feature flags
-
-| File | Decision |
-|---|---|
-| `src/Pacco.Services.Parcels.Core/Entities/Parcel.cs` | The parcel model — variant, size, and the **volume calculation**, which is the rule that determines what fits in a vehicle |
-| `src/Pacco.Services.Parcels.Infrastructure/Mongo/Documents/CustomerDocument.cs` | The decision to replicate customer identity locally as an id-only document, mirroring `orders-service` |
-| `src/Pacco.Services.Parcels.Infrastructure/Extensions.cs` | Composition, and the subscription set — five external events, four of them from `orders-service` |
-| `src/Pacco.Services.Parcels.Api/Program.cs` | `public GetWebHostBuilder` to support in-process provider verification; route ordering that protects `parcels/volume` |
-| `tests/Pacco.Services.Parcels.PactProviderTests/PACT/ParcelsApiPactProviderTests.cs` | The decision to verify one of six cross-service calls by contract |
-| `src/Pacco.Services.Parcels.Api/appsettings.json` | Outbox with `disableTransactions: true` |
-
-**Feature flag system: none.** No LaunchDarkly / Unleash / Flagsmith / Split / OpenFeature dependency or configuration. Switches are startup-time booleans in `appsettings.json` (`consul.enabled`, `fabio.enabled`, `vault.enabled`, `vault.pki.enabled`, `outbox.enabled`, `metrics.enabled`, `jaeger.enabled`, `swagger.enabled`, `logger.*.enabled`). The parcel variant and size vocabulary and the volume calculation are compiled in, not configurable.
+**Feature-flag system: none.** No flag provider package is referenced. The only switches are per-integration `enabled` booleans in `appsettings.json` and `appsettings.test.json`, which are deployment and test configuration rather than runtime feature flags. There are no flag keys to list.
 
 ## 13. Open questions / ambiguities
 
-- **`GET /parcels/volume` has no visible customer scoping.** Whether an authenticated caller receives a platform-wide total is **Needs validation**.
-- **Ownership checks** on `GET`/`DELETE /parcels/{parcelId}` are **Needs validation** — the gateway does not bind them to `@user_id`.
-- **The volume calculation** — how variant and size map to a number — was read at the entity level but not verified against any test. It is the rule that determines vehicle capacity fit, and it has **no unit tests**. **Needs validation.**
-- **No unit or integration tests for the parcel domain.** The only tests are the Pact provider verification of a single endpoint.
-- **Pact publication is unproven.** A provider verification exists here and a consumer contract in `Pacco.Services.Orders`, but no broker or publish step was found, so whether the two are actually exchanged rather than kept in step by hand is **Unknown**.
-- **The mutual parcel-to-order view** maintained by events in both directions has no reconciliation or drift detection. **Needs validation.**
-- **`disableTransactions: true`** on the outbox, as everywhere else.
+Mirrored in the final section of this file.
 
 ## 14. Frontend stack
 
-**No frontend assets detected — checked:** `public/`, `public/js/`, `src/` (four C# projects only), `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view templates (`*.cshtml`, `*.razor`, `*.html`). None of these web-asset directories exist. No `package.json`, no bundler configuration, no JavaScript or CSS. The only browser-facing surface is the runtime-generated Swagger UI at `/docs`.
+No frontend assets detected — checked: `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view template directories. `src/` and `tests/` contain only C# projects. There is no `package.json`, no bundler configuration, no HTML and no view templates.
 
 ---
 
 ## README vs repository
 
-**What the README claims:**
-- Parcels service, part of Pacco, .NET Core 3.1, runnable with `dotnet run` or Docker, available at `http://localhost:5007`. — **Confirmed** (`appsettings.json` `consul.port: 5007`, `Pacco/compose/services.yml` `5007:80`).
+| Claim in the documentation | What the repository shows | Marker |
+|---|---|---|
+| README describes a parcels service on .NET Core 3.1 built with Convey, following clean architecture | Confirmed: four layered projects, Convey `0.4.*`, `netcoreapp3.1` | Confirmed |
+| The platform is described as event-driven with independent data per service | Confirmed, and this service holds the platform's third copy of customer data | Confirmed |
+| Contract testing is mentioned as a platform practice | It exists on exactly one boundary, between the orders service as consumer and this service as provider | Stale doc — it is a single worked example, not a platform-wide practice |
+| The platform README describes a uniform test approach | Test coverage across the platform is uneven: this repository has provider contract tests only, and five of the twelve service repositories have no tests at all | Stale doc |
 
-**README claims not reflected in the clone — Stale doc:**
-- The README instructs running the command **"in the `/src/Pacco.Services.Parcels` directory"**; the actual host project is **`/src/Pacco.Services.Parcels.Api`**. The documented path does not exist. **Stale doc** — the same systematic error found in nine of the ten service repositories.
-- Links, Travis badge, and Docker Hub image reference the upstream `devmentors` organisation rather than the `hianshul100` fork analysed here. **Stale doc.**
-
-**Components on disk but not in the README:**
-- **The Pact provider tests** and the fact that this repository is one half of the platform's only contract-testing pair — along with `scripts/start-test.sh`, which exists solely to support them and appears in no other repository.
-- **The volume calculation** and the `GET /parcels/volume` endpoint, the rule the platform relies on to decide what fits in a vehicle.
-- **The local `customers` replica collection** and its dependence on the `customer_created` event.
-- The five external event subscriptions, four of them from `orders-service`, and the bidirectional parcel-to-order relationship they maintain.
-- The transactional outbox/inbox and the handler decorators; `scripts/`.
-
-**Unknown (neither pass yielded proof):**
-- Whether the Pact contract is published and verified automatically or maintained by hand.
-- Whether the volume query is scoped to a customer.
+**Docs-only claims:** none identified.
+**Disk-only components:** the volume query, the separate test settings file and `scripts/start-test.sh`, and the MongoDB seeding fixtures — present on disk, not described in the README.
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This section lists what we assumed, what is blocking us, and what we still need to find out. Everything here is written in plain words so anyone can read it.
 
 ### Assumptions
 
-| # | Assumption | Rationale | Impact if Wrong | Validation Path |
-|---|------------|-----------|-----------------|-----------------|
-| A1 | The local `customers` collection is an existence check only, populated solely by the `customer_created` event — the same pattern as in `orders-service`. | `CustomerDocument` holds one field, `Id`, and the service subscribes to `customer_created`. | Customer data could be duplicated across services with no reconciliation defined. | Confirm the only insert path in the customer repository is the event handler. |
-| A2 | Parcel-to-order membership is kept consistent purely by events flowing in both directions between this service and `orders-service`, with no reconciliation. | Four order events are consumed here and `parcel_deleted` is consumed there; no shared store, no periodic sync, and no drift check exist. | A single lost message would leave a parcel permanently attached to a cancelled order, or free when it should be held, with nothing to detect it. | Deliberately drop a message in a test environment and observe whether either side recovers. |
-| A3 | The volume calculation on `Parcel` is the platform's authoritative rule for whether a set of parcels fits a vehicle. | It is the only volume computation in the workspace, and `GET /parcels/volume` is its only consumer-facing surface. | Capacity decisions elsewhere could be based on a different or absent rule, allowing over-allocated vehicles. | Ask the product owner to confirm the rule, and add unit tests covering each variant and size. |
+| ID | Assumption | Why we made it |
+|---|---|---|
+| A1 | The copy of customer data held here is kept up to date only by messages from the customers service. | The only place it is written is the handler for the customer-created message. |
+| A2 | Restricting a customer to their own parcels is done by the gateway, not by this service. | The filter is written into the gateway routing file, and no equivalent check appears in the service code inspected. |
+| A3 | The separate test settings file exists so the contract tests can run without the shared infrastructure. | It points at its own database and turns every shared dependency off. |
 
 ### Blockers
 
-_None identified for this repository._
+_None._
 
 ### Open Questions
 
-| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
-|---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** Does `GET /parcels/volume` return a platform-wide total to any authenticated caller? It carries no customer binding at the gateway. | If so, every customer can see aggregate platform activity, which is a business-information leak rather than a personal-data one. | Unknown — the query was not traced to confirm whether it filters by customer. | Security owner |
-| Q2 | **[ACTION NOW]** Can a caller read or delete a parcel belonging to someone else? `GET` and `DELETE /parcels/{parcelId}` are not bound to the token's user id at the gateway. | Parcel records carry customer-identifying context, and deletion is destructive. | Unknown — the handlers were not confirmed to check `CustomerId`. | Security owner / service owner |
-| Q3 | **[handled later by architecture_evolution_generation]** Is the Pact contract between Orders and Parcels published and verified automatically, or kept in step by hand? | An unpublished contract gives the appearance of contract testing without the protection, and only one of six cross-service calls is covered either way. | Unknown — no broker URL or publish step appears in either repository. | Service owner |
-| Q4 | **[ACTION NOW]** Should the volume calculation have unit tests? It currently has none, and it is the rule that decides vehicle capacity fit. | A silent error there would over- or under-allocate vehicles across the whole platform, and nothing would catch it. | Yes — it is small, pure, and central. | Service owner |
+| ID | Question | Owner and next step |
+|---|---|---|
+| Q1 | Can a caller inside the platform network list another customer's parcels by calling this service directly? | **[ACTION NOW]** Confirm with the requesting team, since ownership checking currently sits only at the edge. |
+| Q2 | Is the single contract between the orders service and this one meant to be extended to the other service boundaries? | **[handled later by the ADR authoring stage]** Record the intended scope of contract testing. |
+| Q3 | What keeps the three separate copies of a customer in step if a message is lost? | **[handled later by the ADR authoring stage]** Record how duplicated customer data is repaired. |
