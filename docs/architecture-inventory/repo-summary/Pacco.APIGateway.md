@@ -159,7 +159,8 @@ Swagger is exposed via `Ntrada.Extensions.Swagger`.
 is `false` and calls are resolved through Fabio at `fabio:9999` instead of the `localUrl` values.
 
 **Note.** `ordermaker-service` has **no gateway module** in any of the four configurations — it is
-not reachable through the platform edge.
+not reachable through the platform edge, even though `Pacco/compose/services.yml` runs it (port
+5015) and lists it under this gateway's own `depends_on`.
 
 ## 9. Deployment / runtime clues
 
@@ -286,5 +287,5 @@ by `Ntrada.Extensions.Swagger` and ships no first-party frontend code.
 | Q1 | **[ACTION NOW]** Is the production gateway meant to run the synchronous or the asynchronous configuration? | These are two different systems. In async mode, twenty write endpoints stop returning a domain result and become fire-and-forget publishes, so every client must be written differently. Nothing in the repository states the intent | `Pacco/compose/services.yml` selects `ntrada-async.docker.yml`, so async looks like the default — but that is a local-development file | Platform architect |
 | Q2 | **[ACTION NOW]** In asynchronous mode, how does a client learn the outcome of a write? | The gateway returns no domain result for twenty routes. `operations-service` exists to report outcomes, but nothing in the gateway configuration hands the client an operation id or tells it where to look | Clients appear to be expected to connect to the `operations-service` SignalR hub and correlate by request id, but this is inference, not documented behaviour | Platform architect |
 | Q3 | **[ACTION NOW]** Is `allowedOrigins: ['*']` with `allowCredentials: true` intentional? | This combination allows any website to make credentialed calls to the gateway on a signed-in user's behalf | It is likely a development convenience that was never tightened, but that is a guess | Whoever owns Pacco authentication |
-| Q4 | **[ACTION NOW]** Why is `ordermaker-service` absent from all four gateway configurations? | It exposes `POST /orders` and drives the order-creation saga, yet nothing at the platform edge can reach it. Either it is unused, or callers reach it by a path outside the gateway | Consistent with `ordermaker-service` also being absent from every deployment manifest — it may simply not be deployed | Platform owner |
+| Q4 | **[ACTION NOW]** Why is `ordermaker-service` absent from all four gateway configurations? | It exposes `POST /orders` and drives the order-creation saga, yet nothing at the platform edge can reach it. Callers must therefore reach it by a path outside the gateway | It is **not** an undeployed service: `Pacco/compose/services.yml:78-85` and `services-local.yml:78-85` run it on port 5015 and this gateway `depends_on` it. So the omission looks deliberate — an internal-only orchestrator — rather than an artefact of the service being unused | Platform owner |
 | Q5 | **[handled later by HLD]** Should the gateway's twenty routing keys be validated against the services that own them? | The gateway hard-codes other services' exchange and routing-key names in YAML with no compile-time or startup check. A renamed command in a service silently becomes an unroutable publish at the edge | Introduce a shared contract source or a startup validation step | Platform architect |

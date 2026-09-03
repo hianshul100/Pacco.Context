@@ -7,7 +7,8 @@ saga across Orders, Parcels, Vehicles and Availability.
 - **Repository:** `Pacco.Services.OrderMaker`, path: `src/Pacco.Services.OrderMaker`
 - **Base ref analysed:** `feature/12998/aidlc`
 - **Port:** `5015` (per its own `appsettings.json`)
-- **Deployment status: not in any platform manifest — see dimension 9**
+- **Deployment status: started by both Compose stacks; absent from the PM2 manifests and from every
+  gateway config, so it has no edge route — see dimension 9**
 
 ---
 
@@ -26,19 +27,21 @@ distinctive:**
 - That it is a **saga orchestrator** built on `Chronicle_` 3.2.1 — the only saga implementation on
   the platform.
 - `Sagas/AIOrderMakingSaga.cs`, `Sagas/AIMakingOrderData.cs`, `Handlers/AIOrderMakingHandler.cs`.
-- That it is a **single-project** service with no clean-architecture split, unlike nine of its
-  siblings.
+- That it is a **single-project** service with no clean-architecture split, unlike the seven
+  siblings that use the four-project `.Api`/`.Application`/`.Core`/`.Infrastructure` layout.
 - That it publishes commands onto **other services' exchanges**, driving them directly.
 - The synchronous dependencies on `availability-service` and `vehicles-service`.
 - That it has **no MongoDB** and **no Jaeger tracing**.
 - That it exposes `POST /orders` — a second, competing order-creation entry point alongside
   `orders-service`.
 
-**Stale doc:** none identified in this repository's own README. However, `Pacco/README.md`'s
-"start all services" instruction does not start this service, because it is in none of the platform
-manifests. **Documented claim not fully reflected in the tree** — recorded in `Pacco.md`.
+**Stale doc:** none identified in this repository's own README, and none in `Pacco/README.md`
+either — its "start all services" instruction (`docker-compose -f services-local.yml up`) **does**
+start this service, which is defined at `compose/services-local.yml:78-85`. **No conflict.**
 
-**Unknown:** whether this service is deployed at all, and where Chronicle keeps saga state.
+**Unknown:** how callers reach this service's `POST /orders` given it has no gateway route, why it
+is omitted from the PM2 process manifests when both Compose stacks include it, and where Chronicle
+keeps saga state.
 
 ---
 
@@ -189,10 +192,17 @@ publicly reachable.
 - `.travis.yml`: `dotnet: 3.1.100`, branches `master`/`develop`, `./scripts/build.sh`,
   `after_success: ./scripts/dockerize.sh` → `$DOCKER_USERNAME/pacco.services.ordermaker`.
 - Consul registration on port `5015` — outside the platform's contiguous 5000–5009 block.
-- **Absent from every platform deployment manifest.** It appears in **none** of:
-  `Pacco/services.yml`, `Pacco/prod-services.yml`, `Pacco/compose/services.yml`,
-  `Pacco/compose/services-local.yml`, or any `ntrada*.yml`. It has a build and an image but no
-  declared place in a running platform. **Unverifiable from the repositories — needs validation.**
+- **Deployed by Compose, absent from PM2 and from the edge.** Present in:
+  `Pacco/compose/services.yml:78-85` (`image: devmentors/pacco.services.ordermaker`,
+  `container_name: ordermaker-service`, `ports: 5015:80`), `Pacco/compose/services-local.yml:78-85`
+  (`build: ../../Pacco.Services.OrderMaker`), `api-gateway`'s `depends_on` list
+  (`Pacco/compose/services.yml:65`), and the Prometheus scrape config
+  (`Pacco/compose/prometheus/prometheus.yml:38-40`, job `ordermaker-service`).
+  Absent from: `Pacco/services.yml` and `Pacco/prod-services.yml` (both PM2 manifests list only
+  api, availability, customers, deliveries, identity, operations, orders, parcels, pricing,
+  vehicles) and all four `ntrada*.yml` gateway configs. So it runs under Compose but has **no edge
+  route** and **no PM2 process entry**. How callers reach it is **Unverifiable from the
+  repositories — needs validation.**
 - **Scale-out consideration:** if Chronicle saga state is in-memory, running more than one instance
   would split saga state across processes and break correlation. **Needs validation.**
 
@@ -230,7 +240,7 @@ publicly reachable.
 | `src/Pacco.Services.OrderMaker/Sagas/AIOrderMakingSaga.cs` | **The order-creation choreography in full** — which services are called, in what order, on which events, and with which correlation key. This is the most decision-bearing file in the repository |
 | `src/Pacco.Services.OrderMaker/Sagas/AIMakingOrderData.cs` | What state a running saga carries across service boundaries |
 | `src/Pacco.Services.OrderMaker/Extensions.cs` | The choice of `Chronicle_` 3.2.1 with no persistence configuration; in-memory command and event dispatchers; Redis; and the absence of Vault, Jaeger, Mongo and the outbox |
-| `src/Pacco.Services.OrderMaker/Pacco.Services.OrderMaker.csproj` | The single-project layout — a deliberate departure from the clean-architecture split used by nine sibling services, consistent with the platform README's "or another style that is the best fit" |
+| `src/Pacco.Services.OrderMaker/Pacco.Services.OrderMaker.csproj` | The single-project layout — a deliberate departure from the clean-architecture split used by seven sibling services, consistent with the platform README's "or another style that is the best fit" |
 | `src/Pacco.Services.OrderMaker/Program.cs` | That this service exposes its own `POST /orders` entry point, parallel to `orders-service` |
 | `src/Pacco.Services.OrderMaker/Services/Clients/VehiclesServiceClient.cs` | That vehicle selection is a placeholder (`FirstOrDefault()`), explicitly flagged in a comment |
 
@@ -275,7 +285,9 @@ output is the plain-text welcome string returned by `GET /`.
 | Package set: Chronicle present; Mongo, outbox, Jaeger, Vault, Swagger absent | `src/Pacco.Services.OrderMaker/Pacco.Services.OrderMaker.csproj` |
 | Port 5015, exchange, `httpClient.type: ""`, service map, absence of `mongo` and `jaeger` sections | `src/Pacco.Services.OrderMaker/appsettings.json`, `appsettings.local.json`, `appsettings.docker.json` |
 | Container build and CI | `Dockerfile`, `.travis.yml`, `scripts/build.sh`, `scripts/start.sh`, `scripts/dockerize.sh` |
-| Absence from platform manifests | `../hianshul100_Pacco/services.yml`, `../hianshul100_Pacco/prod-services.yml`, `../hianshul100_Pacco/compose/services.yml`, `../hianshul100_Pacco/compose/services-local.yml` |
+| Compose service definition (port 5015) and gateway `depends_on` | `../hianshul100_Pacco/compose/services.yml:65,78-85`, `../hianshul100_Pacco/compose/services-local.yml:78-85` |
+| Prometheus scrape job `ordermaker-service` | `../hianshul100_Pacco/compose/prometheus/prometheus.yml:38-40` |
+| Absence from the PM2 process manifests | `../hianshul100_Pacco/services.yml`, `../hianshul100_Pacco/prod-services.yml` |
 | Absence of a gateway module | `../hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml`, `ntrada.docker.yml`, `ntrada-async.yml`, `ntrada-async.docker.yml` |
 | Message catalogue entry for the `ordermaker` exchange | `../hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json` |
 | Commands this service drives | `../hianshul100_Pacco.Services.Orders/src/Pacco.Services.Orders.Application/Commands/`, `../hianshul100_Pacco.Services.Availability/src/Pacco.Services.Availability.Application/Commands/` |
@@ -299,7 +311,7 @@ output is the plain-text welcome string returned by `GET /`.
 
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** This service has a Dockerfile, a CI pipeline and a port, but appears in no deployment manifest and behind no gateway route. Nobody on this side can tell whether the order-creation saga is live code or dead code | Any description of how orders are actually created on this platform, and whether the coordination logic here needs governing at all | Platform owner / operations | Someone must state whether `ordermaker-service` runs in any environment and, if it does, how callers reach it | TBD |
+| B1 | **[ACTION NOW]** This service is started by both Compose stacks and scraped by Prometheus, yet it sits behind no gateway route and in neither PM2 process manifest. Nobody on this side can tell how its `POST /orders` is invoked, so whether the order-creation saga is a live path or unreachable code is unanswerable | Any description of how orders are actually created on this platform, and whether the coordination logic here needs governing at all | Platform owner / operations | Someone must state how callers reach `POST /orders` on `ordermaker-service` given the absence of a gateway route, and whether its omission from `services.yml` / `prod-services.yml` is deliberate | TBD |
 | B2 | **[ACTION NOW]** If this service is live, its saga state has no confirmed durable store, no transactional outbox, and no distributed tracing — so a restart mid-order can lose an order that is already half-created in four other services, with no trace to follow and no automatic retry | Treating order creation as reliable, and any later work that depends on the saga completing | Platform architect | Confirm the Chronicle persistence backend; if it is in-memory, decide whether to add persistence or accept the loss window explicitly | TBD |
 
 ### Open Questions

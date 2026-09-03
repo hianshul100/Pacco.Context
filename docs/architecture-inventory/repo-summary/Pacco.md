@@ -27,8 +27,10 @@ CNCF tooling, clean architecture + DDD. It gives a clone list and two `docker-co
 **Claimed in README, not verifiable from this repository:**
 
 - "clean architecture and DDD" — this repository contains no C# source. The claim is verifiable
-  only in the service repos, where it holds for nine of eleven services and does **not** hold for
-  `pricing-service` or `ordermaker-service` (single-project layouts).
+  only in the service repos, where the four-project `.Api`/`.Application`/`.Core`/`.Infrastructure`
+  split holds for seven of the ten services (Availability, Customers, Deliveries, Identity, Orders,
+  Parcels, Vehicles) and does **not** hold for `pricing-service` or `ordermaker-service`
+  (single-project layouts) or `operations-service` (an `.Api` plus a console `.GrpcClient`).
 - The pointer to `Pacco-sample-scenario.rest` "in the APIGateway repo" — the file was not located
   in `Pacco.APIGateway`. **Stale doc — needs validation.**
 
@@ -49,8 +51,10 @@ CNCF tooling, clean architecture + DDD. It gives a clone list and two `docker-co
   `pacco_overview.png`) that are not referenced by any prose in the README beyond the logo.
 
 **Stale doc.** The README's clone list omits `Pacco.Web`, which is in the discovery scope for this
-job. The README's "start all services" instruction does not start `ordermaker-service`, because
-that service is in none of the compose or process manifests.
+job. The README's "start all services" instruction is accurate — `compose/services-local.yml`
+starts all eleven containers, `ordermaker-service` included. The narrower gap is that
+`ordermaker-service` is missing from the two PM2 process manifests (`services.yml`,
+`prod-services.yml`), so the PM2 path starts ten of the eleven.
 
 **Unknown.** Whether `compose/services.yml` (pulls published images) or `compose/services-local.yml`
 (local build) is the intended default; the README names only the latter.
@@ -75,8 +79,8 @@ developers running the shell scripts.
 | Entrypoint | Kind | Effect |
 |---|---|---|
 | `compose/infrastructure.yml` | Docker Compose | Starts the full backing estate: `consul`, `fabio` (9998/9999), `grafana` (3000), `jaeger`, `mongo` (27017 + named volume), `prometheus`, `rabbitmq` (5672/15672/15692), `redis` (6379 + named volume), `seq` (5341→80), `vault` (8200, dev root token). Network `pacco-network` |
-| `compose/services.yml` | Docker Compose | Runs the nine services + gateway from published `devmentors/pacco.*` images |
-| `compose/services-local.yml` | Docker Compose | The README's documented service start path |
+| `compose/services.yml` | Docker Compose | Runs all ten services + `api-gateway` (11 containers) from published `devmentors/pacco.*` images |
+| `compose/services-local.yml` | Docker Compose | The README's documented service start path; same 11 containers, built from the sibling clones instead of pulled |
 | `compose/host-infrastructure.yml` | Docker Compose | Host-networking variant of the infrastructure stack |
 | `compose/consul-fabio-vault.yml`, `compose/mongo-rabbit-redis.yml`, `compose/grafana-seq-jaeger-prometheus.yml` | Docker Compose | Split stacks — the infrastructure estate in three startable groups |
 | `services.yml` | PM2 app manifest | 10 apps, `script: dotnet run`, `max_restarts: 3`, `cwd` pointing at sibling repository source directories |
@@ -148,9 +152,12 @@ dependency.
 - **Port allocation (from `prod-services.yml`):** api `5000`, availability `5001`, customers
   `5002`, deliveries `5003`, identity `5004`, operations `5005`, orders `5006`, parcels `5007`,
   pricing `5008`, vehicles `5009`.
-- **Missing deployable:** `ordermaker-service` (port 5015 per its own `appsettings.json`) appears
-  in **none** of `services.yml`, `prod-services.yml`, `compose/services.yml`, or
-  `compose/services-local.yml`.
+- **Compose/PM2 divergence:** `ordermaker-service` (port 5015) **is** defined in
+  `compose/services.yml:78-85` (image `devmentors/pacco.services.ordermaker`, `5015:80`) and
+  `compose/services-local.yml:78-85` (`build: ../../Pacco.Services.OrderMaker`), is listed under
+  `api-gateway`'s `depends_on` (`compose/services.yml:65`), and is scraped by
+  `compose/prometheus/prometheus.yml:38-40`. It is **absent from both PM2 manifests**, which list
+  only the ten apps above. The Compose stacks therefore run 11 containers; PM2 runs 10 processes.
 - **Image registry:** `compose/services.yml` pulls `devmentors/pacco.apigateway`,
   `devmentors/pacco.services.availability`, `devmentors/pacco.services.customers`,
   `devmentors/pacco.services.deliveries`, `devmentors/pacco.services.identity`, and the remaining
@@ -202,7 +209,7 @@ Logstash stack that no service is configured to use.
 
 1. Which compose stack is authoritative for which environment — eight exist, one is documented.
 2. Whether the Vault unseal keys and root token in `docker-images.txt` are live credentials.
-3. Why `ordermaker-service` is absent from every process and compose manifest.
+3. Why `ordermaker-service` is in both compose stacks but in neither PM2 process manifest.
 4. Whether the six documented-but-unused data technologies are planned, abandoned, or reference
    material only.
 5. Whether `assets/*.png` still reflect the implemented topology.
@@ -256,7 +263,7 @@ third-party UI on port 3000 but ships no first-party frontend code.
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
 | B1 | **[ACTION NOW]** `docker-images.txt` holds five Vault unseal key shares and a Vault root token in plaintext, and the compose files use a fixed Vault dev token and default RabbitMQ credentials. Nobody on this side can tell whether any of it still opens a real system | Treating this repository as safe to share, fork or publish, and any security conclusion drawn from it later | Whoever administers the Pacco Vault instance | A person with Vault access must test whether those keys still unseal it; if they do, rotate them and purge the values from git history | TBD |
-| B2 | **[ACTION NOW]** `ordermaker-service` exists as a service repository but is in none of this repository's four service manifests, so the definition of "the running platform" is incomplete here | Any statement about what a full Pacco deployment contains, and the order-creation saga's operational status | Platform owner / operations | Confirm whether `ordermaker-service` should be added to the manifests or is intentionally not deployed | TBD |
+| B2 | **[ACTION NOW]** This repository's two deployment paths disagree about `ordermaker-service`: both compose stacks start it, both PM2 manifests omit it. "The running platform" therefore has two different definitions depending on which path is used | Any statement about what a full Pacco deployment contains, and the order-creation saga's operational status under the PM2 path | Platform owner / operations | Confirm which path is authoritative, and whether `ordermaker-service` should be added to `services.yml` / `prod-services.yml` or is intentionally Compose-only | TBD |
 
 ### Open Questions
 
