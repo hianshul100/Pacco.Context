@@ -1,221 +1,177 @@
-# Repository summary — `Pacco.Services.Customers`
+---
+title: "Repository Summary — Pacco.Services.Customers"
+project_key: "Common Architecture"
+project_name: "Common Architecture"
+stage: "architecture_discovery"
+repository: "Pacco.Services.Customers"
+status: "evidence-based inventory"
+---
 
-**Repository:** `Pacco.Services.Customers` (workspace clone path: `hianshul100_Pacco.Services.Customers`)
-**Deployable:** `customers-service` (also known as: Customers Service, `Pacco.Services.Customers.Api`, image `devmentors/pacco.services.customers`). **Repository: `Pacco.Services.Customers`, path: `src/Pacco.Services.Customers.Api`.**
-**Upstream URL:** https://github.com/hianshul100/Pacco.Services.Customers
-**Base ref analysed:** `feature/12915/aidlc`
+# Pacco.Services.Customers
+
+**Primary name:** `Pacco.Services.Customers` (aliases used in this file: `customers-service` — the value of `app.service`, the Consul registration name, the MongoDB database name and the Compose service name; `customers` — the RabbitMQ exchange, the Jaeger `serviceName` and the gateway module).
+Repository: `Pacco.Services.Customers`, path: `hianshul100_Pacco.Services.Customers/`
 
 ---
 
-## 1. Primary purpose of the repo
+## 1. Primary purpose
 
-Owns the **customer profile and customer lifecycle state**. It completes a customer's registration after Identity signs a user up, tracks their state (`incomplete` → `valid` → `invalid`/`locked`), counts completed orders, and applies the **VIP policy**. It is also the platform's authority on "may this customer transact", queried by `availability-service` before a reservation is accepted.
+Owns the customer profile: registration completion, customer state, and the VIP policy that decides when a customer is promoted.
 
-**Evidence:** `src/Pacco.Services.Customers.Core/Entities/Customer.cs`, `src/Pacco.Services.Customers.Core/Services/VipPolicy.cs`, `src/Pacco.Services.Customers.Api/Program.cs`.
+Evidence: `src/Pacco.Services.Customers.Core/Entities/Customer.cs`, `src/Pacco.Services.Customers.Core/Entities/State.cs`, `src/Pacco.Services.Customers.Core/Services/VipPolicy.cs`.
 
-## 2. Main runtime/service type
+## 2. Runtime / service type
 
-ASP.NET Core (`netcoreapp3.1`) HTTP microservice plus RabbitMQ consumer, in one process, using the canonical four-project clean-architecture layering (`.Api`, `.Application`, `.Core`, `.Infrastructure`) on Convey.
+ASP.NET Core `netcoreapp3.1` HTTP service using Convey dispatcher endpoints, plus a RabbitMQ subscriber. Listens on `5002`.
 
-## 3. Key entrypoints
+## 3. Entrypoints
 
-| Entrypoint | File |
+| Entrypoint | Path |
 |---|---|
-| `Program.Main` | `src/Pacco.Services.Customers.Api/Program.cs` — `AddConvey().AddWebApi().AddApplication().AddInfrastructure()`, then `UseInfrastructure()` + `UseDispatcherEndpoints(...)` |
-| RabbitMQ subscriptions | `src/Pacco.Services.Customers.Infrastructure/Extensions.cs` → `UseInfrastructure` |
-| Container | `Dockerfile` → `ENTRYPOINT dotnet Pacco.Services.Customers.Api.dll` |
-| Scripts | `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh` |
+| `Program.cs` | `src/Pacco.Services.Customers.Api/Program.cs` |
+| Container entrypoint | `Dockerfile` |
+| `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh` | `scripts/` |
 
-## 4. Important modules/packages
+## 4. Modules / packages
 
-**Projects (authoritative list from `Pacco.Services.Customers.sln`):**
+Four source projects: `Pacco.Services.Customers.Api`, `.Application`, `.Core`, `.Infrastructure`. **No test project exists in this repository.**
 
-| Project | Role |
-|---|---|
-| `src/Pacco.Services.Customers.Api` | Host, endpoint map, `appsettings.json` |
-| `src/Pacco.Services.Customers.Application` | `Commands/` (`CompleteCustomerRegistration`, `ChangeCustomerState`) + handlers; `Queries/` (`GetCustomer`, `GetCustomers`, `GetCustomerState`) + handlers; `Events/`, `Events/External/`, `Events/Rejected/`; `DTO/` |
-| `src/Pacco.Services.Customers.Core` | `Entities/Customer.cs`, `Entities/AggregateRoot.cs`, `Services/VipPolicy.cs`, `Events/`, `Exceptions/`, `Repositories/ICustomerRepository` |
-| `src/Pacco.Services.Customers.Infrastructure` | `Mongo/Documents/CustomerDocument.cs`, `Mongo/Repositories/CustomerMongoRepository.cs`, `Decorators/` (outbox), `Contexts/`, `Exceptions/ExceptionToResponseMapper.cs` + `ExceptionToMessageMapper.cs`, `Logging/`, `Extensions.cs` |
+- **Core:** `Entities/Customer.cs`, `Entities/State.cs`, `Entities/AggregateId.cs`, `Entities/AggregateRoot.cs`, `Services/IVipPolicy.cs`, `Services/VipPolicy.cs`, `Repositories/ICustomerRepository.cs`, domain events `CustomerBecameVip`, `CustomerRegistrationCompleted`, `CustomerStateChanged`.
+- **Application:** commands `ChangeCustomerState`, `CompleteCustomerRegistration` with handlers; integration events `CustomerBecameVip`, `CustomerCreated`, `CustomerStateChanged`; external events `OrderCompleted`, `SignedUp` with handlers; two rejected events; queries `GetCustomer`, `GetCustomerState`, `GetCustomers`.
+- **Infrastructure:** MongoDB documents, repositories and query handlers, plus the outbox decorators, event mapper, message broker and exception mappers that every service in this platform shares.
 
-**No test projects exist in this repository.**
-
-Convey packages match the platform set (`Convey`, `Convey.CQRS.*`, `Convey.Discovery.Consul`, `Convey.HTTP`, `Convey.LoadBalancing.Fabio`, `Convey.Logging`, `Convey.Logging.CQRS`, `Convey.MessageBrokers.CQRS`, `Convey.MessageBrokers.Outbox.Mongo`, `Convey.MessageBrokers.RabbitMQ`, `Convey.Metrics.AppMetrics`, `Convey.Persistence.MongoDB`, `Convey.Persistence.Redis`, `Convey.Secrets.Vault`, `Convey.Security`, `Convey.Tracing.Jaeger`, `Convey.WebApi.*`), all `0.4.*`.
+Convey `0.4.*` packages as used across the platform.
 
 ## 5. External integrations
 
-| Integration | Direction | Mechanism |
-|---|---|---|
-| RabbitMQ | in + out | exchange `customers`, topic |
-| MongoDB | out | database `customers-service` |
-| Redis | out | instance prefix `customers:` |
-| Consul | out | registers `customers-service` on port `5002` |
-| Fabio | out | `http://localhost:9999` |
-| Vault | out | KV v2 `kv/customers-service/settings`; PKI role `customers-service`, CN `customers-service.pacco.io`; dynamic Mongo credentials |
-| Jaeger / Seq / Prometheus | out | tracing / logs / metrics |
+MongoDB, RabbitMQ, Redis, Consul, Fabio, Vault, Jaeger, Prometheus. No outbound HTTP service clients are defined; this service is called by others rather than calling them.
 
-`httpClient.services` is **empty** — this service makes **no outbound HTTP calls to other services**. It is a pure sink and source: it consumes events, exposes queries, and publishes events. That makes it the least coupled of the domain services in the outbound direction, and the most depended-upon in the inbound direction.
-
-**Evidence:** `src/Pacco.Services.Customers.Api/appsettings.json`; no `Services/Clients/` directory exists in `Application` or `Infrastructure`.
-
-## 6. Data stores / state handling
+## 6. Data stores / state
 
 - **Store:** MongoDB, database `customers-service`.
-- **Collections:** `customers` (`AddMongoRepository<CustomerDocument, Guid>("customers")`), plus `inbox` and `outbox`.
-- **Access mechanism:** Convey `IMongoRepository<>` over `MongoDB.Driver`. **No ORM.**
-- **Migration tool: none.** No Flyway, Liquibase, Alembic, or EF Core migrations.
-- **Document shape** (`Infrastructure/Mongo/Documents/CustomerDocument.cs`): the full customer aggregate — id, email, name, address, state, VIP flag, completed-order identifiers, timestamps.
-- **Cross-domain coupling — important:** this service is the **origin** of the `customer_created` event that causes `orders-service`, `parcels-service`, and `availability-service` to each record the customer locally. `orders-service` and `parcels-service` each maintain their own `customers` **collection** holding an id-only replica document. There is no database-level foreign key anywhere (MongoDB, separate logical databases), but there is a real logical dependency: three services hold customer identity that is only ever correct if the `customer_created` event was delivered. A missed event leaves those services unable to accept work for that customer.
-- **Outbox:** enabled, `type: sequential`, `expiry: 3600`, `intervalMilliseconds: 2000`, `inboxCollection: inbox`, `outboxCollection: outbox`, `disableTransactions: true`.
+- **Access mechanism:** no ORM. The MongoDB .NET driver behind `Convey.Persistence.MongoDB`, with explicit document classes and hand-written repositories.
+- **Collections:** a customers collection derived from the customer document type, plus `inbox` and `outbox`.
+- **Migration tool:** none anywhere in the repository.
+- **Cross-domain coupling:** none inbound. Note that `Pacco.Services.Orders` and `Pacco.Services.Parcels` each keep their own `CustomerDocument` copy, so customer identity is replicated across services by event rather than joined by a foreign key.
+- **Cache:** Redis.
 
-## 7. Messaging / async / event mechanisms
+## 7. Messaging / async / events
 
-**System:** RabbitMQ topic exchange `customers`; `conventionsCasing: snakeCase`; queue template `customers-service/{{exchange}}.{{message}}`; retries `3` every `2` seconds; `spanContextHeader: span_context`.
+**System:** RabbitMQ, topic exchange `customers`, snake-case naming conventions, queue template `customers-service/{{exchange}}.{{message}}`, message context header `message_context`, span context header `span_context`. Transactional outbox and inbox on MongoDB (`inbox`, `outbox`).
 
-**Consumed — commands:**
+**Commands consumed:** `change_customer_state`, `complete_customer_registration`.
 
-| Message | Wire name | Key payload fields |
+**Events published:**
+
+| Event name on the wire | Class | Payload key fields |
 |---|---|---|
-| `CompleteCustomerRegistration` | `complete_customer_registration` | `CustomerId`, `Name`, `Address` |
-| `ChangeCustomerState` | `change_customer_state` | `CustomerId`, `State` |
+| `customer_created` | `Application/Events/CustomerCreated.cs` | `CustomerId` (Guid) — read directly from the class |
+| `customer_became_vip` | `Application/Events/CustomerBecameVip.cs` | customer identifier |
+| `customer_state_changed` | `Application/Events/CustomerStateChanged.cs` | customer identifier, state |
 
-**Consumed — external events:**
+**Rejected events published:** `change_customer_state_rejected`, `complete_customer_registration_rejected`.
 
-| Message | Wire name | Origin | Effect |
-|---|---|---|---|
-| `SignedUp` | `signed_up` | `identity-service` | creates the customer record (state `incomplete`) |
-| `OrderCompleted` | `order_completed` | `orders-service` | records the completed order and re-evaluates the VIP policy |
+**External events consumed:** `signed_up` from `Pacco.Services.Identity` (creates the customer record) and `order_completed` from `Pacco.Services.Orders` (feeds the VIP policy). Handlers live in `Application/Events/External/Handlers/`.
 
-**Published — events:**
+Wire names are confirmed against `hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json`. Exact serialised payload shapes are **unknown — requires runtime capture**.
 
-| Event | Wire name | Key payload fields |
+## 8. APIs exposed / consumed
+
+Exposed (`Program.cs`):
+
+| Method | Path | Dispatched type |
 |---|---|---|
-| `CustomerCreated` | `customer_created` | `CustomerId` |
-| `CustomerStateChanged` | `customer_state_changed` | `CustomerId`, `CurrentState`, `PreviousState` |
-| `CustomerBecameVip` | `customer_became_vip` | `CustomerId` |
+| `GET` | `customers` | `GetCustomers` |
+| `GET` | `customers/{customerId}` | `GetCustomer` |
+| `GET` | `customers/{customerId}/state` | `GetCustomerState` |
+| `POST` | `customers` | `CompleteCustomerRegistration`, responds `Created` at `customers/{cmd.CustomerId}` |
+| `PUT` | `customers/{customerId}/state/{state}` | `ChangeCustomerState`, responds `NoContent` |
 
-**Published — rejection events:** `complete_customer_registration_rejected`, `change_customer_state_rejected`, each with `Reason` and `Code`, produced by `Infrastructure/Exceptions/ExceptionToMessageMapper.cs`.
+Consumed by: `Pacco.APIGateway` (module `customers`), `Pacco.Services.Availability` (`CustomersServiceClient`), `Pacco.Services.Pricing` (`CustomersServiceClient`).
 
-**Reliability:** outbox/inbox decorators wrap every command and event handler.
+## 9. Deployment / runtime clues
 
-**Fan-out significance:** `customer_created` is the most widely consumed event in the platform — `availability-service`, `orders-service`, and `parcels-service` all subscribe to it.
+Container image `devmentors/pacco.services.customers`, published `5002:80` in `hianshul100_Pacco/compose/services.yml`, `restart: unless-stopped`, network `pacco`. Consul registration on port `5002`.
 
-## 8. APIs exposed or consumed
+CI: `.travis.yml` runs `./scripts/build.sh`, `./scripts/test.sh`, then `./scripts/dockerize.sh` on success.
 
-**Exposed** (`Program.cs`, `UseDispatcherEndpoints`; base URL `http://localhost:5002`, container port `80`):
+## 10. Security / auth clues
 
-| Method | Path | Maps to | Gateway exposure |
-|---|---|---|---|
-| GET | `customers` | `GetCustomers` | `/customers` — requires claim `role: admin` |
-| GET | `customers/{customerId}` | `GetCustomer` | `/customers/{customerId}` (admin) and `/customers/me` (self, bound to `@user_id`) |
-| GET | `customers/{customerId}/state` | `GetCustomerState` | `/customers/{customerId}/state` (admin) |
-| POST | `customers` | `CompleteCustomerRegistration` | `/customers`, binds `customerId: @user_id`, JSON-schema validated at the gateway (`create_customer.schema`) |
-| PUT | `customers/{customerId}/state/{state}` | `ChangeCustomerState` → `204 No Content` | `/customers/{customerId}/state/{state}` (admin) |
-| GET | `docs`, `ping`, `metrics` | Swagger / health / Prometheus | not routed publicly |
+This is the **only service in the platform that defines a caller access-control list**. `appsettings.json` contains:
 
-**Consumed:** none over HTTP.
+```
+security.certificate:
+  allowedDomains: ["pacco.io"]
+  allowedHosts:   ["localhost"]
+  acl:
+    availability-service:
+      validIssuer: "localhost"
+      permissions: ["customers:read"]
+```
 
-**Called by:** `availability-service` → `GET /customers/{customerId}/state` (with a client certificate in the `Certificate` header); `pricing-service` → `GET /customers/{customerId}`.
+So certificate-based service-to-service authorisation is configured, granting `availability-service` the `customers:read` permission only. Vault supplies the certificate: KV path `customers-service/settings`, PKI common name `customers-service.pacco.io`.
 
-## 9. Deployment/runtime clues
+JWT validation follows the platform pattern with `validIssuer: pacco`.
 
-- `Dockerfile`: sdk:3.1 → aspnet:3.1; `ASPNETCORE_URLS http://*:80`, `ASPNETCORE_ENVIRONMENT docker`; `ENTRYPOINT dotnet Pacco.Services.Customers.Api.dll`.
-- Composed as `customers-service` on `5002:80` (`Pacco/compose/services.yml`); present in `Pacco/services.yml` and `Pacco/prod-services.yml` on `5002`.
-- CI: `.travis.yml` (`dotnet: 3.1.100`, `branches.only: [master, develop]`, `./scripts/build.sh`, `after_success: ./scripts/dockerize.sh`). **No GitHub Actions.**
-- **No Kubernetes, Helm, or Terraform.**
+**Observation, not a defect:** `Pacco.Services.Pricing` also calls this service, but it is not listed in the access-control list. **Needs validation.**
 
-## 10. Security/auth clues
+## 11. Observability / logging / tracing
 
-- **JWT bearer** validation via `certs/localhost.cer`, `validIssuer: pacco`, `validateAudience: false`, `validateLifetime: true`.
-- **This service is the platform's only certificate-authentication *verifier*.** `appsettings.json` → `security.certificate`:
-  - `enabled: true`
-  - `header: "Certificate"`
-  - `skipRevocationCheck: false`
-  - `allowedDomains: ["pacco.io"]`, `allowSubdomains: true`, `allowedHosts: ["localhost"]`
-  - **`acl`**: `{ "availability-service": { "validIssuer": "localhost", "permissions": ["customers:read"] } }`
+Jaeger tracing with `serviceName: customers`, including RabbitMQ span propagation; structured logging via `Convey.Logging` and `Convey.Logging.CQRS` with a message-to-log-template mapper; Prometheus metrics via `Convey.Metrics.AppMetrics`.
 
-  This is the only explicit **service-to-service authorisation policy** in the entire platform — a named caller granted a named permission. Every other cross-service HTTP call in Pacco is unauthenticated.
-- **Vault token `secret`** committed in `appsettings.json` (dev Vault root token).
-- Log redaction via `logger.excludeProperties` (api keys, secrets, connection strings, passwords, email, login, token).
-- Role-based access (`admin`) for customer listing and state changes is enforced **at the gateway** (`ntrada.yml` `claims: role: admin`), not in this service.
+## 12. Files carrying major architecture decisions; feature flags
 
-## 11. Observability/logging/tracing
+- `src/Pacco.Services.Customers.Core/Services/VipPolicy.cs` — the promotion rule that gives this service its business meaning.
+- `src/Pacco.Services.Customers.Application/Events/External/Handlers/SignedUpHandler.cs` — the decision that a customer record is created by reacting to an identity event rather than by a direct call.
+- `src/Pacco.Services.Customers.Api/appsettings.json` — the access-control list, the only one of its kind in the platform.
+- The outbox decorators in `Pacco.Services.Customers.Infrastructure/Decorators/`.
 
-- **Tracing:** Jaeger (`serviceName: customers-service`, UDP `localhost:6831`, `sampler: const`), with the RabbitMQ Jaeger plugin so broker hops stay in the trace.
-- **Logging:** console + rolling file `logs/logs.txt` (daily) + Seq (`http://localhost:5341`); ELK sink configured but `enabled: false`. `excludePaths: ["/", "/ping", "/metrics"]`. Handler-level logging via `.AddHandlersLogging()`.
-- **Correlation:** `Correlation-Context` header read in `Infrastructure/Extensions.cs`; `Saga` header forwarded.
-- **Metrics:** App.Metrics + Prometheus at `/metrics`. No custom metrics (unlike `availability-service`).
-
-## 12. Files with major architecture decisions; feature flags
-
-| File | Decision |
-|---|---|
-| `src/Pacco.Services.Customers.Core/Services/VipPolicy.cs` | **The VIP business rule, hard-coded:** `ApplyVipStatusIfEligible` returns early if the customer is already VIP, returns if `customer.CompletedOrders.Count() < 20`, otherwise calls `customer.SetVip()`. The threshold **20** is a literal in source with no configuration binding and no feature flag. |
-| `src/Pacco.Services.Customers.Core/Entities/Customer.cs` | Customer states and the legal transitions between them |
-| `src/Pacco.Services.Customers.Api/appsettings.json` | The `security.certificate.acl` — the platform's only service-to-service authorisation policy |
-| `src/Pacco.Services.Customers.Infrastructure/Extensions.cs` | Composition: Consul, Fabio, RabbitMQ + outbox, Mongo, Redis, metrics, Jaeger, handler logging |
-| `src/Pacco.Services.Customers.Infrastructure/Exceptions/ExceptionToMessageMapper.cs` | Async error contract (rejection events) |
-
-**Feature flag system: none.** No LaunchDarkly / Unleash / Flagsmith / Split / OpenFeature dependency or configuration exists. The only switches are startup-time booleans in `appsettings.json` (`consul.enabled`, `fabio.enabled`, `vault.enabled`, `vault.pki.enabled`, `outbox.enabled`, `metrics.enabled`, `jaeger.enabled`, `swagger.enabled`, `security.certificate.enabled`, `logger.*.enabled`). Business rules — most notably the VIP threshold of 20 completed orders — are **not** configurable; changing them requires a code change and a redeploy.
+**Feature-flag system: none.** No flag provider package is referenced. The only switches are per-integration `enabled` booleans in `appsettings.json`, which are deployment configuration rather than runtime feature flags. There are no flag keys to list.
 
 ## 13. Open questions / ambiguities
 
-- **The VIP threshold (20 completed orders) is a magic number** with no config binding. Whether the business expects to tune it is **Unknown**.
-- **`customer_became_vip` has no subscriber.** No service in the workspace subscribes to it (`pricing-service` reads the VIP flag over HTTP instead, via `GET /customers/{customerId}`). The event may be published for future use or for external consumers. **Needs validation.**
-- **No tests exist** in this repository, despite it owning the VIP policy and the customer state machine — the two pieces of logic most likely to be got wrong.
-- The `acl` grants `availability-service` `customers:read`, but whether the permission is actually enforced per-endpoint (as opposed to being a coarse allow-list) was not verified in Convey's source. **Needs validation.**
-- The exact customer state vocabulary and which transitions are legal were read from `Customer.cs` but not cross-checked against gateway or client expectations. **Needs validation.**
+Mirrored in the final section of this file.
 
 ## 14. Frontend stack
 
-**No frontend assets detected — checked:** `public/`, `public/js/`, `src/` (four C# projects only), `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view templates (`*.cshtml`, `*.razor`, `*.html`). None of these web-asset directories exist. No `package.json`, no bundler configuration, no JavaScript or CSS files. The only browser-facing surface is the runtime-generated Swagger UI at `/docs`.
+No frontend assets detected — checked: `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view template directories. `src/` contains only the four C# projects. There is no `package.json`, no bundler configuration, no HTML and no view templates.
 
 ---
 
 ## README vs repository
 
-**What the README claims:**
-- Customers service, part of Pacco, .NET Core 3.1, runnable with `dotnet run` or Docker, available at `http://localhost:5002`. — **Confirmed** (`appsettings.json` `consul.port: 5002`, `Pacco/compose/services.yml` `5002:80`).
+| Claim in the documentation | What the repository shows | Marker |
+|---|---|---|
+| README describes a customers service on .NET Core 3.1 built with Convey, following clean architecture | Confirmed: four layered projects, Convey `0.4.*` throughout, `netcoreapp3.1` | Confirmed |
+| The build script chain includes `./scripts/test.sh` | There is no test project in this repository, so the step has nothing to execute | Needs validation |
+| The platform README presents service-to-service security as a uniform concern | Only this service defines an access-control list; `Pacco.Services.Deliveries` has no security block at all | Stale doc — security configuration is not uniform across services |
+| The access list grants `availability-service` read access | `Pacco.Services.Pricing` also calls this service but is not in the list | Needs validation |
 
-**README claims not reflected in the clone — Stale doc:**
-- The README instructs running the command **"in the `/src/Pacco.Services.Customers` directory"**; the actual host project is **`/src/Pacco.Services.Customers.Api`**. The documented path does not exist. **Stale doc** — the same systematic error found in nine of the ten service repositories.
-- Links, Travis badge, and Docker Hub image all reference the upstream `devmentors` organisation, not the `hianshul100` fork analysed here. **Stale doc.**
-
-**Components on disk but not in the README:**
-- **The certificate-authentication ACL** — the platform's only service-to-service authorisation policy, and the reason `availability-service` can read customer state. Entirely undocumented.
-- **The VIP policy** (`VipPolicy.cs`, threshold 20) — the service's most significant business rule, undocumented.
-- The customer state machine and the `PUT /customers/{customerId}/state/{state}` admin endpoint.
-- The message contracts: two commands consumed, two external events consumed, three events published, two rejection events.
-- The transactional outbox/inbox and the handler decorators.
-- `scripts/` (`build.sh`, `test.sh`, `dockerize.sh`).
-
-**Unknown (neither pass yielded proof):**
-- Whether the absence of tests is deliberate (the service is considered simple) or an oversight.
-- Whether `customer_became_vip` is consumed by anything outside this workspace.
+**Docs-only claims:** none identified.
+**Disk-only components:** the VIP policy and the customer state machine — present in code, not described in the README.
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This section lists what we assumed, what is blocking us, and what we still need to find out. Everything here is written in plain words so anyone can read it.
 
 ### Assumptions
 
-| # | Assumption | Rationale | Impact if Wrong | Validation Path |
-|---|------------|-----------|-----------------|-----------------|
-| A1 | The `customers` collections held by `orders-service` and `parcels-service` are read-only id-only replicas kept in step by the `customer_created` event, not independent sources of truth. | Both `CustomerDocument` classes in those services contain only `public Guid Id { get; set; }`, and both services subscribe to `customer_created`. | If either service writes customer data of its own, there would be three competing customer records and no defined reconciliation. | Read the write paths in both services' Mongo repositories and confirm the only insert is the event handler. |
-| A2 | The VIP threshold of 20 completed orders is a product rule that the business is content to change by code deployment. | It is a bare literal in `VipPolicy.cs` with no configuration binding, and the platform has no feature-flag system at all. | A routine business request to tune the threshold would require a code change, review, build, and redeploy of a service — which the business may not expect. | Ask the product owner how often the threshold is expected to change. |
-| A3 | The `security.certificate.acl` entry granting `availability-service` the `customers:read` permission is enforced by Convey at request time. | The configuration is explicit and structured, and `availability-service` demonstrably sends the matching header. | Certificate presence might be checked while the named permission is ignored, so the authorisation would be coarser than it looks. | Read the Convey certificate-authentication middleware, or test with a certificate that has no matching ACL entry. |
+| ID | Assumption | Why we made it |
+|---|---|---|
+| A1 | A customer record is created only in response to a sign-up event from the identity service, never by a direct call. | The only creation path in the code is the handler for that event; the write endpoint completes an existing registration. |
+| A2 | The access-control list is not enforced in day-to-day local development. | It depends on certificates issued by the secrets manager, which is started in development mode in the shared stack. |
 
 ### Blockers
 
-_None identified for this repository._
+_None._
 
 ### Open Questions
 
-| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
-|---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** Should the VIP threshold and the customer state vocabulary be configurable rather than compiled in? | They are the service's core business rules; today changing either needs a full deployment cycle. | Move the threshold to configuration if the business expects to tune it; otherwise document it as fixed. | Product owner |
-| Q2 | **[handled later by architecture_evolution_generation]** Does anything consume `customer_became_vip`? No service in these repositories subscribes to it, and `pricing-service` reads the VIP flag over HTTP instead. | Either the event is dead weight, or there is a consumer outside the workspace that the inventory is missing. | Likely published for future or external use; unverified. | Architecture team |
-| Q3 | **[ACTION NOW]** Is the complete absence of tests in this repository acceptable, given it owns the VIP policy and the customer state machine? | These are the two behaviours most likely to break silently, and a break shows up as wrong pricing or blocked reservations. | No — at minimum the VIP policy and state transitions warrant unit tests. | Service owner |
-| Q4 | **[ACTION NOW]** What are the legal customer state transitions, and which of them may an administrator force through `PUT /customers/{customerId}/state/{state}`? | An admin endpoint that can set an arbitrary state can put a customer into a state the domain never intended. | Read from `Customer.cs`, but the endpoint's validation was not confirmed. | Product owner |
+| ID | Question | Owner and next step |
+|---|---|---|
+| Q1 | Should the pricing service be added to the caller access list, or does it reach this service by a path the list does not cover? | **[ACTION NOW]** Confirm with the requesting team; the answer changes how service-to-service trust is described for the whole platform. |
+| Q2 | What rule decides when a customer becomes a VIP, in business terms? | **[handled later by the ADR authoring stage]** Read the policy class with a business owner present and record the rule. |
+| Q3 | Why does this service have no automated tests when the availability service has four test projects? | **[handled later by the ADR authoring stage]** Record the testing approach for the platform as a whole. |

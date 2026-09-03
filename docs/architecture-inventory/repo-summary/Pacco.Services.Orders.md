@@ -1,253 +1,180 @@
-# Repository summary — `Pacco.Services.Orders`
+---
+title: "Repository Summary — Pacco.Services.Orders"
+project_key: "Common Architecture"
+project_name: "Common Architecture"
+stage: "architecture_discovery"
+repository: "Pacco.Services.Orders"
+status: "evidence-based inventory"
+---
 
-**Repository:** `Pacco.Services.Orders` (workspace clone path: `hianshul100_Pacco.Services.Orders`)
-**Deployable:** `orders-service` (also known as: Orders Service, `Pacco.Services.Orders.Api`, image `devmentors/pacco.services.orders`). **Repository: `Pacco.Services.Orders`, path: `src/Pacco.Services.Orders.Api`.**
-**Upstream URL:** https://github.com/hianshul100/Pacco.Services.Orders
-**Base ref analysed:** `feature/12915/aidlc`
+# Pacco.Services.Orders
+
+**Primary name:** `Pacco.Services.Orders` (aliases used in this file: `orders-service` — the value of `app.service`, the Consul registration name, the MongoDB database name and the Compose service name; `orders` — the RabbitMQ exchange, the Jaeger `serviceName` and the gateway module).
+Repository: `Pacco.Services.Orders`, path: `hianshul100_Pacco.Services.Orders/`
 
 ---
 
-## 1. Primary purpose of the repo
+## 1. Primary purpose
 
-Owns the **order aggregate and the order lifecycle** — the hub of the platform. An order collects parcels, has a vehicle assigned, is priced, gets approved when its resource reservation succeeds, and then follows the delivery through to completion or cancellation. It is the most connected service in Pacco: three outbound HTTP clients, seven event subscriptions, seven command subscriptions, and nine published events.
+The centre of the platform's domain. It owns the order aggregate and its lifecycle, links parcels and a vehicle to an order, prices the order, and reacts to reservation and delivery outcomes. It has by far the largest message surface of any service.
 
-**Evidence:** `src/Pacco.Services.Orders.Core/Entities/Order.cs`, `src/Pacco.Services.Orders.Api/Program.cs`, `src/Pacco.Services.Orders.Infrastructure/Extensions.cs`.
+Evidence: `src/Pacco.Services.Orders.Core/Entities/Order.cs`, `OrderStatus.cs`.
 
-## 2. Main runtime/service type
+## 2. Runtime / service type
 
-ASP.NET Core (`netcoreapp3.1`) HTTP microservice plus RabbitMQ consumer, in one process, using the canonical four-project clean-architecture layering (`.Api`, `.Application`, `.Core`, `.Infrastructure`) on Convey.
+ASP.NET Core `netcoreapp3.1` HTTP service using Convey dispatcher endpoints, plus a RabbitMQ subscriber. Listens on `5006`.
 
-## 3. Key entrypoints
+## 3. Entrypoints
 
-| Entrypoint | File |
+| Entrypoint | Path |
 |---|---|
-| `Program.Main` | `src/Pacco.Services.Orders.Api/Program.cs` — `AddConvey().AddWebApi().AddApplication().AddInfrastructure()`, then `UseInfrastructure()` + `UseDispatcherEndpoints(...)` |
-| RabbitMQ subscriptions | `src/Pacco.Services.Orders.Infrastructure/Extensions.cs` → `UseInfrastructure` |
-| Container | `Dockerfile` → `ENTRYPOINT dotnet Pacco.Services.Orders.Api.dll` |
-| Scripts | `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh` |
+| `Program.cs` | `src/Pacco.Services.Orders.Api/Program.cs` |
+| Container entrypoint | `Dockerfile` |
+| `scripts/build.sh`, `scripts/test.sh`, `scripts/dockerize.sh`, `scripts/start.sh` | `scripts/` |
 
-## 4. Important modules/packages
+## 4. Modules / packages
 
-**Projects (authoritative list from `Pacco.Services.Orders.sln`):**
+Four source projects plus one test project: `Pacco.Services.Orders.Api`, `.Application`, `.Core`, `.Infrastructure`, and `tests/Pacco.Services.Orders.PactConsumerTests`.
 
-| Project | Role |
-|---|---|
-| `src/Pacco.Services.Orders.Api` | Host, endpoint map, `appsettings.json` |
-| `src/Pacco.Services.Orders.Application` | `Commands/` (`CreateOrder`, `ApproveOrder`, `CancelOrder`, `DeleteOrder`, `AddParcelToOrder`, `DeleteParcelFromOrder`, `AssignVehicleToOrder`) + handlers; `Queries/` (`GetOrder`, `GetOrders`) + handlers; `Events/`, `Events/External/`, `Events/Rejected/`; `DTO/`; `Services/Clients/` (`IParcelsServiceClient`, `IPricingServiceClient`, `IVehiclesServiceClient`) |
-| `src/Pacco.Services.Orders.Core` | `Entities/Order.cs`, `Entities/Parcel.cs`, `Entities/Customer.cs`, `Entities/AggregateRoot.cs`, `Events/`, `Exceptions/`, `Repositories/IOrderRepository`, `ICustomerRepository` |
-| `src/Pacco.Services.Orders.Infrastructure` | `Mongo/Documents/OrderDocument.cs`, `CustomerDocument.cs`, `Mongo/Repositories/`, `Services/ParcelsServiceClient.cs`, `PricingServiceClient.cs`, `VehiclesServiceClient.cs`, `Decorators/` (outbox), `Contexts/`, `Exceptions/ExceptionToResponseMapper.cs` + `ExceptionToMessageMapper.cs`, `Logging/`, `Extensions.cs` |
-| `tests/Pacco.Services.Orders.PactConsumerTests` | **Pactify 1.1.0** consumer-side contract tests — `PACT/ParcelsApiPactConsumerTests.cs` |
-
-**Contract testing:** this repository is the **consumer** side of the platform's single Pact pair; `Pacco.Services.Parcels` is the provider. The contract covers `GET /parcels/{parcelId}` only. The other five cross-service HTTP calls in the platform have no contract tests.
+- **Core:** `Entities/Order.cs`, `OrderStatus.cs`, `Parcel.cs`, `Customer.cs`, `AggregateId.cs`, `AggregateRoot.cs`; domain events `OrderStateChanged`, `ParcelAdded`, `ParcelDeleted`; `Repositories/ICustomerRepository.cs`, `Repositories/IParcelRepository.cs`; exceptions `CannotChangeOrderPriceException`, `CannotChangeOrderStateException`, `CannotDeleteOrderException`, `InvalidOrderPriceException`, `OrderParcelNotFoundException`, `ParcelAlreadyAddedToOrderException`.
+- **Application:** commands `AddParcelToOrder`, `ApproveOrder`, `AssignVehicleToOrder`, `CancelOrder`, `CreateOrder`, `DeleteOrder`, `DeleteParcelFromOrder` with handlers; nine integration events; seven external events with handlers; ten rejected events; service client contracts `IParcelsServiceClient`, `IPricingServiceClient`, `IVehiclesServiceClient`.
+- **Infrastructure:** `Mongo/Documents/OrderDocument.cs`, `Mongo/Documents/CustomerDocument.cs`, `Mongo/Repositories/OrderMongoRepository.cs`, `CustomerMongoRepository.cs`, `Mongo/Queries/Handlers/GetOrderHandler.cs`, `GetOrdersHandler.cs`, `Services/Clients/ParcelsServiceClient.cs`, `PricingServiceClient.cs`, `VehiclesServiceClient.cs`, plus the shared outbox decorators, event mapper, message broker and exception mappers.
+- **Tests:** `PACT/ParcelsApiPactConsumerTests.cs` using `Pactify 1.1.0` — the **consumer** side of a consumer-driven contract with `Pacco.Services.Parcels`.
 
 ## 5. External integrations
 
-| Integration | Direction | Mechanism |
-|---|---|---|
-| `parcels-service` | outbound HTTP | `GET {parcels-service}/parcels/{id}` → `ParcelDto` (`Infrastructure/Services/ParcelsServiceClient.cs`) |
-| `pricing-service` | outbound HTTP | `GET {pricing-service}/pricing?customerId={customerId}&orderPrice={orderPrice}` → `OrderPricingDto` (`Infrastructure/Services/PricingServiceClient.cs`) |
-| `vehicles-service` | outbound HTTP | `GET {vehicles-service}/vehicles/{id}` → `VehicleDto` (`Infrastructure/Services/VehiclesServiceClient.cs`) |
-| RabbitMQ | in + out | exchange `orders`, topic |
-| MongoDB | out | database `orders-service` |
-| Redis | out | instance prefix `orders:` |
-| Consul | out | registers `orders-service` on port `5006` |
-| Fabio | out | `http://localhost:9999`, `httpClient.type: "fabio"` |
-| Vault | out | KV v2 `kv/orders-service/settings`; PKI role `orders-service`, CN `orders-service.pacco.io`; dynamic Mongo credentials |
-| Jaeger / Seq / Prometheus | out | tracing / logs / metrics |
+MongoDB, RabbitMQ, Redis, Consul, Fabio, Vault, Jaeger, Prometheus, and three services over HTTP: `httpClient.services: {parcels: parcels-service, pricing: pricing-service, vehicles: vehicles-service}` with `httpClient.type: fabio`.
 
-`appsettings.json` → `httpClient.services`: `parcels: parcels-service`, `pricing: pricing-service`, `vehicles: vehicles-service`. **Three outbound service dependencies — the most of any service in the platform.** None of the three calls carries a caller credential (contrast `availability-service` → `customers-service`, which presents a certificate).
-
-**No payment integration.** Orders are priced by `pricing-service` but nothing charges anyone: there is no payment gateway, no invoicing, no settlement, and no `payments` service. For an order aggregate that computes a total price, this is a significant functional absence.
-
-## 6. Data stores / state handling
+## 6. Data stores / state
 
 - **Store:** MongoDB, database `orders-service`.
-- **Collections — two domain collections:**
-  - `orders` — `AddMongoRepository<OrderDocument, Guid>("orders")`
-  - **`customers`** — `AddMongoRepository<CustomerDocument, Guid>("customers")`
-  - plus `inbox` and `outbox`.
-- **Access mechanism:** Convey `IMongoRepository<>` over `MongoDB.Driver`. **No ORM.**
-- **Migration tool: none.** No Flyway, Liquibase, Alembic, or EF Core migrations.
-- **Document shapes:**
-  - `OrderDocument` — order id, `CustomerId`, status, the embedded collection of parcels, the assigned `VehicleId`, the total price, delivery date, timestamps.
-  - `CustomerDocument` — **`public Guid Id { get; set; }` and nothing else.** An id-only replica.
-- **Cross-domain coupling — the platform's clearest example.** This service maintains a **local `customers` collection replicating customer identity owned by `customers-service`**, populated by the `customer_created` event. `parcels-service` does exactly the same, with an identically empty `CustomerDocument`. There is no database foreign key (MongoDB, separate logical databases, no relational constraints), but there is a hard operational dependency: if `customer_created` is missed, this service does not recognise the customer and rejects their orders. The replica stores no customer attributes — only the fact that the id is known — so the coupling is an existence check, not a data copy.
-  The order document also holds a `VehicleId` and parcel identifiers owned by other services, again as logical references with no enforcement.
-- **Outbox:** enabled, `type: sequential`, `expiry: 3600`, `intervalMilliseconds: 2000`, `inboxCollection: inbox`, `outboxCollection: outbox`, `disableTransactions: true`.
+- **Access mechanism:** no ORM. The MongoDB .NET driver behind `Convey.Persistence.MongoDB`, with explicit document classes and hand-written repositories.
+- **Collections:** an orders collection from `OrderDocument` and a customers collection from `CustomerDocument`, plus `inbox` and `outbox`.
+- **Migration tool:** none anywhere in the repository.
+- **Cross-domain coupling:** this service keeps its **own copy of the customer**, `Mongo/Documents/CustomerDocument.cs`, populated from the `customer_created` event published by `Pacco.Services.Customers`. `Pacco.Services.Parcels` keeps a second, independent copy. There are no foreign keys — a MongoDB database has none — so the same customer exists as three separate documents in three databases, kept in step only by events. This is the platform's main data-consistency risk and its main reason for service independence.
+- The order document also embeds parcel entries and holds a vehicle identifier owned by `Pacco.Services.Vehicles`.
+- **Cache:** Redis.
 
-## 7. Messaging / async / event mechanisms
+## 7. Messaging / async / events
 
-**System:** RabbitMQ topic exchange `orders`; `conventionsCasing: snakeCase`; queue template `orders-service/{{exchange}}.{{message}}`; retries `3` every `2` seconds; `spanContextHeader: span_context`.
+**System:** RabbitMQ, topic exchange `orders`, snake-case naming, queue template `orders-service/{{exchange}}.{{message}}`, message context header `message_context`, span context header `span_context`. Transactional outbox and inbox on MongoDB (`inbox`, `outbox`).
 
-**Consumed — commands (seven, the most in the platform):**
+**Commands consumed:** `add_parcel_to_order`, `approve_order`, `assign_vehicle_to_order`, `cancel_order`, `create_order`, `delete_order`, `delete_parcel_from_order`.
 
-| Message | Wire name | Key payload fields |
+**Events published:**
+
+| Event name on the wire | Class | Payload key fields |
 |---|---|---|
-| `CreateOrder` | `create_order` | `OrderId`, `CustomerId` |
-| `ApproveOrder` | `approve_order` | `OrderId` |
-| `CancelOrder` | `cancel_order` | `OrderId`, `Reason` |
-| `DeleteOrder` | `delete_order` | `OrderId` |
-| `AddParcelToOrder` | `add_parcel_to_order` | `OrderId`, `ParcelId`, `CustomerId` |
-| `DeleteParcelFromOrder` | `delete_parcel_from_order` | `OrderId`, `ParcelId` |
-| `AssignVehicleToOrder` | `assign_vehicle_to_order` | `OrderId`, `VehicleId`, `DeliveryDate` |
+| `order_created` | `Application/Events/OrderCreated.cs` | `OrderId` (Guid) — read directly from the class |
+| `order_approved` | `Application/Events/OrderApproved.cs` | order identifier |
+| `order_canceled` | `Application/Events/OrderCanceled.cs` | order identifier, reason |
+| `order_completed` | `Application/Events/OrderCompleted.cs` | order identifier, customer identifier |
+| `order_deleted` | `Application/Events/OrderDeleted.cs` | order identifier |
+| `order_delivering` | `Application/Events/OrderDelivering.cs` | order identifier |
+| `parcel_added_to_order` | `Application/Events/ParcelAddedToOrder.cs` | order identifier, parcel identifier |
+| `parcel_deleted_from_order` | `Application/Events/ParcelDeletedFromOrder.cs` | order identifier, parcel identifier |
+| `vehicle_assigned_to_order` | `Application/Events/VehicleAssignedToOrder.cs` | order identifier, vehicle identifier |
 
-**Consumed — external events (seven, the most in the platform):**
+**Rejected events published** (ten): `add_parcel_to_order_rejected`, `approve_order_rejected`, `assign_vehicle_to_order_rejected`, `cancel_order_rejected`, `create_order_rejected`, `delete_order_rejected`, `delete_parcel_from_order_rejected`, `delivering_order_rejected`, `order_for_delivery_not_found`, `order_for_reserved_vehicle_not_found`. The last two are named as findings rather than as rejections, which makes them read as domain notifications.
 
-| Message | Wire name | Origin | Effect |
-|---|---|---|---|
-| `CustomerCreated` | `customer_created` | `customers-service` | records the customer in the local `customers` replica |
-| `ParcelDeleted` | `parcel_deleted` | `parcels-service` | removes the parcel from any order holding it |
-| `ResourceReserved` | `resource_reserved` | `availability-service` | **approves the order** — the reservation succeeding is what makes an order valid |
-| `ResourceReservationCanceled` | `resource_reservation_canceled` | `availability-service` | cancels the order whose reservation was lost |
-| `DeliveryStarted` | `delivery_started` | `deliveries-service` | moves the order to delivering |
-| `DeliveryCompleted` | `delivery_completed` | `deliveries-service` | completes the order |
-| `DeliveryFailed` | `delivery_failed` | `deliveries-service` | fails/cancels the order |
+**External events consumed** (seven, each with a handler in `Application/Events/External/Handlers/`): `customer_created`, `delivery_completed`, `delivery_failed`, `delivery_started`, `parcel_deleted`, `resource_reservation_canceled`, `resource_reserved`.
 
-**Published — events (nine, the most in the platform):**
+This is the platform's busiest node: it consumes from `customers`, `deliveries`, `parcels` and `availability`, and the `ordermaker` saga drives it by publishing four of its commands.
 
-| Event | Wire name | Key payload fields |
+Wire names are confirmed against `hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json`. Exact serialised payload shapes are **unknown — requires runtime capture**.
+
+## 8. APIs exposed / consumed
+
+Exposed (`Program.cs`):
+
+| Method | Path | Dispatched type |
 |---|---|---|
-| `OrderCreated` | `order_created` | `OrderId` |
-| `OrderApproved` | `order_approved` | `OrderId` |
-| `OrderCanceled` | `order_canceled` | `OrderId`, `Reason` |
-| `OrderCompleted` | `order_completed` | `OrderId`, `CustomerId` |
-| `OrderDeleted` | `order_deleted` | `OrderId` |
-| `OrderDelivering` | `order_delivering` | `OrderId` |
-| `ParcelAddedToOrder` | `parcel_added_to_order` | `OrderId`, `ParcelId` |
-| `ParcelDeletedFromOrder` | `parcel_deleted_from_order` | `OrderId`, `ParcelId` |
-| `VehicleAssignedToOrder` | `vehicle_assigned_to_order` | `OrderId`, `VehicleId` |
+| `GET` | `orders/{orderId}` | `GetOrder` |
+| `GET` | `orders` | `GetOrders` |
+| `POST` | `orders` | `CreateOrder`, responds `Created` |
+| `DELETE` | `orders/{orderId}` | `DeleteOrder` |
+| `POST` | `orders/{orderId}/parcels/{parcelId}` | `AddParcelToOrder` |
+| `DELETE` | `orders/{orderId}/parcels/{parcelId}` | `DeleteParcelFromOrder` |
+| `POST` | `orders/{orderId}/vehicles/{vehicleId}` | `AssignVehicleToOrder` |
 
-**Published — rejection events (ten, the most in the platform):** `create_order_rejected`, `approve_order_rejected`, `cancel_order_rejected`, `delete_order_rejected`, `add_parcel_to_order_rejected`, `delete_parcel_from_order_rejected`, `assign_vehicle_to_order_rejected`, `delivering_order_rejected`, plus two that are not `*_rejected`-suffixed but serve the same purpose: **`order_for_delivery_not_found`** and **`order_for_reserved_vehicle_not_found`** (key field `VehicleId`). The last two are emitted when an inbound event references an order this service does not have — the platform's only explicit signal that two services' views have diverged.
+Consumed: `parcels-service`, `pricing-service` and `vehicles-service` through the three clients in `Infrastructure/Services/Clients/`.
 
-**Downstream consumers:** `customers-service` (`order_completed` → VIP evaluation), `parcels-service` (`order_canceled`, `order_deleted`, `parcel_added_to_order`, `parcel_deleted_from_order`), `ordermaker-service` (`order_created`, `parcel_added_to_order`, `vehicle_assigned_to_order`, `order_approved`), `operations-service` (everything).
+Called by: `Pacco.APIGateway` (module `orders`; the list route is rewritten to `orders-service/orders?customerId=@user_id`, so a signed-in user only ever sees their own orders).
 
-**Reliability:** outbox/inbox decorators wrap every command and event handler. The `Saga` header is forwarded, so the `AIOrderMakingSaga` in `ordermaker-service` stays correlated.
+## 9. Deployment / runtime clues
 
-## 8. APIs exposed or consumed
+Container image `devmentors/pacco.services.orders`, published `5006:80` per the platform port map, `restart: unless-stopped`, network `pacco`. Consul registration on port `5006`.
 
-**Exposed** (`Program.cs`, `UseDispatcherEndpoints`; base URL `http://localhost:5006`, container port `80`):
+CI: `.travis.yml` runs `./scripts/build.sh`, `./scripts/test.sh`, then `./scripts/dockerize.sh` on success — and here the test step has something to run, namely the contract tests.
 
-| Method | Path | Maps to | Gateway exposure |
-|---|---|---|---|
-| GET | `orders` | `GetOrders` | `/orders` → `orders-service/orders?customerId=@user_id` — scoped to the caller |
-| GET | `orders/{orderId}` | `GetOrder` | `/orders/{orderId}` |
-| POST | `orders` | `CreateOrder` | `/orders` — gateway generates `orderId`, binds `customerId: @user_id` |
-| DELETE | `orders/{orderId}` | `DeleteOrder` | `/orders/{orderId}` |
-| POST | `orders/{orderId}/parcels/{parcelId}` | `AddParcelToOrder` | same |
-| DELETE | `orders/{orderId}/parcels/{parcelId}` | `DeleteParcelFromOrder` | same |
-| POST | `orders/{orderId}/vehicles/{vehicleId}` | `AssignVehicleToOrder` | same |
-| GET | `docs`, `ping`, `metrics` | Swagger / health / Prometheus | not routed publicly |
+## 10. Security / auth clues
 
-**Note:** `ApproveOrder` has **no HTTP endpoint** — approval is reachable only as a broker command, in practice triggered by the `resource_reserved` event. Approval is deliberately not a user action.
+- JWT validation following the platform pattern, `validIssuer: pacco`.
+- Vault: KV path `orders-service/settings`, PKI role for `orders-service`.
+- The gateway rewrites the order list route to filter by the signed-in user's identifier, so ownership is enforced at the edge rather than inside the service. A caller reaching this service directly on the platform network could list any customer's orders. **Needs validation.**
+- This service is **not** listed in the caller access-control list defined by `Pacco.Services.Customers`, yet it consumes customer data by event rather than by call, so no entry is required.
 
-**Consumed:** `GET /parcels/{id}` (Parcels), `GET /pricing?customerId=&orderPrice=` (Pricing), `GET /vehicles/{id}` (Vehicles).
+## 11. Observability / logging / tracing
 
-**Called by:** nothing over HTTP — `ordermaker-service` interacts with this service purely through the broker.
+Jaeger tracing with `serviceName: orders`, including RabbitMQ span propagation; structured logging via `Convey.Logging` and `Convey.Logging.CQRS` with a message-to-log-template mapper; Prometheus metrics via `Convey.Metrics.AppMetrics`.
 
-**Ownership scoping:** `GET /orders` is scoped to `@user_id` at the gateway and `POST /orders` binds `customerId` from the token, so a caller cannot create an order for someone else. However `GET /orders/{orderId}`, `DELETE /orders/{orderId}`, and the three parcel/vehicle routes are addressed **by order id with no ownership binding at the gateway**. Whether the service checks that the order belongs to the caller is **Needs validation**.
+## 12. Files carrying major architecture decisions; feature flags
 
-## 9. Deployment/runtime clues
+- `src/Pacco.Services.Orders.Core/Entities/Order.cs` and `OrderStatus.cs` — the order state machine, guarded by `CannotChangeOrderStateException` and `CannotChangeOrderPriceException`.
+- `src/Pacco.Services.Orders.Infrastructure/Mongo/Documents/CustomerDocument.cs` — the decision to replicate customer data instead of calling for it.
+- `src/Pacco.Services.Orders.Application/Events/External/Handlers/` — the seven reactions that make this service the hub of the platform.
+- `src/Pacco.Services.Orders.Infrastructure/Services/Clients/PricingServiceClient.cs` — the decision to price an order by a synchronous call rather than by an event.
+- `tests/Pacco.Services.Orders.PactConsumerTests/PACT/ParcelsApiPactConsumerTests.cs` — the consumer-driven contract testing decision, applied to exactly one of the three service dependencies.
 
-- `Dockerfile`: sdk:3.1 → aspnet:3.1; `ASPNETCORE_URLS http://*:80`, `ASPNETCORE_ENVIRONMENT docker`; `ENTRYPOINT dotnet Pacco.Services.Orders.Api.dll`.
-- Composed as `orders-service` on `5006:80` (`Pacco/compose/services.yml`); present in `Pacco/services.yml` and `Pacco/prod-services.yml` on `5006`.
-- CI: `.travis.yml` (`dotnet: 3.1.100`, `branches.only: [master, develop]`, `./scripts/build.sh`, `after_success: ./scripts/dockerize.sh`). **No GitHub Actions.**
-- **No Kubernetes, Helm, or Terraform.**
-- Whether `./scripts/build.sh` runs the Pact consumer tests, and whether the resulting pact is published anywhere for the provider to verify, is **Unknown** — no broker URL or publish step appears in the repository.
-
-## 10. Security/auth clues
-
-- **JWT bearer** validation via `certs/localhost.cer`, `validIssuer: pacco`, `validateAudience: false`, `validateIssuer: true`, `validateLifetime: true`.
-- `.AddSecurity()` is registered, but there is **no `security.certificate` block** — this service neither presents nor verifies client certificates, so its three outbound calls are unauthenticated.
-- **Vault token `secret`** committed in `appsettings.json` (dev Vault root token).
-- Log redaction via `logger.excludeProperties`.
-- **Authorisation is enforced only at the gateway**, and only partially: `@user_id` binding protects order *creation* and *listing*, but per-order routes are not ownership-bound at the gateway (§8). Direct access to port `5006` bypasses all of it.
-
-## 11. Observability/logging/tracing
-
-- **Tracing:** Jaeger (`serviceName: orders-service`, UDP `localhost:6831`, `sampler: const`) with the RabbitMQ Jaeger plugin, so broker hops stay in the trace. Given this service's three synchronous dependencies and fourteen inbound message types, it is the most valuable trace source in the platform.
-- **Logging:** console + rolling file `logs/logs.txt` (daily) + Seq (`http://localhost:5341`); ELK sink present but `enabled: false`. `excludePaths: ["/", "/ping", "/metrics"]`. Handler logging via `.AddHandlersLogging()`.
-- **Correlation:** `Correlation-Context` header; `Saga` header forwarded.
-- **Metrics:** App.Metrics + Prometheus at `/metrics`. No custom metrics — no counters for orders created, approved, cancelled, or for the two `*_not_found` divergence events, which are exactly the signals worth alerting on.
-
-## 12. Files with major architecture decisions; feature flags
-
-| File | Decision |
-|---|---|
-| `src/Pacco.Services.Orders.Core/Entities/Order.cs` | The order state machine — the platform's central lifecycle — and its invariants |
-| `src/Pacco.Services.Orders.Infrastructure/Extensions.cs` | Composition, and the subscription set: seven commands and seven external events, making this the platform's integration hub |
-| `src/Pacco.Services.Orders.Infrastructure/Mongo/Documents/CustomerDocument.cs` | The decision to replicate customer identity locally as an id-only document rather than call `customers-service` |
-| `src/Pacco.Services.Orders.Infrastructure/Services/PricingServiceClient.cs` | Pricing is fetched synchronously at order time rather than subscribed to |
-| `src/Pacco.Services.Orders.Application/Events/Rejected/` | Including `OrderForDeliveryNotFound` and `OrderForReservedVehicleNotFound` — the platform's only explicit divergence signals |
-| `tests/Pacco.Services.Orders.PactConsumerTests/PACT/ParcelsApiPactConsumerTests.cs` | The decision to contract-test one of six cross-service calls |
-| `src/Pacco.Services.Orders.Api/appsettings.json` | Three HTTP service dependencies; outbox with `disableTransactions: true` |
-
-**Feature flag system: none.** No LaunchDarkly / Unleash / Flagsmith / Split / OpenFeature dependency or configuration. Switches are startup-time booleans in `appsettings.json` (`consul.enabled`, `fabio.enabled`, `vault.enabled`, `vault.pki.enabled`, `outbox.enabled`, `metrics.enabled`, `jaeger.enabled`, `swagger.enabled`, `logger.*.enabled`). No order-lifecycle behaviour is gated.
+**Feature-flag system: none.** No flag provider package is referenced. The only switches are per-integration `enabled` booleans in `appsettings.json`, which are deployment configuration rather than runtime feature flags. There are no flag keys to list.
 
 ## 13. Open questions / ambiguities
 
-- **Ownership checks on per-order routes.** `GET`/`DELETE /orders/{orderId}` and the parcel/vehicle routes are not ownership-bound at the gateway. **Needs validation** that the handlers check `CustomerId`.
-- **No payment.** An order carries a total price and nothing collects it. Whether payment is out of scope or future is **Unknown**.
-- **Three synchronous dependencies at order time** (Parcels, Pricing, Vehicles) with no fallback, cache, or circuit breaker visible beyond Convey's two HTTP retries. Behaviour when any is down is **Needs validation**.
-- **The two `*_not_found` events have no subscriber** in the workspace — only `operations-service` records them, and nothing alerts. **Needs validation.**
-- **Pact publication is unproven.** A consumer contract exists in this repository and a provider verification exists in `Pacco.Services.Parcels`, but no pact broker or publish step was found, so it is **Unknown** whether the two are actually exchanged rather than kept in step by hand.
-- **`disableTransactions: true`** on the outbox, as everywhere else — order state and its outgoing events are not written atomically.
-- The order status vocabulary was read from `Order.cs` but not exhaustively verified against every handler. **Needs validation.**
+Mirrored in the final section of this file.
 
 ## 14. Frontend stack
 
-**No frontend assets detected — checked:** `public/`, `public/js/`, `src/` (four C# projects only), `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view templates (`*.cshtml`, `*.razor`, `*.html`). None of these web-asset directories exist. No `package.json`, no bundler configuration, no JavaScript or CSS. The only browser-facing surface is the runtime-generated Swagger UI at `/docs`.
+No frontend assets detected — checked: `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/`, `wwwroot/`, and view template directories. `src/` and `tests/` contain only C# projects. There is no `package.json`, no bundler configuration, no HTML and no view templates.
 
 ---
 
 ## README vs repository
 
-**What the README claims:**
-- Orders service, part of Pacco, .NET Core 3.1, runnable with `dotnet run` or Docker, available at `http://localhost:5006`. — **Confirmed** (`appsettings.json` `consul.port: 5006`, `Pacco/compose/services.yml` `5006:80`).
+| Claim in the documentation | What the repository shows | Marker |
+|---|---|---|
+| README describes an orders service on .NET Core 3.1 built with Convey, following clean architecture | Confirmed: four layered projects, Convey `0.4.*`, `netcoreapp3.1` | Confirmed |
+| The platform README presents services as independent with their own data | Confirmed, and the cost is visible: the same customer is stored separately here, in the parcels service and in the customers service | Confirmed |
+| The platform README describes an event-driven design | Mostly true here, but pricing is fetched by a direct synchronous call, and parcels and vehicles are queried directly as well | Needs validation — this service has both event and call dependencies on the same neighbours |
+| Contract testing protects service boundaries | Only the boundary with the parcels service is covered; the pricing and vehicles boundaries have no contract tests | Stale doc |
+| The message catalogue lists ten rejection messages for this service | Two of them are named as findings (`order_for_delivery_not_found`, `order_for_reserved_vehicle_not_found`) rather than as rejections | Needs validation |
 
-**README claims not reflected in the clone — Stale doc:**
-- The README instructs running the command **"in the `/src/Pacco.Services.Orders` directory"**; the actual host project is **`/src/Pacco.Services.Orders.Api`**. The documented path does not exist. **Stale doc** — the same systematic error found in nine of the ten service repositories.
-- Links, Travis badge, and Docker Hub image reference the upstream `devmentors` organisation rather than the `hianshul100` fork analysed here. **Stale doc.**
-
-**Components on disk but not in the README:**
-- **The order lifecycle itself** — the platform's central state machine, its seven commands, seven event subscriptions, and nine published events. Entirely undocumented.
-- **The Pact consumer tests**, and the fact that this repository is one half of the platform's only contract-testing pair.
-- **The three synchronous service dependencies** (Parcels, Pricing, Vehicles) and what happens to order creation if any is unavailable.
-- **The local `customers` replica collection** and its dependence on the `customer_created` event.
-- **The two divergence events** `order_for_delivery_not_found` and `order_for_reserved_vehicle_not_found`.
-- That `ApproveOrder` has no HTTP endpoint and is driven only by `resource_reserved`.
-- The transactional outbox/inbox and the handler decorators; `scripts/`.
-
-**Unknown (neither pass yielded proof):**
-- Whether the Pact contract is published and verified automatically or maintained by hand.
-- Whether order handlers enforce customer ownership.
+**Docs-only claims:** none identified.
+**Disk-only components:** the contract test project, the order state machine rules, and the two finding-style messages — present in code, not described in the README.
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This section lists what we assumed, what is blocking us, and what we still need to find out. Everything here is written in plain words so anyone can read it.
 
 ### Assumptions
 
-| # | Assumption | Rationale | Impact if Wrong | Validation Path |
-|---|------------|-----------|-----------------|-----------------|
-| A1 | An order becomes approved when `resource_reserved` arrives, and this is the only path to approval. | `ApproveOrder` has no HTTP route, and the service subscribes to `resource_reserved` from `availability-service`. | The order lifecycle diagram would be wrong at its most important transition, and downstream design work would model approval as a user action. | Read `ResourceReservedHandler` and confirm it dispatches `ApproveOrder`. |
-| A2 | The local `customers` collection is an existence check only, populated solely by the `customer_created` event. | `CustomerDocument` contains one field, `Id`, and the service subscribes to `customer_created`. | Customer data could be duplicated and drift between two services with no reconciliation defined. | Confirm the only insert path in `CustomerMongoRepository` is the event handler. |
-| A3 | The three outbound HTTP calls are made synchronously during order handling with no cached fallback. | Each client issues a direct `GET` with no cache lookup, and the only resilience configured is Convey's two HTTP retries. | Availability and latency conclusions for order creation would be wrong, in either direction. | Trace `CreateOrderHandler` and `AddParcelToOrderHandler` through their client calls. |
+| ID | Assumption | Why we made it |
+|---|---|---|
+| A1 | The copy of customer data held here is kept up to date only by messages from the customers service. | The only place it is written is the handler for the customer-created message; there is no direct call to fetch a customer. |
+| A2 | Restricting a customer to their own orders is done by the gateway, not by this service. | The filter is written into the gateway routing file, and no equivalent check appears in the service code inspected. |
+| A3 | This service is the platform's central domain, so changes here affect the most other services. | It publishes nine events, accepts seven commands, reacts to seven other services' events and calls three services directly. |
 
 ### Blockers
 
-| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
-|---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** It is not established that a caller can only act on their own orders. Order creation and listing are bound to the token's user id at the gateway, but `GET`/`DELETE /orders/{orderId}` and the parcel and vehicle routes are addressed by id with no ownership binding. | Security sign-off on the public API; any exposure of the gateway to real customers. | Security owner / service owner | Read the query and command handlers for a `CustomerId` check; if absent, add one, or bind `customerId: @user_id` on those gateway routes as is already done for creation. | TBD |
+_None._
 
 ### Open Questions
 
-| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
-|---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** Is payment out of scope for this platform? Orders carry a total price and nothing collects it. | It is a large functional gap for a commercial ordering system and would change the service map substantially if added. | Unknown — no payment code, service, or integration exists anywhere in the thirteen repositories. | Product owner |
-| Q2 | **[ACTION NOW]** What should happen when `parcels-service`, `pricing-service`, or `vehicles-service` is unavailable during order handling? | All three are called synchronously with only two retries, so any of them being down likely fails order creation outright. | Undefined in the repositories. | Service owner |
-| Q3 | **[handled later by architecture_evolution_generation]** Is the Pact contract between Orders and Parcels published and verified automatically, or kept in step by hand? | An unpublished contract gives the appearance of contract testing without the protection, and only one of six cross-service calls is covered either way. | Unknown — no broker URL or publish step appears in either repository. | Service owner |
-| Q4 | **[ACTION NOW]** Who is meant to act on `order_for_delivery_not_found` and `order_for_reserved_vehicle_not_found`? | They are the platform's only explicit signals that two services' views have diverged, and nothing subscribes to them or alerts on them. | Only `operations-service` records them, as it records everything. | Platform owner |
-| Q5 | **[handled later by architecture_evolution_generation]** What are the legal order states and transitions, and which are reachable from the public API? | This is the platform's central state machine, and downstream design work will encode it. | Read from `Order.cs`, but not verified handler by handler. | Product owner |
+| ID | Question | Owner and next step |
+|---|---|---|
+| Q1 | What happens if the customer copy stored here falls behind the customers service? Nothing in the code repairs it. | **[handled later by the ADR authoring stage]** Record how duplicated customer data is kept correct over time. |
+| Q2 | Can a caller inside the platform network list another customer's orders by calling this service directly? | **[ACTION NOW]** Confirm with the requesting team, since ownership checking currently sits only at the edge. |
+| Q3 | Should the pricing, parcels and vehicles boundaries also have contract tests, or is the parcels one a sample? | **[handled later by the ADR authoring stage]** Record the intended testing scope for service boundaries. |
+| Q4 | Two rejection messages are named as findings rather than failures. Are they errors or ordinary outcomes? | **[handled later by the ADR authoring stage]** Record what a client should do when it receives them. |
