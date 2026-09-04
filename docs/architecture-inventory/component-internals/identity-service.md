@@ -140,17 +140,17 @@ Four properties distinguish it from its siblings:
 
 ### 1.4 Position in the platform
 
-| Fact | Evidence |
-| --- | --- |
-| Listens on `5004:80` in Docker Compose | `hianshul100_Pacco/compose/services.yml:42-49` |
-| PM2 app name `identity`, run from `…Identity.Api` | `hianshul100_Pacco/services.yml:18-21` |
-| Reachable only through the gateway prefix `/identity` | `Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:237-289` |
-| Only 4 of its 8 HTTP routes have a gateway route | §6.2 — the three token-lifecycle routes and `""` are unrouted |
-| Owns the RabbitMQ topic exchange `identity` | `…Api/appsettings.json:136-142` |
-| Its `SignedUp` event has exactly one consumer, `customers-service` | grep of `SignedUp`/`signed_up` across all 14 clones |
-| Its `SignedIn` event has **no** consumer | same grep — `operations-service`'s `messages.json:66-69` subscribes `signed_in` generically, but only to render a UI notification (§6.5) |
-| Scraped by Prometheus as a static target `identity-service` | `hianshul100_Pacco/compose/prometheus/prometheus.yml:26-28` |
-| It is **not** in any other service's `depends_on`; `operations-service` depends on it | `hianshul100_Pacco/compose/services.yml:59-67` |
+| Serial Number | Fact | Evidence |
+| --- | --- | --- |
+| 1 | Listens on `5004:80` in Docker Compose | `hianshul100_Pacco/compose/services.yml:42-49` |
+| 2 | PM2 app name `identity`, run from `…Identity.Api` | `hianshul100_Pacco/services.yml:18-21` |
+| 3 | Reachable only through the gateway prefix `/identity` | `Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:237-289` |
+| 4 | Only 4 of its 8 HTTP routes have a gateway route | §6.2 — the three token-lifecycle routes and `""` are unrouted |
+| 5 | Owns the RabbitMQ topic exchange `identity` | `…Api/appsettings.json:136-142` |
+| 6 | Its `SignedUp` event has exactly one consumer, `customers-service` | grep of `SignedUp`/`signed_up` across all 14 clones |
+| 7 | Its `SignedIn` event has **no** consumer | same grep — `operations-service`'s `messages.json:66-69` subscribes `signed_in` generically, but only to render a UI notification (§6.5) |
+| 8 | Scraped by Prometheus as a static target `identity-service` | `hianshul100_Pacco/compose/prometheus/prometheus.yml:26-28` |
+| 9 | It is **not** in any other service's `depends_on`; `operations-service` depends on it | `hianshul100_Pacco/compose/services.yml:59-67` |
 
 ---
 
