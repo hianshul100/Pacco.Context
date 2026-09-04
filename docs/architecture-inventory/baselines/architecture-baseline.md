@@ -9,7 +9,8 @@
 | Branch | `arch-discovery-21758174-49b6-4af2-9774-025561defc90` |
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
-| Prior artifact at this path | None — this document is authored fresh |
+| Prior artifact at this path | None — this document was authored fresh |
+| Revision | **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -148,11 +149,14 @@ These absences are load-bearing for §9 and are recorded as gaps, not as design 
 
 Pacco presents **one intended front door**: `api-gateway`, published on host port `5000`
 (`compose/services.yml:11`, `5000:80`). Every service behind it is also published on a host port in
-the Compose stacks (`5001`–`5009`), which means that in the Compose topology the gateway is the
-*conventional* entry point rather than an *enforced* one — nothing in the Compose network
-definition prevents a client from calling `orders-service` on `5006` directly. Whether a real
-environment places a firewall or ingress in front of those ports is `[unknown]`; no manifest in the
-workspace describes network policy.
+the Compose stacks — `5001`–`5009` for the nine routed services, plus `5015` for `ordermaker-service`
+(`compose/services.yml`, `ports: - 5015:80`), which is published on the host even though no
+`ntrada*.yml` route targets it (§2.3). That is **ten** directly reachable service ports, which means
+that in the Compose topology the gateway is the *conventional* entry point rather than an *enforced*
+one — nothing in the Compose network definition prevents a client from calling `orders-service` on
+`5006` directly, and the saga service is on the host network at `5015` despite being unreachable
+through the gateway. Whether a real environment places a firewall or ingress in front of those ports
+is `[unknown]`; no manifest in the workspace describes network policy.
 
 Traffic crossing the boundary arrives over three protocols, all terminating on `operations-service`
 or `api-gateway`:
@@ -182,7 +186,7 @@ Eleven deployables are defined in `hianshul100_Pacco/compose/services.yml`. Name
 | `identity-service` | `devmentors/pacco.services.identity` | 5004 | `Pacco.Services.Identity` | *the identity service* — sign-up, sign-in, token issuance |
 | `operations-service` | `devmentors/pacco.services.operations` | 5005 | `Pacco.Services.Operations` | *the operations service* — operation status tracking and real-time push |
 | `orders-service` | `devmentors/pacco.services.orders` | 5006 | `Pacco.Services.Orders` | *the order service* — order aggregate and its lifecycle |
-| `ordermaker-service` | `devmentors/pacco.services.ordermaker` | (see §2.3) | `Pacco.Services.OrderMaker` | *the order saga* — multi-step order creation process |
+| `ordermaker-service` | `devmentors/pacco.services.ordermaker` | 5015 (out of band — see §2.3) | `Pacco.Services.OrderMaker` | *the order saga* — multi-step order creation process |
 | `parcels-service` | `devmentors/pacco.services.parcels` | 5007 | `Pacco.Services.Parcels` | *the parcel service* — parcel records |
 | `pricing-service` | `devmentors/pacco.services.pricing` | 5008 | `Pacco.Services.Pricing` | *the pricing service* — order pricing and VIP discounting |
 | `vehicles-service` | `devmentors/pacco.services.vehicles` | 5009 | `Pacco.Services.Vehicles` | *the vehicle service* — vehicle catalogue |
@@ -203,6 +207,11 @@ There are **two different deployable sets** in the orchestration repository, and
 - `services.yml` and `prod-services.yml` — PM2 process manifests at the repository root — each
   declare **10** apps: `api`, `availability`, `customers`, `deliveries`, `identity`, `operations`,
   `orders`, `parcels`, `pricing`, `vehicles`.
+
+`ordermaker-service` is also the one deployable whose host port sits **outside** the contiguous
+`5001`–`5009` block: `compose/services.yml` maps it to `5015:80`. The gap is not itself meaningful —
+nothing occupies `5010`–`5014` — but it is why the service is easy to miss when the platform's port
+range is quoted as "5000 to 5009".
 
 **`ordermaker` is absent from both PM2 manifests.** Combined with the fact that `ordermaker-service`
 has no route in any `ntrada*.yml` gateway configuration, this means the saga service is reachable
@@ -262,17 +271,58 @@ that this is why `operations-service` is the only service that subscribes to `id
 
 ### 3.3 Runtime type emission — a notable structural mechanism
 
-`api-gateway` does not have compiled C# types for the 80-odd messages it publishes. Ntrada reads a
-`messages.json` payload contract and uses `System.Reflection.Emit` to **generate the message types
-at runtime** from the incoming request body. This has three architectural consequences worth stating
-plainly:
+The mechanism described here belongs to **`operations-service`**, not to `api-gateway`. It is stated
+first because an earlier reading of this platform attributes it to the gateway, and that attribution
+is wrong.
 
-1. There is no compile-time contract between `api-gateway` and the services that consume its
-   messages. A field renamed in a service's command class will not break the gateway build.
-2. Message shape validation at the edge is limited to whatever `messages.json` declares.
-3. The wire payload of a message is discoverable only by reading `messages.json` and the consuming
-   service's command class side by side — there is no single generated schema. This is why the wire
-   payloads of the ~80 messages remain an open item (see the closing section).
+`operations-service` does not have compiled C# types for the roughly 80 messages it subscribes to. It
+reads `messages.json` (`Operations.Api/messages.json` — a map of service → `exchange`, `commands`,
+`events`, `rejectedEvents`) and uses `System.Reflection.Emit` to **generate the message types at
+runtime**. `Subscriptions.SubscribeMessages` builds a dynamic assembly with
+`AssemblyBuilder.DefineDynamicAssembly`, and `BindMessages<T>` calls `moduleBuilder.DefineType(message,
+TypeAttributes.Public, type)` once per message name, stamps each emitted type with a
+`MessageAttribute` carrying the owning exchange, then subscribes to it reflectively
+(`Operations.Api/Infrastructure/Subscriptions.cs:19-83`).
+
+This is the **only** occurrence of either artifact in the workspace: `find . -name messages.json`
+returns exactly one path and `grep -rln "Reflection.Emit" --include=*.cs` returns exactly one file,
+both under `Pacco.Services.Operations.Api`.
+
+Three architectural consequences worth stating plainly:
+
+1. The emitted types are **field-less** — `DefineType` adds no members and nothing populates them —
+   so `operations-service` observes *that* a message arrived on an exchange without deserialising its
+   contents. The one component that sees every message therefore cannot serve as a contract oracle for
+   payload shape (`architecture-views.md` GAP-15 records the same finding).
+2. `operations-service`'s observable surface is bounded **exactly** by `messages.json`: a message
+   absent from that file is not subscribed at all, whatever the publishing service emits.
+3. There is no compile-time contract on this path. A field renamed in a publisher's event class will
+   not break the `operations-service` build, because no build-time reference to that class exists.
+
+**`api-gateway` is a separate case and must not be conflated with the above.** The gateway likewise
+holds no compiled C# types for the messages it publishes in async mode, but for a different and more
+mundane reason: all of its behaviour is declared in `ntrada*.yml`, and message publication is performed
+by the `Ntrada.Extensions.RabbitMq` 0.4.* NuGet package (`Pacco.APIGateway.csproj:18`). The gateway
+repository contains **no** `messages.json`, **no** `payloads/` directory, and **no**
+`System.Reflection.Emit` code — its entire `src/Pacco.APIGateway/` tree is `Program.cs`, the csproj,
+four `ntrada*.yml` files, four `appsettings*.json`, `Properties/`, `certs/`, and four
+`Infrastructure/*.cs` correlation and tracing hooks.
+
+How Ntrada turns a request body into a published message is therefore `[unknown]`: the package source
+is not in this workspace and nothing in the gateway repository describes it. The only payload-contract
+evidence at the edge is a single route — `ntrada-async.yml:204-205` declares
+`payload: complete_customer_registration` and `schema: complete_customer_registration.schema` — and
+**neither referenced file is present in the repository**, so even that route's declared contract cannot
+be read here. `[inferred]` that the remaining nineteen `use: rabbitmq` routes rely on Ntrada's default
+body-to-message conversion, since none of them declares a `payload` or `schema`; the conversion rule
+itself is `[unknown]`.
+
+The consequence that matters for impact analysis is unchanged, but its reason is different from the
+one previously recorded: there is no compile-time contract between `api-gateway` and the services that
+consume its messages, because the gateway compiles no message types at all — not because it emits them.
+Edge-side message shape validation is limited to whatever Ntrada does with a `payload`/`schema` pair,
+which is `[unknown]` and, on nineteen of twenty routes, not declared. The wire payloads of the ~80
+messages remain an open item (see Q9 in the closing section).
 
 ### 3.4 No shared contract package
 
@@ -338,10 +388,19 @@ check and every price calculation therefore has a hard synchronous dependency on
 
 ### 4.2 Asynchronous messaging — the platform's primary integration fabric
 
-RabbitMQ carries roughly **80 distinct messages** across **eight topic exchanges**, one owned by
-each publishing service: `identity`, `customers`, `availability`, `vehicles`, `orders`, `parcels`,
-`deliveries`, `ordermaker`. The full message-to-exchange and subscription tables are in
+RabbitMQ carries roughly **80 distinct messages** across **eight topic exchanges that carry traffic**,
+one owned by each publishing service: `identity`, `customers`, `availability`, `vehicles`, `orders`,
+`parcels`, `deliveries`, `ordermaker`. The full message-to-exchange and subscription tables are in
 `repo-inventory.md` §3.2 and are not restated here.
+
+**A ninth exchange is declared but never published to.** `operations-service` configures
+`rabbitMq.exchange` as `{ name: "operations", type: "topic", declare: true, durable: true,
+autoDelete: false }` in `Operations.Api/appsettings.json`, so an `operations` topic exchange is
+created on the broker at startup — but no publish path to it exists in the service: `grep -rn
+"PublishAsync\|IBusPublisher" Operations/src` returns nothing, consistent with `operations-service`
+being a pure subscriber and projection component (§3.2, §5.4). A reader inspecting a running broker
+will therefore find nine exchanges where the eight above account for all message flow; the ninth is an
+empty declaration, not a missing publisher this document failed to find.
 
 Structurally, the pattern is uniform across every service:
 
@@ -400,6 +459,22 @@ it publishes to are six: `availability` (line 120), `customers` (200), `deliveri
 (359), `parcels` (446), `vehicles` (508). **`identity` is not among them** — sign-up and sign-in
 remain synchronous downstream proxies even in async mode, which is the correct choice given the
 caller needs the token back.
+
+The twenty are **not evenly distributed** across those six exchanges, and the distribution matters for
+any per-service impact assessment of a switch between the two families:
+
+| Target exchange | `use: rabbitmq` routes in `ntrada-async.yml` |
+|-----------------|---------------------------------------------|
+| `orders` | 5 |
+| `availability` | 4 |
+| `deliveries` | 4 |
+| `vehicles` | 3 |
+| `customers` | 2 |
+| `parcels` | 2 |
+| **Total** | **20** |
+
+This breakdown is also why the "20 write routes" label on the single `gw → availability` edge in the
+embedded §2.2 diagram must be read as a platform-wide total rather than an edge fact (§12.3).
 
 The `.docker.yml` and non-`.docker.yml` variants differ in **how the gateway reaches services**:
 
@@ -659,11 +734,17 @@ it narrows:
 |---------------------|----------|---------|
 | Operation status storage in `operations-service` | `Operations.Api/Services/OperationsService.cs:13,16` injects `IDistributedCache` — **the only `IDistributedCache` injection site in the entire workspace** | Active runtime dependency, confirmed |
 | SignalR backplane in `operations-service` | `Operations.Api/Infrastructure/Extensions.cs:106` — `signalR.AddRedis(redisOptions.ConnectionString)` | Active runtime dependency, confirmed |
-| The other eight registering services | Registration only; no `IDistributedCache` injection, no cache read or write found | **Registered but no active use observed.** Convey may use it internally for the message inbox/outbox; that was not verified |
+| Access-token deactivation in `identity-service` | `Identity.Api/Program.cs:57-59` routes `POST access-tokens/revoke` to `IAccessTokenService.DeactivateAsync(cmd.AccessToken)`; `Identity.Infrastructure/Extensions.cs:82,88` register `.AddRedis()` and `.AddSecurity()` together | **Active call path into a token store, confirmed.** `IAccessTokenService` is declared by Convey, not by this repository (`grep -rn "IAccessTokenService" Identity/src` returns only the call site), so that the store it writes to is the registered Redis rather than an in-process cache is `[inferred]` — the same inference as A1 |
+| The other seven registering services | `availability-service`, `customers-service`, `deliveries-service`, `ordermaker-service`, `orders-service`, `parcels-service`, `vehicles-service`. Registration only; no `IDistributedCache` injection, no Convey cache-backed service resolved, no cache read or write found | **Registered but no active use observed.** Convey may use it internally for the message inbox/outbox; that was not verified |
 
 So the honest statement is: **Redis is a confirmed runtime dependency of `operations-service` for two
-distinct purposes, and a registered-but-unexercised dependency of eight other services.** Drawing a
-runtime edge from all nine services to Redis would over-generalise a subset behaviour.
+distinct purposes and of `identity-service` for access-token deactivation, and a
+registered-but-unexercised dependency of seven other services.** Drawing a runtime edge from all nine
+services to Redis would over-generalise a subset behaviour; drawing it from `operations-service` alone
+would drop an evidenced consumer. Note the asymmetry between the two confirmed users:
+`operations-service` resolves `IDistributedCache` directly in this workspace, whereas
+`identity-service`'s path runs through a Convey abstraction whose implementation is not here — so the
+`identity-service` edge is evidenced at the call site and `[inferred]` at the store.
 
 `operations-service` also registers `AddMongo()` (`Extensions.cs:71`) and has a `mongo.database`
 configured, yet the only operation-state read/write path observed is through `IDistributedCache`.
@@ -677,7 +758,8 @@ One Redis server serves the whole platform, partitioned only by the `redis.insta
 This is a **shared-infrastructure** relationship, not a service-to-service one: two services sharing
 a Redis instance have no runtime relationship with each other. The prefixes give logical isolation;
 they give no isolation of memory pressure, eviction, or failure. A single Redis outage removes
-operation status tracking and the SignalR backplane simultaneously.
+operation status tracking, the SignalR backplane, and `identity-service` access-token deactivation
+simultaneously — three unrelated capabilities in two services, sharing one failure domain.
 
 ### 6.6 Data model ownership summary
 
@@ -1147,9 +1229,16 @@ found no `docs/adr/` directory, no `adr/` directory, no `decisions/` directory, 
 repository is `README.md` plus the four `docs/architecture-inventory/` artifacts and the thirteen
 `repo-summary/*.md` files; none of them is an ADR.
 
+**The governance catalog was also checked, and it is empty.** This revision queried the CAKE knowledge
+graph for tenant `Q5SCXYFS` for any node of any type, and for any ADR, Decision, or Constraint
+governing Pacco's messaging, Redis caching, gateway routing, or deployment topology. The graph
+returned **zero rows** for an unscoped node count, and the corpus search returned **no chunks**. So the
+catalog holds no governing decision for this platform either — the absence recorded above is not an
+artifact of searching only the file system.
+
 This section therefore records **no ADR-derived constraints**, because there are none to derive. No
 architecture decision has been invented, inferred, or back-filled from code to fill the gap. If ADRs
-exist outside this workspace, they are `[unknown]`.
+exist outside this workspace and outside the catalog, they are `[unknown]`.
 
 ### 11.2 Constraints enforced by the code
 
@@ -1182,10 +1271,11 @@ closing section rather than silently reconciled.
 | # | Documented claim | Code reality | Resolution |
 |---|-----------------|--------------|------------|
 | X1 | `architecture-views.md` §4.5: "No CI or CD pipeline definition exists… Individual service repositories were not observed to carry a shared pipeline template either" | Eleven `.travis.yml` files define `build.sh` → `test.sh` → `dockerize.sh` on `master`/`develop` (§9.5). `repo-inventory.md` §2.3 records them correctly | **Follow the code.** CI exists. The CD half of the claim stands — no deployment automation was observed |
-| X2 | `architecture-views.md` §6 GAP-9: `AddRedis()` is registered in "eight services" | `AddRedis()` is registered in **nine**: `availability-service`, `customers-service`, `deliveries-service`, `identity-service`, `operations-service`, `ordermaker-service`, `orders-service`, `parcels-service`, `vehicles-service`. Only `pricing-service` omits it | **Follow the code.** Nine. The substance of GAP-9 — registered but unexercised — is unaffected |
+| X2 | `architecture-views.md` §6 GAP-9: `AddRedis()` is registered in "eight services" | `AddRedis()` is registered in **nine**: `availability-service`, `customers-service`, `deliveries-service`, `identity-service`, `operations-service`, `ordermaker-service`, `orders-service`, `parcels-service`, `vehicles-service`. Only `pricing-service` omits it | **Follow the code.** Nine. This is a **count** error only; GAP-9's identification of *which* registrations are exercised is correct and is recorded separately as X6 |
 | X3 | `docker-images.txt` lists SQL Server 2017, PostgreSQL, InfluxDB, Elasticsearch, Kibana, and Logstash as platform components | None is referenced by any service. `influxEnabled: false`, `elk.enabled: false` everywhere (§9.4) | **Follow the code.** Actual datastores are MongoDB and Redis; actual sinks are Prometheus and Seq. The file is a setup cookbook, not a manifest |
 | X4 | The repository name `Pacco.Web` implies a web client is part of the platform | The repository tracks one file, `README.md`, containing `# Pacco.Web`. No frontend exists anywhere in the workspace (§7.1) | **Follow the code.** There is no frontend. Whether one exists outside this scope is `[unknown]` |
 | X5 | `capability-baseline.md` CONFLICT-01: operation status durability | `operations-service` registers `AddMongo()` and configures a `mongo.database`, yet the only observed operation-state path is `IDistributedCache` (Redis) (§6.4) | **Follow the code.** Operation status is cached in Redis, not durably stored. Consistent with CONFLICT-01 |
+| X6 | An earlier revision of **this document** claimed the eight non-`operations-service` `AddRedis()` registrants had no active use, narrowing `architecture-views.md` GAP-9 (`architecture-views.md:1309`) from **two** evidenced Redis consumers to one | `Identity.Api/Program.cs:57-59` routes `POST access-tokens/revoke` to `IAccessTokenService.DeactivateAsync(cmd.AccessToken)`, with `.AddRedis()` and `.AddSecurity()` registered together at `Identity.Infrastructure/Extensions.cs:82,88`. GAP-9's two-consumer reading is the correct one | **Follow the code — and GAP-9.** §6.4 now records `identity-service` access-token deactivation as an evidenced consumer, separate from the seven with no observable use. This is a self-correction of this document, not a defect in `architecture-views.md`; recorded so a reader comparing revisions sees why the count changed. See §12.3 |
 
 ### 11.4 Future or intended state, not implemented
 
@@ -1232,7 +1322,10 @@ Diagram edges there carry an explicit confidence marker — `[confirmed]`, `[inf
 
 Two diagrams are embedded below because §4 of this document depends on them directly. Both were
 verified edge by edge against source configuration before embedding; both are reproduced **verbatim**
-from `architecture-views.md`.
+from `architecture-views.md`. Verification found **three defects** — one under-drawn fan-out in the
+synchronous graph and two mislocated edge labels in the asynchronous graph. They are named in full in
+§12.3 and carried as B6 in the closing section. The diagrams are embedded unaltered because this stage
+does not own `architecture-views.md`; read them with the §12.3 caveats in hand.
 
 **Synchronous dependency graph** (`architecture-views.md` §2.1) — every HTTP call between services,
 showing which callers go through Fabio and which do not.
@@ -1343,16 +1436,44 @@ exchanges and their owners; `ordermaker-service` as the sole cross-exchange publ
 `operations-service` subscribing to all eight exchanges; and the `customer_created` replication
 fan-out to three services.
 
-Three inconsistencies were found and are **surfaced, not reconciled**: the Travis CI claim in
-`architecture-views.md` §4.5 (X1), the eight-versus-nine `AddRedis()` count in its GAP-9 (X2), and
-the `availability` → `ordermaker` `resource_reserved` edge, which is a correct subscription but
-carries no saga behaviour (§5.1). All three appear in the closing section.
+**Four** inconsistencies were found and are **surfaced, not reconciled**: the Travis CI claim in
+`architecture-views.md` §4.5 (X1), the eight-versus-nine `AddRedis()` count in its GAP-9 (X2), the
+`availability` → `ordermaker` `resource_reserved` edge, which is a correct subscription but carries no
+saga behaviour (§5.1), and — new in this revision — a **substantive divergence from GAP-9** described
+next. All four appear in the closing section.
 
-One caveat on the embedded synchronous graph, stated so a reader does not over-read it: it draws
-`gw --> orders` as the illustrative direct-`localUrl` edge, but `ntrada.yml` declares `localUrl`
-pairs for **all nine** routed services (`5001`–`5009`, §4.3). The diagram under-draws that fan-out.
-That is incompleteness rather than an incorrect edge, so it does not disqualify the diagram from
-being embedded — but "only `orders-service` is reached directly" would be a wrong reading of it.
+**The GAP-9 substance divergence (X6).** `architecture-views.md` GAP-9
+(`architecture-views.md:1309`) names **two** evidenced Redis consumers: "`identity-service` token
+revocation and `operations-service` state plus SignalR backplane". §6.4 of this baseline, as first
+written, recognised only `operations-service` and placed `identity-service` in the
+registered-but-unused group. §6.4 has been corrected in this revision to record the `identity-service`
+access-token deactivation path (`Identity.Api/Program.cs:57-59`), so the two artifacts now **agree on
+the substance** of GAP-9 — two evidenced consumers, not one. The divergence is recorded here rather
+than deleted because it was a real disagreement between two artifacts in the same inventory and
+because X2 remains open: GAP-9 still states eight `AddRedis()` registrations where the code shows nine.
+X2 is a count error in `architecture-views.md`; X6 was a substance error in this document, now fixed on
+this side.
+
+**Three caveats on the embedded diagrams**, stated so a reader does not over-read them. None is an
+*incorrect* edge; all three are labelling or completeness defects, which is why the diagrams remain
+embedded verbatim. All three are carried as B6 because `architecture-views.md` is owned by another
+stage.
+
+1. *Synchronous graph, under-drawn fan-out.* It draws `gw --> orders` as the illustrative
+   direct-`localUrl` edge, but `ntrada.yml` declares `localUrl` pairs for **all nine** routed services
+   (`5001`–`5009`, §4.3). "Only `orders-service` is reached directly" would be a wrong reading.
+2. *Asynchronous graph, a platform-wide count on a single edge.* The edge
+   `gw -->|"20 write routes as commands"| xav` attaches the **platform-wide** total of 20 `use:
+   rabbitmq` routes to the `api-gateway` → `availability` **exchange edge alone**. `ntrada-async.yml`
+   declares **4** routes onto the `availability` exchange; the 20 distributes as orders 5,
+   availability 4, deliveries 4, vehicles 3, customers 2, parcels 2. Read the 20 as the label for the
+   six `gw -->` edges collectively, not for the one it is drawn on.
+3. *Asynchronous graph, a whole-topology claim on a single edge.* The edge
+   `xom -->|"all 8 exchanges observed"| ops` puts the claim that `operations-service` subscribes to
+   every exchange onto the `ordermaker` → `operations-service` edge specifically, while the graph
+   draws only **3** of the 8 exchange → `ops` edges (`xom`, `xid`, `xor`). The claim itself is correct
+   — `messages.json` binds all eight — but the graph does not draw it, and the label's placement
+   implies the `ordermaker` exchange is the one carrying it.
 
 ---
 
@@ -1394,6 +1515,7 @@ the analysis date of 2026-09-04; none is an agreed commitment.
 | B3 | **[ACTION NOW]** Nobody in the available sources can say whether `ordermaker-service` runs in any real environment. It has no route in any `ntrada*.yml`, is absent from both PM2 manifests, has no observable publisher for its `MakeOrder` entry command, and can only be reached by publishing directly onto the `ordermaker` exchange | §5.1 and §5.2 in full; the saga description that four other services participate in; the `ordermaker-service` edges in both embedded diagrams | The platform's only orchestrated process is described as current behaviour. If it is dead code, a substantial part of this baseline describes something that never runs | Platform owner / operator for the Pacco runtime (no named individual recorded — see Q18) | Confirm whether `ordermaker-service` is deployed in any environment, and inspect the `ordermaker` exchange on the running broker for a publisher; if it is deployed but unreachable, record it as dead code | 2026-09-11 (proposed) |
 | B4 | **[handled later by runtime and deployment validation]** No production runtime manifest exists in any repository — no Kubernetes, Helm, Terraform, Kustomize, or service-mesh configuration | Every scaling, availability, replica-count, probe, and network-policy statement in §9.2; assumption A3; any operational review that this document is meant to support | Runtime shape cannot be established from source repositories at any confidence, because the sources simply do not contain it | The runtime and deployment validation stage (owner assigned when that stage is scheduled) | Obtain read access to the deployment platform itself and re-derive the topology there, rather than from source repositories | n/a — resolves when the runtime and deployment validation stage runs; no action required from this stage |
 | B5 | **[handled later by architecture views generation]** `architecture-views.md` §4.5 states no CI pipeline definition exists in any repository, which the code contradicts — eleven `.travis.yml` files define a build-test-dockerize pipeline (§9.5, X1). Its §6 GAP-9 also states `AddRedis()` is registered in eight services where the code shows nine (X2) | Trust in `architecture-views.md` as a reference alongside this document; any consumer that reads both and finds them disagreeing | Two artifacts in the same inventory make contradictory factual claims. This stage consumes `architecture-views.md` and must not modify it, so the contradiction can only be surfaced here, not fixed here | The architecture views generation stage, which owns `architecture-views.md` | Re-run or amend the architecture views generation stage so that §4.5 records the eleven Travis pipelines and GAP-9 records nine `AddRedis()` registrations, matching `repo-inventory.md` §2.3 and §9.5 of this document | n/a — resolves when the architecture views generation stage next runs; no action required from this stage |
+| B6 | **[handled later by architecture views generation]** Three labelling and completeness defects in the two diagrams this document embeds from `architecture-views.md` (§12.2, §12.3): (a) §2.1 draws `gw --> orders` as the only direct-`localUrl` edge where `ntrada.yml` declares `localUrl` for all nine routed services; (b) §2.2's `gw -->\|"20 write routes as commands"\| xav` puts the platform-wide total of 20 `use: rabbitmq` routes on the availability edge alone, where `ntrada-async.yml` declares 4 (orders 5, availability 4, deliveries 4, vehicles 3, customers 2, parcels 2); (c) §2.2's `xom -->\|"all 8 exchanges observed"\| ops` places a whole-topology claim on the `ordermaker` → `operations-service` edge while only 3 of the 8 exchange → `ops` edges are drawn | Any reader who takes the embedded diagrams at face value without §12.3's caveats — specifically, anyone sizing the gateway's async write surface per exchange, or the `operations-service` subscription fan-in | None of the three is an incorrect *edge*, so the diagrams remain usable and are embedded verbatim. But each label reads as a per-edge fact when it is a platform-wide one, which is exactly the error class that produces wrong impact analysis. This stage consumes `architecture-views.md` and must not modify it, so the defects can only be surfaced here | The architecture views generation stage, which owns `architecture-views.md` (no named individual recorded — see Q18) | Amend §2.1 to draw the direct-`localUrl` fan-out to all nine services or relabel the single edge as illustrative; move the "20 write routes" label off the `gw → xav` edge and give each of the six `gw -->` edges its own count; either draw the remaining five exchange → `ops` edges or move the "all 8 exchanges observed" label off the `xom` edge onto a note | n/a — resolves when the architecture views generation stage next runs; no action required from this stage |
 
 ### Open Questions
 
@@ -1407,13 +1529,13 @@ finding, and nothing elsewhere in this baseline rests on it.
 |----|----------|----------------|--------------------------|----------------|----------------------------------|
 | Q1 | **[ACTION NOW]** Does order-making saga state survive a restart of `ordermaker-service`? `Chronicle_` 3.2.1 is registered with a bare `AddChronicle()` and no persistence package | An order half-way through the seven-step sequence in §5.1 would be silently abandoned — the customer's order exists, a vehicle is assigned, and nothing ever completes or compensates it | Likely not durable. The absence of a `Chronicle.Persistence.*` reference is the whole basis for this; no observed behaviour confirms it | Platform owner, or the original author of `ordermaker-service` | Reading the `Chronicle_` 3.2.1 default registration, or a restart test against a running saga |
 | Q2 | **[ACTION NOW]** Is losing operation status acceptable? It is held only in Redis with `requests.expirySeconds: 300`, and in async gateway mode it is the caller's only channel for learning an outcome | A caller who gets `202 Accepted` and waits longer than five minutes, or who is connected when Redis restarts, never learns whether their order succeeded | Probably an accepted design choice for a status projection — the expiry is explicitly configured rather than defaulted, and `operations-service` writes no domain state. Whether five minutes suits the real order lifecycle is the actual question | Platform owner, or the original author of `operations-service` | A platform owner or the original author |
-| Q3 | **[handled later by data and integration analysis]** Why do eight services register `AddRedis()` and never inject `IDistributedCache`? Only `operations-service` uses it | Determines whether Redis is a genuine runtime dependency of nine services or of one. §6.4 draws the narrow reading; a wrong call here mis-scopes every Redis outage impact assessment | Likely vestigial copy-paste across service templates, possibly with Convey using the connection internally for inbox/outbox. Not verified either way | Data and integration analysis stage, with the platform owner | Reading the Convey 0.4.x inbox/outbox implementation, or observing Redis key traffic per service at runtime |
+| Q3 | **[handled later by data and integration analysis]** Why do **seven** services register `AddRedis()` with no observable use at all — no `IDistributedCache` injection and no Convey cache-backed service resolved? Only `operations-service` (directly) and `identity-service` (through Convey's `IAccessTokenService`) have an evidenced path | Determines whether Redis is a genuine runtime dependency of nine services or of two. §6.4 draws the narrow reading; a wrong call here mis-scopes every Redis outage impact assessment | Likely vestigial copy-paste across service templates, possibly with Convey using the connection internally for inbox/outbox. Not verified either way. The `identity-service` case shows the pattern is not purely vestigial — a Convey abstraction can consume the registration without any local `IDistributedCache` reference, so the other seven cannot be dismissed on that evidence alone | Data and integration analysis stage, with the platform owner | Reading the Convey 0.4.x inbox/outbox and `IAccessTokenService` implementations, or observing Redis key traffic per service at runtime |
 | Q4 | **[ACTION NOW]** Is it deliberate that commands issued by the saga carry an empty user context, so every ownership guard in the platform is skipped? The guards are written `if (identity.IsAuthenticated && …)` and therefore fail open | An unauthenticated message reaching a handler bypasses authorization entirely. §5.3 shows the saga path does exactly this, and §8.3 shows the same guard shape in four handlers | Probably an intentional "trusted internal caller" pattern — the mechanism to carry identity exists (`CorrelationContext.UserContext`) and is simply not populated on this path. But nothing states the intent, and the same failure mode applies to any direct exchange publish | Security owner, with the platform owner | A security owner's ruling on whether internal messages are trusted, plus a decision on whether direct broker access is possible in a real environment |
 | Q5 | **[handled later by data and integration analysis]** Nothing consumes `customer_state_changed` or `became_vip`. The three customer replicas are built from `customer_created` and never updated. There is no reconciliation mechanism at all | `orders-service`, `availability-service`, and `parcels-service` can act on permanently stale customer data, and a single missed `customer_created` leaves a replica inconsistent forever | Likely an oversight rather than a design: both events are published and declared, yet no handler exists in any of the thirteen repositories. Services that need current state fetch it synchronously instead, which suggests the replica was only ever meant for existence checks | Data and integration analysis stage, with the owners of the three subscribing services | A stage that examines data flow and consistency requirements across services |
 | Q6 | **[ACTION NOW]** Should `pricing-service` be in `customers-service`'s certificate ACL? It calls `customers-service` over HTTP but the ACL grants `customers:read` only to `availability-service` | Either a legitimate caller is missing a grant, or certificate enforcement is not actually in effect — and §8.4 cannot tell which | No confident reading. The two possibilities are indistinguishable from configuration alone | Security owner for the Pacco platform | Calling `customers-service` from `pricing-service` in a running environment and observing whether the certificate check rejects it |
 | Q7 | **[ACTION NOW]** Is client-certificate authentication actually enforced anywhere? Exactly one of ten services sets `security.certificate.enabled: true`; `availability-service` has a header name and nothing else; the other eight sections are empty | Determines whether §8.4 describes a working control or a single-service experiment. "Pacco uses mTLS between services" would be a false statement either way, but the degree matters | Likely a partial, experimental rollout — Vault PKI is provisioned for every service (each has a `pki.roleName` and a `<service>.pacco.io` common name) while verification is switched on in one place | Security owner for the Pacco platform | A security owner, or a runtime test presenting no certificate to `customers-service` |
 | Q8 | **[ACTION NOW]** What publishes `MakeOrder`, the command that starts the order-making saga? No gateway route targets `ordermaker-service`, and no service in the thirteen repositories publishes it | Without an entry point, the platform's only orchestrated process has no traceable trigger, and §5.1 describes a sequence nothing is known to start. Directly compounds B3 | None. This is an *Unverifiable — Missing Source Evidence* case, not an inference gap | Platform owner / operator for the Pacco runtime | Inspecting publishers on the `ordermaker` exchange in a running broker, or a client outside these thirteen repositories |
-| Q9 | **[handled later by data and integration analysis]** What are the wire payloads of the roughly 80 messages? `api-gateway` emits them via `System.Reflection.Emit` from `messages.json`, so no compiled contract exists | Any consumer or producer change is unguarded by a build-time contract (§3.4, C2). Without payload shapes, message-level impact analysis is guesswork | None. The shapes are recoverable only by reading `messages.json` against each consuming service's command class | Data and integration analysis stage | Cross-reading `messages.json` with each service's command and event classes, or capturing live messages from the broker |
+| Q9 | **[handled later by data and integration analysis]** What are the wire payloads of the roughly 80 messages? No single artifact declares them: `operations-service` emits **field-less** types from `messages.json` via `System.Reflection.Emit` (§3.3), so its subscriptions carry no shape; `api-gateway` compiles no message types at all and delegates publication to `Ntrada.Extensions.RabbitMq` 0.4.*, whose body-to-message conversion is `[unknown]` because the package source is not in this workspace | Any consumer or producer change is unguarded by a build-time contract (§3.4, C2). Without payload shapes, message-level impact analysis is guesswork | None. The shapes are recoverable only by reading `messages.json` (for the message *names* per exchange) against each **publishing and consuming service's** command and event classes — `messages.json` itself declares no fields | Data and integration analysis stage | Cross-reading `messages.json` with each service's command and event classes, capturing live messages from the broker, or reading the `Ntrada.Extensions.RabbitMq` 0.4.* source for the edge-published shapes |
 | Q10 | **[ACTION NOW]** Do the SignalR hub and the gRPC `SubscribeOperations` stream scope delivery per caller, or broadcast all operations to every connected client? | An unscoped broadcast would leak every customer's operation activity to every connected client — a data exposure, not just a design question | None. The static test page in §7.2 passes a JWT to `initializeAsync` after connecting, which suggests per-caller scoping is intended, but the hub's delivery logic was not established | Security owner, with the owner of `operations-service` | Reading `PaccoHub` and the gRPC service implementation in full, or connecting two clients and observing cross-delivery |
 | Q11 | **[handled later by test and quality analysis]** How does the Pact file get from `orders-service` (consumer) to `parcels-service` (provider)? `Pactify` 1.1.0 is used with no Pact broker | The platform's only cross-service contract test may not actually verify anything if the provider never receives the consumer's pact | Likely a manually copied file or a test that only runs on the consumer side. Not established | Test and quality analysis stage | Reading the two repositories' test projects and CI scripts together, or asking the original author |
 | Q12 | **[ACTION NOW]** Which deployment path is authoritative — Docker Compose or PM2 — and why does `prod-services.yml` omit `ordermaker` while `compose/services.yml` includes it? | §9.1 describes two parallel paths and cannot say which one describes reality. The omission is also the strongest single piece of evidence behind B3 | Possibly successive stages rather than alternatives, with the PM2 manifests predating the Compose stacks. The `ordermaker` omission would then simply be an un-updated file | Platform owner / operator for the Pacco runtime | A platform owner, or the deployment history of any real environment |
