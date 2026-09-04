@@ -61,7 +61,8 @@ independently:
 6. [Gaps, unknowns, and assumptions](#6--gaps-unknowns-and-assumptions)
 7. [Architectural characteristics](#7--architectural-characteristics)
 8. [Behavioral constraints](#8--behavioral-constraints)
-9. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
+9. [Service Lookup Index](#service-lookup-index)
+10. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
 
 **Capability index.** Sixteen capabilities are evidenced: eleven business/domain capabilities
 (CAP-01 … CAP-11) and five platform/technical capabilities (CAP-12 … CAP-16).
@@ -1169,6 +1170,78 @@ inference.
 
 ---
 
+## Service Lookup Index
+
+> Compact cross-reference for AI-agent and tooling consumption. For full capability descriptions and evidence, see Sections 1–4 above.
+
+Row names are **deployable names** as they appear in the repositories — the `container_name` /
+`image` entries in `Pacco/compose/services.yml` for the eleven containerised deployables, the
+project name for the one non-containerised deployable, and the repository name for the one
+in-scope component that ships no deployable of its own. Repository names (`Pacco.Services.Orders`)
+are bound as aliases in Notes, never used as the row name.
+
+`Pacco.Web` is **excluded**: it maps to no capability in this baseline. Its entire tracked content
+is `README.md` (verified — `git ls-files` returns exactly one path), so there is no evidence to map.
+It remains in scope for the platform per assumption A6.
+
+| Service / Repo | Capabilities Owned (Primary) | Capabilities Supported (Secondary) | Confidence | Notes |
+|----------------|------------------------------|-------------------------------------|------------|-------|
+| `api-gateway` | CAP-02 Edge Routing & Access Enforcement | CAP-01 Identity & Access Management, CAP-11 Operation Status Projection & Real-Time Notification, CAP-12 Asynchronous Messaging & Event Distribution, CAP-14 Platform Observability | medium | Repo `Pacco.APIGateway`. Validates a JWT it cannot issue and generates the correlation id CAP-11 keys on. Sync/async is a whole-config swap (`NTRADA_CONFIG`), not a per-route flag, so 20 write routes change transport between the two modes — which config is authoritative is unresolved (B4) |
+| `identity-service` | CAP-01 Identity & Access Management | CAP-12 Asynchronous Messaging & Event Distribution | high | Repo `Pacco.Services.Identity`. Sole credential issuer on the platform; no boundary ambiguity. Accepts `sign_up` as a broker command as well as over HTTP |
+| `customers-service` | CAP-03 Customer Profile & Lifecycle Management | CAP-08 Order Pricing & Discounting, CAP-12 Asynchronous Messaging & Event Distribution, CAP-15 Secrets & Service-Identity Management | medium | Repo `Pacco.Services.Customers`. Weakest link is CAP-15: it is the platform's only certificate-ACL **enforcement point**, and whether the ACL is enforced or merely declared is unresolved (Q7). Its `customers` data is replicated into `orders-service` and `parcels-service` and never reconciled (Q4) |
+| `availability-service` | CAP-04 Resource Availability & Reservation | CAP-03 Customer Profile & Lifecycle Management, CAP-05 Vehicle Fleet Catalogue, CAP-07 Order Lifecycle Management, CAP-12 Asynchronous Messaging & Event Distribution, CAP-15 Secrets & Service-Identity Management | medium | Repo `Pacco.Services.Availability`. Weakest link is CAP-15 (Q7): it is the only certificate-presenting caller on the platform. Its `resource_reserved` event is what approves an order, so it writes into CAP-07's lifecycle without owning it |
+| `vehicles-service` | CAP-05 Vehicle Fleet Catalogue | CAP-12 Asynchronous Messaging & Event Distribution | high | Repo `Pacco.Services.Vehicles`. Reference data only — it reserves nothing; date-level availability is CAP-04's. `vehicle_added` and `vehicle_updated` have no subscriber anywhere in the thirteen clones (Q13) |
+| `parcels-service` | CAP-06 Parcel Catalogue & Volume Calculation | CAP-03 Customer Profile & Lifecycle Management, CAP-07 Order Lifecycle Management, CAP-12 Asynchronous Messaging & Event Distribution | medium | Repo `Pacco.Services.Parcels`. Weakest link is the CAP-03 replica semantics: it holds a `customers` copy written once from `customer_created` and never updated (Q4). Pact **provider** for the CAP-06/CAP-07 boundary |
+| `orders-service` | CAP-07 Order Lifecycle Management | CAP-03 Customer Profile & Lifecycle Management, CAP-04 Resource Availability & Reservation, CAP-05 Vehicle Fleet Catalogue, CAP-06 Parcel Catalogue & Volume Calculation, CAP-08 Order Pricing & Discounting, CAP-09 Delivery Execution & Tracking, CAP-12 Asynchronous Messaging & Event Distribution | medium | Repo `Pacco.Services.Orders`. The platform's hub and its heaviest coupling surface — 7 commands, 9 events, 10 rejected events, 3 sync callees, 7 external event subscriptions. Weakest link is the CAP-03 replica semantics (Q4). Pact **consumer** |
+| `pricing-service` | CAP-08 Order Pricing & Discounting | CAP-03 Customer Profile & Lifecycle Management | high | Repo `Pacco.Services.Pricing`. Boundary ambiguity is real but does not weaken ownership: it shares none of the platform's conventions — verified to have no `rabbitMq`, no `mongo` and no `redis` section — so its grouping under a customer/commercial subsystem is an inference (A5), not evidence. Owns no data; reads CAP-03 on every call |
+| `deliveries-service` | CAP-09 Delivery Execution & Tracking | CAP-07 Order Lifecycle Management, CAP-12 Asynchronous Messaging & Event Distribution | medium | Repo `Pacco.Services.Deliveries`. Ownership is high; medium reflects the initiation path — nothing in any repository publishes `start_delivery` or calls the service, so its trigger is unevidenced (Q1). Its three events are what close CAP-07's lifecycle |
+| `ordermaker-service` | CAP-10 Automated Order Orchestration | CAP-04 Resource Availability & Reservation, CAP-05 Vehicle Fleet Catalogue, CAP-06 Parcel Catalogue & Volume Calculation, CAP-07 Order Lifecycle Management, CAP-12 Asynchronous Messaging & Event Distribution | medium | Repo `Pacco.Services.OrderMaker`. Commands four capabilities that do not know it exists — the orchestration edge is one-directional and invisible from the owning side. Reachability unproven: no gateway route, absent from both PM2 manifests (B1). Verified to have no `vault` and no `jaeger` section, so it sits outside CAP-15 and emits no traces into CAP-14 |
+| `operations-service` | CAP-11 Operation Status Projection & Real-Time Notification | CAP-12 Asynchronous Messaging & Event Distribution, CAP-14 Platform Observability | low | Repo `Pacco.Services.Operations`. **The `low` reflects CAP-12 only, not CAP-11** — ownership of CAP-11 is `high`. This service hosts `messages.json`, the platform-wide message catalogue, which is a hand-maintained copy of names owned by eight *other* repositories with no generation or validation step; §2 rates that catalogue ownership `low`. A message added anywhere is invisible to CAP-11 until someone edits that file |
+| `Pacco.Services.Operations.GrpcClient` | — | CAP-11 Operation Status Projection & Real-Time Notification | high | Second deployable of repo `Pacco.Services.Operations` (`OutputType: Exe`, `Protobuf Include="Operations.proto"`). A non-containerised console **client** of the CAP-11 gRPC surface — it owns no capability and appears in no compose stack or PM2 manifest. Whether downstream stages should treat it as a platform component or a sample is open (Q16) |
+| `Pacco` | CAP-13 Service Discovery & Load Balancing, CAP-14 Platform Observability, CAP-15 Secrets & Service-Identity Management, CAP-16 Environment & Deployment Definition | CAP-02 Edge Routing & Access Enforcement, CAP-12 Asynchronous Messaging & Event Distribution | medium | Ships **no runtime deployable of its own** — the row name is the repository name because there is none to use. Owns CAP-13/14/15 *by definition* while all ten services own them *by participation*, and participation is uneven (no Jaeger and no Vault in `ordermaker-service`; `Convey.WebApi.Security` only in Availability and Customers). Medium reflects CAP-14 coverage and CAP-15 enforcement (Q7) |
+
+**Capability with no owning component.** CAP-12 Asynchronous Messaging & Event Distribution appears
+in the Secondary column of eleven rows and the Primary column of none. This is not an omission: §2
+records that it has no single owner — nine services each own one exchange, and the catalogue that
+defines what CAP-11 can observe lives inside a service that owns none of the names in it. Tooling
+that batches over this index will find CAP-12 unassigned; that is the evidenced state (Q15).
+
+### Ownership statements
+
+`api-gateway` implements the Edge Routing & Access Enforcement capability.
+
+`identity-service` implements the Identity & Access Management capability.
+
+`customers-service` implements the Customer Profile & Lifecycle Management capability.
+
+`availability-service` implements the Resource Availability & Reservation capability.
+
+`vehicles-service` implements the Vehicle Fleet Catalogue capability.
+
+`parcels-service` implements the Parcel Catalogue & Volume Calculation capability.
+
+`orders-service` implements the Order Lifecycle Management capability.
+
+`pricing-service` implements the Order Pricing & Discounting capability.
+
+`deliveries-service` implements the Delivery Execution & Tracking capability.
+
+`ordermaker-service` implements the Automated Order Orchestration capability.
+
+`operations-service` implements the Operation Status Projection & Real-Time Notification capability.
+
+`Pacco` implements the Service Discovery & Load Balancing capability.
+
+`Pacco` implements the Platform Observability capability.
+
+`Pacco` implements the Secrets & Service-Identity Management capability.
+
+`Pacco` implements the Environment & Deployment Definition capability.
+
+Components in scope: api-gateway, identity-service, customers-service, availability-service, vehicles-service, parcels-service, orders-service, pricing-service, deliveries-service, ordermaker-service, operations-service, Pacco.Services.Operations.GrpcClient, Pacco
+
+---
+
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
@@ -1190,6 +1263,7 @@ inference.
 | A6 | `Pacco.Web` being present in the clone set means it is in scope for this platform even though it holds no source | Kept it visible as unverifiable rather than dropping it silently | A frontend capability exists that this baseline does not cover at all | Check the repository's commit history and default branch upstream, and ask the scope owner for issue 12998 whether a web client exists elsewhere |
 | A7 | The role claim the gateway checks on its admin routes is the same role the identity service issues in its tokens | Needed to describe the admin gates in CAP-02 as effective | Admin-only routes would either reject everyone or admit everyone, and CAP-02's access enforcement would not work as described | Decode a token minted by `identity-service` for an admin user and confirm the claim name and value match the `claims.role` gate in `ntrada.yml`; or call one admin route end to end |
 | A8 | Capability maturity and team ownership are genuinely unrecorded, not merely unretrieved | No source available to this stage held either attribute | Both would be recoverable from a system this stage did not reach, and the two platform-wide unknowns in §6.4 would be answerable | Query an enterprise capability catalogue or portfolio system and an engineering directory, if either exists for this organisation (see Q10, Q11) |
+| A9 | A synchronous HTTP call to a capability's owner, a subscription to one of its events, or a command published onto its exchange is enough to record the caller as a **secondary contributor** to that capability in the Service Lookup Index | The Secondary column needed a stated rule; code shows the edge but never labels it as contribution | The Secondary column would over-report: a service that merely reads another's data would be indistinguishable from one that genuinely shares responsibility for the capability, and tooling batching over the index would follow edges that carry no ownership | Review the Secondary column with a platform architect against §3.1 and §3.2 of `repo-inventory.md`, and split "consumes" from "contributes to" if the distinction matters downstream |
 
 ### Blockers
 
@@ -1230,4 +1304,6 @@ a finding, and nothing elsewhere in this baseline rests on it.
 | Q12 | **[handled later by security review]** Why does the order-making automation run with no user identity, bypassing the ownership checks every customer request passes through? | Requests made by this capability are not subject to the per-caller checks described in CAP-04 and CAP-07 | Likely a pragmatic choice so the saga can act across customers, since it constructs an empty `UserContext` explicitly rather than omitting one. Whether that was intended to carry a service identity instead is unknown | Security review stage, with the `ordermaker-service` author | A security review, or the engineer who wrote the saga |
 | Q13 | **[ACTION NOW]** Are `vehicle_added` and `vehicle_updated` meant to have consumers? Both are published and declared in `messages.json`, but only `vehicle_deleted` has a subscriber anywhere in the thirteen clones | `orders-service` reads vehicle data synchronously at assignment time and stores the resulting price on the order, so a later vehicle price or capacity change never reaches an existing order (CAP-05, CAP-07) | Likely deliberate for pricing, since the order captures its price at assignment by design — but that makes the two events unused rather than pending. Subject to A4 | Platform owner, with the `vehicles-service` and `orders-service` owners | A platform owner, or the running broker's queue bindings for the `vehicles` exchange |
 | Q14 | **[ACTION NOW]** Where does `ordermaker-service` keep its saga state, and is losing it acceptable? `Extensions.cs` calls `AddChronicle()` with no persistence backend and no `Chronicle.Persistence.*` package | A restart mid-saga would strand an in-flight order in a partially built state, and CAP-10's single compensation path would not fire (CAP-10) | Almost certainly in-memory, which is Chronicle's default when no persistence is registered. If CAP-10 turns out to be dead code (B1) the question is moot, so resolve B1 first | Platform owner, with the `ordermaker-service` author | Chronicle's package defaults, plus a restart test against a running saga |
+| Q15 | **[handled later by capability and domain modelling]** Which component should downstream tooling treat as the owner of CAP-12 Asynchronous Messaging & Event Distribution? It is the only capability in the Service Lookup Index with no Primary row | Any consumer of this index that assumes every capability has exactly one owning component will either drop CAP-12 or attach it to an arbitrary service. CAP-12 is the substrate every other capability integrates over, so mis-assigning it mis-draws the whole platform | None, and the absence is the finding rather than a gap in retrieval: nine services each own one exchange, while the catalogue that binds them (`messages.json`) sits in `operations-service`, which owns none of the names in it. A candidate answer is to split CAP-12 into a per-service exchange capability and a separately owned catalogue capability, but that is a modelling decision this stage cannot make | Capability and domain modelling stage, with the platform architect | A capability-modelling decision, not further code reading — the code position is already fully established in §2 note 1 |
+| Q16 | **[handled later by capability and domain modelling]** Is `Pacco.Services.Operations.GrpcClient` an in-scope platform component or a sample that should be dropped from the component list? | It is on the `Components in scope` line, so a downstream stage that batches over that line will analyse it. If it is a demo, that is wasted scope; if it is a real client, it is an unexamined consumer of the CAP-11 gRPC contract | Likely a sample: `repo-inventory.md` §2.3 records it as a console demo client, it has no `container_name` in either compose stack and no PM2 entry, and its `Program.cs` drives the gRPC surface directly. It was kept in the list because it is a genuine second deployable of its repository (`OutputType: Exe`), and dropping a real component is the worse error | Capability and domain modelling stage, or the original author of `operations-service` | The author, or a statement of intent for the repository's second project |
 
