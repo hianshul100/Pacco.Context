@@ -41,6 +41,16 @@ carries. Framework plumbing (Convey composition roots, `Decorators/`, DTO mapper
 mappers) is deliberately **not** promoted to a capability; it appears only as a quality signal in
 §7 or as evidence of a capability it serves.
 
+**Cross-reference convention.** Two registers are referenced in this document and they are numbered
+independently:
+
+- **`A#` / `B#` / `Q#`** always refer to the *Assumptions, Blockers & Open Questions* tables at the
+  end of **this** file. Every such reference in §§1–8 resolves there and nowhere else.
+- **`G#`** always refers to the **gap register in `service-summaries.md` §5** (`G1`–`G14`), which
+  this file does not restate. A `G#` is cited only to point at the prior document's evidence; the
+  actionable item for this baseline is always the accompanying `B#` or `Q#`. `G#` ids are written
+  as `service-summaries.md G7` at first use in each section and as plain `G7` thereafter.
+
 ## Table of contents
 
 1. [Capability-first view](#1--capability-first-view)
@@ -215,7 +225,8 @@ mappers) is deliberately **not** promoted to a capability; it appears only as a 
   `Approved` through `Delivering` to `Completed`, so it is the capability that closes the order
   lifecycle.
 - **Purpose / business value:** **not observed.**
-- **Confidence:** high for the capability; **medium** for how it is initiated — see G7/Q6.
+- **Confidence:** high for the capability; **medium** for how it is initiated — see Q1 (evidence
+  first recorded as `service-summaries.md` G7).
 - **Evidence:** `Pacco.Services.Deliveries/src/Pacco.Services.Deliveries.Core/Entities/Delivery.cs`,
   `DeliveryStatus.cs`; `Core/ValueObjects/DeliveryRegistration.cs`;
   `Application/Commands/Handlers/StartDeliveryHandler.cs` (`DeliveryAlreadyStartedException`);
@@ -233,7 +244,7 @@ mappers) is deliberately **not** promoted to a capability; it appears only as a 
   "uber AI order maker" framing; no document explains the business need.
 - **Confidence:** medium — the choreography is unambiguous, but the service has no gateway route
   and appears in neither PM2 manifest, so whether this capability is a live path is undetermined
-  (G2/B3).
+  (B1; evidence first recorded as `service-summaries.md` G2).
 - **Evidence:** `Pacco.Services.OrderMaker/src/Pacco.Services.OrderMaker/Sagas/AIOrderMakingSaga.cs`,
   `Sagas/AIMakingOrderData.cs`; `Handlers/AIOrderMakingHandler.cs`;
   `Services/Clients/{Availability,Vehicles}ServiceClient.cs`; `Services/ResourceReservationsService.cs`;
@@ -321,8 +332,10 @@ infrastructure. Framework plumbing that carries none of those properties is excl
 
 **Capability: CAP-15 — Secrets & Service-Identity Management**
 
-- **Description:** Vault is the configured secret and PKI source for every service
-  (`vault.enabled: true` in all ten). On top of it, two services implement a second,
+- **Description:** Vault is the configured secret and PKI source for **nine of the ten services**
+  (`vault.enabled: true`); `ordermaker-service` has no `vault` section at all and references no
+  `Convey.Secrets.Vault` package, so it is the one host outside this capability. On top of it, two
+  services implement a second,
   certificate-based trust layer: callers present a client certificate in a `Certificate` header,
   and `customers-service` carries an **access-control list** granting `availability-service` the
   `customers:read` permission, restricted to `allowedDomains: ['pacco.io']`. This is the only
@@ -330,10 +343,13 @@ infrastructure. Framework plumbing that carries none of those properties is excl
   valid JWT".
 - **Purpose / business value:** **not observed.** `Pacco/docker-images.txt` documents the Vault
   init, unseal, `userpass` policy and PKI role setup operationally, but states no rationale.
-- **Confidence:** high for the configuration; **medium** for runtime enforcement — see Q9.
-- **Evidence:** `vault` section with `enabled: true` in all ten service `appsettings.json`
-  (including `pricing-service`); `Convey.Secrets.Vault` package reference in every service
-  `*.csproj`; `Pacco.Services.Customers/src/Pacco.Services.Customers.Api/appsettings.json`
+- **Confidence:** high for the configuration; **medium** for runtime enforcement — see Q7.
+- **Evidence:** `vault` section with `enabled: true` in nine of the ten service `appsettings.json`
+  files (including `pricing-service`; **absent** in
+  `Pacco.Services.OrderMaker/src/Pacco.Services.OrderMaker/appsettings.json`);
+  `Convey.Secrets.Vault` package reference in those same nine service `*.csproj` files (**absent**
+  in `Pacco.Services.OrderMaker/src/Pacco.Services.OrderMaker/Pacco.Services.OrderMaker.csproj`);
+  `Pacco.Services.Customers/src/Pacco.Services.Customers.Api/appsettings.json`
   (`security.certificate.acl.availability-service.permissions`, `allowedDomains: ['pacco.io']`);
   `Pacco.Services.Availability/src/Pacco.Services.Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs`
   (certificate attached in the constructor); `Convey.WebApi.Security` referenced by Availability
@@ -384,13 +400,13 @@ any of the thirteen clones. Capability descriptions are not repeated here; see �
 | CAP-06 Parcel Catalogue & Volume Calculation | `parcels-service` (`Pacco.Services.Parcels`) | `orders-service` (holds its own `Parcel` copy inside the order aggregate) | high | `Parcels.Core/Entities/Parcel.cs`; `Parcels.Infrastructure/Mongo/Queries/Handlers/GetParcelsVolumeHandler.cs`; `Orders.Core/Entities/Parcel.cs` |
 | CAP-07 Order Lifecycle Management | `orders-service` (`Pacco.Services.Orders`) | `ordermaker-service` (drives the aggregate by command); `deliveries-service` (its events advance order state); `availability-service` (`resource_reserved` triggers approval) | high | `Orders.Core/Entities/Order.cs`, `OrderStatus.cs`; `Orders.Application/Commands/Handlers/*.cs`; `Orders.Application/Events/External/Handlers/*.cs` |
 | CAP-08 Order Pricing & Discounting | `pricing-service` (`Pacco.Services.Pricing`) | `customers-service` (supplies the completed-order count and VIP flag the rule reads) | high | `Pricing.Api/Core/Services/CustomerDiscountsService.cs`; `Pricing.Api/Queries/Handlers/GetOrderPricingHandler.cs`; `Pricing.Api/Services/Clients/CustomersServiceClient.cs` |
-| CAP-09 Delivery Execution & Tracking | `deliveries-service` (`Pacco.Services.Deliveries`) | `orders-service` (sole consumer of all three delivery events) | high (owner) / medium (initiation path, G7) | `Deliveries.Core/Entities/Delivery.cs`; `Deliveries.Application/Commands/Handlers/StartDeliveryHandler.cs`; `Orders.Application/Events/External/Handlers/Delivery{Started,Completed,Failed}Handler.cs` |
-| CAP-10 Automated Order Orchestration | `ordermaker-service` (`Pacco.Services.OrderMaker`) | `orders-service`, `parcels-service`, `vehicles-service`, `availability-service` — all four are commanded by the saga and none of them knows it exists | medium — reachability unproven (G2/B3) | `OrderMaker/Sagas/AIOrderMakingSaga.cs`, `AIMakingOrderData.cs`; `Pacco/compose/services.yml` (port `5015`); absent from `Pacco/services.yml`, `prod-services.yml`, all four `ntrada*.yml` |
+| CAP-09 Delivery Execution & Tracking | `deliveries-service` (`Pacco.Services.Deliveries`) | `orders-service` (sole consumer of all three delivery events) | high (owner) / medium (initiation path, Q1 — `service-summaries.md` G7) | `Deliveries.Core/Entities/Delivery.cs`; `Deliveries.Application/Commands/Handlers/StartDeliveryHandler.cs`; `Orders.Application/Events/External/Handlers/Delivery{Started,Completed,Failed}Handler.cs` |
+| CAP-10 Automated Order Orchestration | `ordermaker-service` (`Pacco.Services.OrderMaker`) | `orders-service`, `parcels-service`, `vehicles-service`, `availability-service` — all four are commanded by the saga and none of them knows it exists | medium — reachability unproven (B1 — `service-summaries.md` G2) | `OrderMaker/Sagas/AIOrderMakingSaga.cs`, `AIMakingOrderData.cs`; `Pacco/compose/services.yml` (port `5015`); absent from `Pacco/services.yml`, `prod-services.yml`, all four `ntrada*.yml` |
 | CAP-11 Operation Status Projection & Real-Time Notification | `operations-service` (`Pacco.Services.Operations`) | all eight message-publishing services (their message names populate `messages.json`); `api-gateway` (generates the correlation id) | high | `Operations.Api/Services/OperationsService.cs`; `Handlers/Generic*Handler.cs`; `Infrastructure/Subscriptions.cs`; `messages.json`; `Hubs/PaccoHub.cs`; `Operations.proto` |
 | CAP-12 Asynchronous Messaging & Event Distribution | **none — no single owner.** Distributed across nine exchange-owning services; the message *catalogue* sits in `operations-service` | `Pacco` (owns the broker image and network); every publishing and subscribing service | high (topology) / **low (catalogue ownership)** | each service's `appsettings.json` → `rabbitMq`; `Operations.Api/messages.json`; `Pacco/compose/rabbitmq/Dockerfile`; `repo-inventory.md` §3.2 |
 | CAP-13 Service Discovery & Load Balancing | `Pacco` (defines the Consul and Fabio containers) | all ten services participate via `consul`/`fabio` config and Convey packages | high | `Pacco/compose/consul-fabio-vault.yml`; `consul`/`fabio` sections in all ten service `appsettings.json`; `Convey.Discovery.Consul`, `Convey.LoadBalancing.Fabio` in every service `*.csproj` |
 | CAP-14 Platform Observability | `Pacco` (defines Jaeger, Seq, Prometheus, Grafana) | all ten services plus `api-gateway` emit signals; **`ordermaker-service` emits no traces** | high (estate) / medium (coverage) | `Pacco/compose/grafana-seq-jaeger-prometheus.yml`, `compose/prometheus/prometheus.yml`; `jaeger`/`logger`/`metrics` sections per service; no `jaeger` section or package in `Pacco.Services.OrderMaker` |
-| CAP-15 Secrets & Service-Identity Management | `Pacco` (defines Vault and documents its PKI setup) — enforcement point is `customers-service` | `availability-service` (the only certificate-presenting caller); all ten services consume Vault secrets | high (config) / medium (enforcement, Q9) | `Pacco/docker-images.txt`; `Pacco/compose/consul-fabio-vault.yml`; `Customers.Api/appsettings.json` (`security.certificate.acl`); `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` |
+| CAP-15 Secrets & Service-Identity Management | `Pacco` (defines Vault and documents its PKI setup) — enforcement point is `customers-service` | `availability-service` (the only certificate-presenting caller); nine of the ten services consume Vault secrets — `ordermaker-service` has no `vault` section and no `Convey.Secrets.Vault` reference | high (config) / medium (enforcement, Q7) | `Pacco/docker-images.txt`; `Pacco/compose/consul-fabio-vault.yml`; `Customers.Api/appsettings.json` (`security.certificate.acl`); `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` |
 | CAP-16 Environment & Deployment Definition | `Pacco` | each service repo owns its own `Dockerfile`, `.travis.yml` and `scripts/` | high | `Pacco/compose/*.yml`; `Pacco/services.yml`, `prod-services.yml`; `Pacco/Pacco.sln`; per-repo `Dockerfile` and `.travis.yml` |
 
 **Notes on shared or ambiguous ownership**
@@ -414,7 +430,7 @@ any of the thirteen clones. Capability descriptions are not repeated here; see �
 4. **CAP-08's rule reads a fact CAP-03 owns, on every call.** `pricing-service` holds no data and
    calls `customers-service` synchronously per request. Grouping it under a "customer and
    commercial" domain is an inference, not evidence — `service-summaries.md` §2.4 flags the same
-   uncertainty (`[assumption]`, mirrored as A5 below).
+   uncertainty (`[assumption]`; this baseline records the underlying grouping premise as A5 below).
 5. **CAP-13, CAP-14, CAP-15 are owned by definition in one repo and by participation in ten.** The
    `Pacco` repository defines the containers and the network; each service independently decides
    whether to participate, and participation is uneven (no Jaeger in `ordermaker-service`;
@@ -431,7 +447,7 @@ repositories — an HTTP endpoint registration, a CQRS command/query handler, a 
 a saga step, or a configuration key. **No feature-flag system exists on the platform**: a
 workspace-wide search for `LaunchDarkly`, `Unleash`, `Flagsmith`, `Split`, `featureFlag`,
 `feature_flag` and `featureToggle` across `*.cs`, `*.json` and `*.yml` returned zero matches
-(`repo-inventory.md` §6, G12), so no flag-driven features can be traced.
+(`repo-inventory.md` §6), so no flag-driven features can be traced.
 
 Line references are to `src/**/Program.cs` where Convey's `UseDispatcherEndpoints` registers the
 HTTP surface; repository prefixes are omitted where the capability's owning repository is
@@ -477,22 +493,22 @@ unambiguous from §2.
 | CAP-09 | Delivery start, complete, fail, and registration append | `…Deliveries.Api/Program.cs:34-39` | high |
 | CAP-09 | Re-start blocked unless the previous delivery for that order failed | `Deliveries.Application/Commands/Handlers/StartDeliveryHandler.cs:28-34` | high |
 | CAP-09 | Registrations accepted only while in progress | `Deliveries.Core/Entities/Delivery.cs:46-59` | high |
-| CAP-10 | Saga entry point `POST /orders` on the orchestrator, distinct from the Orders API | `OrderMaker/Handlers/AIOrderMakingHandler.cs`; `OrderMaker/Program.cs`; **no route in any `ntrada*.yml`** | medium — endpoint observed, caller path `[unknown]` (G2) |
+| CAP-10 | Saga entry point `POST /orders` on the orchestrator, distinct from the Orders API | `OrderMaker/Handlers/AIOrderMakingHandler.cs`; `OrderMaker/Program.cs`; **no route in any `ntrada*.yml`** | medium — endpoint observed, caller path `[unknown]` (B1 — `service-summaries.md` G2) |
 | CAP-10 | Five-step choreography keyed by `OrderId` | `OrderMaker/Sagas/AIOrderMakingSaga.cs:45-132` | high |
 | CAP-10 | Vehicle and reservation-date selection delegated to sync clients mid-saga | `AIOrderMakingSaga.cs:92-101`; `Services/Clients/VehiclesServiceClient.cs`; `Services/ResourceReservationsService.cs` | high |
 | CAP-10 | Single compensation path: cancel the order if parcel attachment fails | `AIOrderMakingSaga.cs:140-146` | high |
 | CAP-11 | Operation lookup by correlation id over HTTP | `Operations.Api/Program.cs` (`GET /operations/{operationId}`); `ntrada.yml:283` | high |
 | CAP-11 | Real-time push over SignalR hub `/pacco` and server-streaming gRPC | `Operations.Api/Hubs/PaccoHub.cs`; `Operations.proto` (`GetOperation`, `SubscribeOperations`); `wwwroot/ui/js/app.js` | high |
-| CAP-11 | Subscription set driven by a data file, types emitted at runtime | `Operations.Api/messages.json` (8 exchanges, 26 commands, 30 events, 31 rejected events); `Infrastructure/Subscriptions.cs` (`System.Reflection.Emit`) | high |
+| CAP-11 | Subscription set driven by a data file, types emitted at runtime | `Operations.Api/messages.json` (8 service blocks, each with one `exchange`; 24 commands, 29 events, 27 rejected events summed across all blocks — of which `orders-service` alone contributes 7 / 9 / 10); `Infrastructure/Subscriptions.cs` (`System.Reflection.Emit`) | high |
 | CAP-11 | Operation state expiry window | `Operations.Api/appsettings.json:149-151` (`requests.expirySeconds: 300`) → `Services/OperationsService.cs:50-55` (`SlidingExpiration`) | high |
 | CAP-12 | Exchange-per-service topic topology with `snakeCase` naming | each service `appsettings.json` → `rabbitMq` (`exchange.name`, `conventions`); `repo-inventory.md` §3.2 | high |
 | CAP-12 | Transactional inbox/outbox in the seven aggregate-owning services | `outbox` section present in Availability, Customers, Deliveries, Identity, Orders, Parcels, Vehicles `appsettings.json`; absent in Operations and OrderMaker; no `rabbitMq` at all in Pricing | high |
-| CAP-12 | Rejected-event convention as the failure channel (31 declared) | `Operations.Api/messages.json`; each service's `Exceptions/` → `*_rejected` mapping | high |
+| CAP-12 | Rejected-event convention as the failure channel (27 declared across the 8 service blocks) | `Operations.Api/messages.json`; each service's `Exceptions/` → `*_rejected` mapping | high |
 | CAP-13 | Consul registration and Fabio-resolved outbound calls in all ten services | `consul` and `fabio` sections in every `hianshul100_Pacco.Services.*/src/**/appsettings.json`; `httpClient.services` maps | high |
 | CAP-14 | Traces, logs and metrics per service | `jaeger`, `logger`/`seq`, `metrics` sections per service `appsettings.json`; `Pacco/compose/prometheus/prometheus.yml` | high |
 | CAP-14 | Request/trace id generation and header exposure at the edge | `ntrada.yml` (`generateRequestId`, `generateTraceId`; `Request-ID`, `Trace-ID`, `Resource-ID`, `Total-Count`) | high |
-| CAP-15 | Vault enabled in every service, including `pricing-service` | `vault.enabled: true` in all ten service `appsettings.json`; `Convey.Secrets.Vault` in every service `*.csproj` | high |
-| CAP-15 | Certificate ACL granting `availability-service` the `customers:read` permission | `Customers.Api/appsettings.json:164-178` (`security.certificate.acl`, `allowedDomains: ['pacco.io']`) | high (config) / medium (enforcement, Q9) |
+| CAP-15 | Vault enabled in nine of ten services, including `pricing-service`; **not** in `ordermaker-service` | `vault.enabled: true` in nine service `appsettings.json` files; `Convey.Secrets.Vault` in those same nine `*.csproj` files; neither present in `Pacco.Services.OrderMaker/src/Pacco.Services.OrderMaker/` | high |
+| CAP-15 | Certificate ACL granting `availability-service` the `customers:read` permission | `Customers.Api/appsettings.json:164-178` (`security.certificate.acl`, `allowedDomains: ['pacco.io']`) | high (config) / medium (enforcement, Q7) |
 | CAP-15 | Client certificate attached on the one call the ACL covers | `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` | high |
 | CAP-16 | Eleven compose deployables and ten PM2 apps | `Pacco/compose/services.yml`, `compose/services-local.yml`; `Pacco/services.yml`, `prod-services.yml` | high |
 | CAP-16 | Gateway operating mode selected by environment variable | `Pacco/compose/services.yml` (`NTRADA_CONFIG=ntrada-async.docker.yml`) | high |
@@ -673,7 +689,8 @@ omitted unless they carry capability behaviour.
     unseal keys and a root token in plaintext.**
   - `Pacco.Services.Customers/src/Pacco.Services.Customers.Api/appsettings.json:164-178` — the ACL.
   - `Pacco.Services.Availability/src/Pacco.Services.Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs`.
-  - `hianshul100_Pacco.Services.*/src/**/appsettings.json` → `vault` (enabled in all ten).
+  - `hianshul100_Pacco.Services.*/src/**/appsettings.json` → `vault` (enabled in nine of ten; no
+    `vault` section in `Pacco.Services.OrderMaker/src/Pacco.Services.OrderMaker/appsettings.json`).
 
 - **Capability: CAP-16 — Environment & Deployment Definition** (`Pacco`)
   - `compose/infrastructure.yml`, `compose/services.yml`, `compose/services-local.yml`,
@@ -690,20 +707,20 @@ omitted unless they carry capability behaviour.
 | Capability | Overall Confidence | Key Uncertainty | Evidence Basis |
 |------------|-------------------|-----------------|----------------|
 | CAP-01 Identity & Access Management | high | Whether the gateway's committed symmetric `issuerSigningKey` and this service's certificate-based signing configuration are the same trust root; no code path proves the pairing | Source code (aggregate + application services + auth infrastructure) and config |
-| CAP-02 Edge Routing & Access Enforcement | high | Which of the four `ntrada*.yml` files is authoritative in production; the sync and async pairs are architecturally different systems, not environment variants (G6/Q1) | Runtime config (four declarative routing tables) + compose environment variable |
-| CAP-03 Customer Profile & Lifecycle Management | high | Business meaning of `Suspicious` and `Locked` is undocumented; the two downstream replicas of `customers` are never reconciled (Q2) | Source code (aggregate + VIP policy + external event handlers) |
+| CAP-02 Edge Routing & Access Enforcement | high | Which of the four `ntrada*.yml` files is authoritative in production; the sync and async pairs are architecturally different systems, not environment variants (B4 — `service-summaries.md` G6) | Runtime config (four declarative routing tables) + compose environment variable |
+| CAP-03 Customer Profile & Lifecycle Management | high | Business meaning of `Suspicious` and `Locked` is undocumented; the two downstream replicas of `customers` are never reconciled (Q4) | Source code (aggregate + VIP policy + external event handlers) |
 | CAP-04 Resource Availability & Reservation | high | Whether `outbox.disableTransactions: true` against a single-node Mongo is deliberate; what "priority" means commercially | Source code (aggregate root + value object + command handler) and config |
-| CAP-05 Vehicle Fleet Catalogue | high | `vehicle_added` and `vehicle_updated` have no consumer anywhere, so downstream capabilities can act on stale vehicle attributes (G9/Q4) | Source code (aggregate) + endpoint registrations + subscription search |
-| CAP-06 Parcel Catalogue & Volume Calculation | high | The volume formula itself lives behind `IParcelsService.CalculateVolume` and was not read line-by-line for this baseline; how the Pact file crosses to `orders-service` is unknown (Q3) | Source code (aggregate + query handler) and test-project layout |
+| CAP-05 Vehicle Fleet Catalogue | high | `vehicle_added` and `vehicle_updated` have no consumer anywhere, so downstream capabilities can act on stale vehicle attributes (Q13 — `service-summaries.md` G9) | Source code (aggregate) + endpoint registrations + subscription search |
+| CAP-06 Parcel Catalogue & Volume Calculation | high | The volume formula itself lives behind `IParcelsService.CalculateVolume` and was not read line-by-line for this baseline; how the Pact file crosses to `orders-service` is unknown (Q5) | Source code (aggregate + query handler) and test-project layout |
 | CAP-07 Order Lifecycle Management | high | Whether the local `customers` collection is a projection or a second source of truth; the price is set once at vehicle assignment and never recomputed | Source code (aggregate + 7 command handlers + 7 external event handlers + 3 HTTP clients) |
 | CAP-08 Order Pricing & Discounting | high | Discount tiers are hard-coded with no configuration key, no test asserting them in-repo, and no documentation of intent | Source code (one rule class + one query handler) |
-| CAP-09 Delivery Execution & Tracking | medium | **Nothing in the workspace initiates a delivery**: the service subscribes to no external event and no service publishes a `deliveries` command; the only entry is a human calling `POST /deliveries` (G7/Q6) | Source code (aggregate + start handler) and an exhaustive publisher search |
-| CAP-10 Automated Order Orchestration | medium | Reachability (no gateway route, absent from both PM2 manifests) **and** saga-state durability (`AddChronicle()` with no persistence backend) are both unresolved (G2/G3, B1/Q5) | Source code (saga + saga data + clients) and deployment manifests |
-| CAP-11 Operation Status Projection & Real-Time Notification | high | The **wire payloads** it receives are unknowable statically — `Subscriptions.cs` emits field-less types at runtime (G5/Q7). The state store, previously recorded as unknown, is now resolved: see the conflict note in §6 | Source code (`OperationsService.cs`, generic handlers, `Subscriptions.cs`) + config |
+| CAP-09 Delivery Execution & Tracking | medium | **Nothing in the workspace initiates a delivery**: the service subscribes to no external event and no service publishes a `deliveries` command; the only entry is a human calling `POST /deliveries` (Q1 — `service-summaries.md` G7) | Source code (aggregate + start handler) and an exhaustive publisher search |
+| CAP-10 Automated Order Orchestration | medium | Reachability (no gateway route, absent from both PM2 manifests) **and** saga-state durability (`AddChronicle()` with no persistence backend) are both unresolved (B1 and Q14 respectively — `service-summaries.md` G2 and G3) | Source code (saga + saga data + clients) and deployment manifests |
+| CAP-11 Operation Status Projection & Real-Time Notification | high | The **wire payloads** it receives are unknowable statically — `Subscriptions.cs` emits field-less types at runtime (Q6 — `service-summaries.md` G5). The state store, previously recorded as unknown, is now resolved: see the conflict note in §6 | Source code (`OperationsService.cs`, generic handlers, `Subscriptions.cs`) + config |
 | CAP-12 Asynchronous Messaging & Event Distribution | high (topology) / low (contract governance) | `messages.json` is hand-maintained with no generation or validation step, and every consumer redeclares the payload class; a publisher-side field addition reaches nobody until each copy is edited | Config (`rabbitMq` per service) + the catalogue file + per-service handler folders |
 | CAP-13 Service Discovery & Load Balancing | high | Whether Consul/Fabio are actually used in production or only in the compose environment; production topology is not in this workspace | Config (all ten services) + package references + compose definitions |
 | CAP-14 Platform Observability | medium | Coverage is demonstrably uneven — `ordermaker-service`, the one component that spans four capabilities, is the single service with no tracing at all | Config + package references + compose definitions + an explicit absence check |
-| CAP-15 Secrets & Service-Identity Management | medium | Whether the certificate ACL is enforced or advisory (Q8), and whether the committed Vault keys and JWT signing key are live credentials (B2) | Config (ACL, `vault` sections) + one certificate-attaching client + an operational runbook |
+| CAP-15 Secrets & Service-Identity Management | medium | Whether the certificate ACL is enforced or advisory (Q7), and whether the committed Vault keys and JWT signing key are live credentials (B2) | Config (ACL, `vault` sections) + one certificate-attaching client + an operational runbook |
 | CAP-16 Environment & Deployment Definition | high | Which manifest governs production: the compose stacks and the PM2 manifests disagree by exactly one service (`ordermaker-service`), and no manifest is labelled production | Deployment manifests (the strongest evidence class available in this workspace) |
 
 **Evidence-strength note.** No runtime or orchestration manifest of the strongest kind
@@ -725,7 +742,8 @@ code actually shows, and which one this baseline follows. Nothing here is silent
 
 - *Document claim.* `repo-inventory.md` §2.3 and `service-summaries.md` §2.11 both record the
   `operations-service` persistence store as **"unknown — requires runtime validation"**, and
-  `service-summaries.md` raises it as gap G4 / open question Q4.
+  `service-summaries.md` raises it as its own gap G4 / its own open question Q4 (that document's
+  numbering, not this one's).
 - *Code reality.* `Pacco.Services.Operations.Api/Services/OperationsService.cs` injects
   `IDistributedCache` and is the only component that reads or writes operation state. It stores
   each operation under the key `requests:{id}` with
@@ -739,7 +757,7 @@ code actually shows, and which one this baseline follows. Nothing here is silent
   Redis with a 300-second sliding expiry and is not durable. The prior "unknown" is superseded.
 - *Residual caveat.* That Convey's `AddRedis()` binds `IDistributedCache` to Redis rather than to
   an in-memory implementation is read from the package's public contract; the Convey source is not
-  in this workspace. Confidence medium-high, not absolute — see assumption A4.
+  in this workspace. Confidence medium-high, not absolute — see assumption A2.
 
 **CONFLICT-02 — The async gateway directive is `use: rabbitmq`, not `use: publish`.**
 
@@ -758,8 +776,9 @@ code actually shows, and which one this baseline follows. Nothing here is silent
   configured for Vault.
 - *Code reality.* `Pacco.Services.Pricing.Api/appsettings.json:106-107` sets `vault.enabled: true`,
   and `Pacco.Services.Pricing.Api.csproj` references `Convey.Secrets.Vault`.
-- *Resolution.* **Code wins.** CAP-15 records Vault configuration in **all ten** services.
-  `ordermaker-service` remains the only host with no `vault` section at all.
+- *Resolution.* **Code wins.** CAP-15 records Vault configuration in **nine of the ten** services,
+  `pricing-service` included. `ordermaker-service` remains the only host with no `vault` section at
+  all, and the only one whose `*.csproj` does not reference `Convey.Secrets.Vault`.
 
 ### 6.2 Future / intended state (not implemented)
 
@@ -779,28 +798,30 @@ code actually shows, and which one this baseline follows. Nothing here is silent
 - **[likely gap] CAP-09 has no automated trigger.** No service publishes a command or event that
   starts a delivery, and `deliveries-service` subscribes to no external event. `POST /deliveries`
   called by hand is the only entry point found. Either an integration is missing from the
-  workspace, or the capability is genuinely manual today. (Extends G7.)
+  workspace, or the capability is genuinely manual today. (Q1; extends `service-summaries.md` G7.)
 - **[likely gap] CAP-05 publishes events nobody consumes.** `vehicle_added` and `vehicle_updated`
   have no subscriber in any of the thirteen clones — only `vehicle_deleted` is consumed
   (by CAP-04). `orders-service` reads vehicle data synchronously at assignment time, so a vehicle
-  price or capacity change never reaches an existing order. (Extends G9.)
+  price or capacity change never reaches an existing order. (Q13; extends `service-summaries.md` G9.)
 - **[likely gap] CAP-10 is unreachable from the edge.** `ordermaker-service` appears in no
   `ntrada*.yml` route and in neither PM2 manifest, and exposes no HTTP host. Its `MakeOrder`
-  entry point can be reached only by publishing directly to the broker. (Extends G2/G3.)
+  entry point can be reached only by publishing directly to the broker. (B1; extends
+  `service-summaries.md` G2.)
 - **[likely gap] CAP-10 saga state is not durable.** `Extensions.cs` calls `AddChronicle()` with no
   persistence backend registered; Chronicle's default is in-memory. A restart mid-saga would strand
-  in-flight orders in a partially built state with no compensation triggered.
+  in-flight orders in a partially built state with no compensation triggered. (Q14; extends
+  `service-summaries.md` G3.)
 - **[likely gap] CAP-12 has no contract governance.** `messages.json` is hand-maintained, with no
   generator, schema, or validation step in any build script. Every consumer redeclares the payload
   class locally — `CustomerCreated` exists in four repositories, `ResourceReserved` in three. A
   publisher-side field addition silently reaches no consumer.
 - **[likely gap] No schema or data migration tooling exists anywhere.** The single schema action on
   the platform is the unique index created on `users` at `identity-service` startup. Eight other
-  services own Mongo databases with no versioning, migration, or seeding path. (Extends G12.)
-- **[likely gap] CAP-14 coverage is uneven in the worst place.** `ordermaker-service` — the only
+  services own Mongo databases with no versioning, migration, or seeding path. (Q8; extends
+  `service-summaries.md` G11.)
+- **[likely gap] CAP-14 coverage does not extend to the saga.** `ordermaker-service` — the only
   component that spans four capabilities in a single distributed transaction — is the one service
-  with no Jaeger tracing configured. Its saga is therefore the least observable flow on the
-  platform.
+  with no Jaeger tracing configured, so its saga emits no spans to the platform's trace store.
 - **[likely gap] CAP-07's local `customers` collection is never reconciled.** `orders-service` and
   `availability-service` each keep a replica built from `customer_created`. No compensating
   subscription updates them when CAP-03 changes a customer's state or VIP flag.
@@ -808,52 +829,67 @@ code actually shows, and which one this baseline follows. Nothing here is silent
 ### 6.4 Unknowns
 
 - **[unknown] Which gateway configuration is authoritative.** Four `ntrada*.yml` files exist;
-  `NTRADA_CONFIG` selects one; no manifest in the workspace pins a production value. (G6/Q1.)
+  `NTRADA_CONFIG` selects one; no manifest in the workspace pins a production value. (B4;
+  `service-summaries.md` G6.)
 - **[unknown] The wire payload of every message CAP-11 consumes.** `Subscriptions.cs` emits types
   at runtime from `messages.json` via `System.Reflection.Emit` with no properties. What
-  `operations-service` actually receives on the wire cannot be determined statically. (G5/Q7.)
+  `operations-service` actually receives on the wire cannot be determined statically. (Q6;
+  `service-summaries.md` G5.)
 - **[unknown] Capability maturity, platform-wide.** No maturity attribute was retrievable for any
   capability from any source available to this stage, and none is recorded in any repository. Every
-  capability's maturity is unknown rather than assumed.
+  capability's maturity is unknown rather than assumed. (Q10.)
 - **[unknown] Team or domain ownership, platform-wide.** No `CODEOWNERS`, `CONTRIBUTING.md`, or
   team manifest exists in any of the thirteen clones. §2 maps capabilities to **services**, which is
-  evidenced; it does not map them to teams, which is not.
+  evidenced; it does not map them to teams, which is not. (Q11; `service-summaries.md` G10.)
 - **[unknown] Whether the certificate ACL in CAP-15 is enforced or advisory.** The ACL is declared
   in `customers-service` config and a certificate is attached by `availability-service`'s client,
-  but the enforcement code lives in the Convey package, not in this workspace. (Q8.)
+  but the enforcement code lives in the Convey package, not in this workspace. (Q7.)
 - **[unknown] Whether the committed Vault unseal keys, root token, and gateway JWT signing key are
   live credentials or throwaway local-development values.** They are committed in plaintext either
   way. (B2.)
 - **[unknown] How the Pact contract file travels from the `orders-service` consumer test to the
   `parcels-service` provider test.** No broker URL, no shared path, and no CI step referencing one
-  appears in either repository's `.travis.yml`. (Q3.)
+  appears in either repository's `.travis.yml`. (Q5; `service-summaries.md` G12.)
 - **[unknown] Production runtime topology.** No Kubernetes, Helm, or Terraform artifact exists in
   any clone. Scaling, replica counts, network policy, and failover behaviour for every capability
   are outside what these sources can show.
 - **[unknown] Business meaning of the `Suspicious` and `Locked` customer states.** Both are
   settable and both are treated as invalid by CAP-04's reservation gate, but no code path sets
-  either and no document explains when they should apply.
+  either and no document explains when they should apply. (Q9.)
 
 ### 6.5 Assumptions
 
-- **[assumption] Each service's `rabbitMq.exchange` value names the exchange it owns.** Used
-  throughout §2 to attribute publication to a capability. Consistent across all ten services and
-  matched by `messages.json`, but never asserted in a document.
-- **[assumption] Convey's `AddRedis()` binds `IDistributedCache` to Redis.** Underpins CONFLICT-01
-  and CAP-11. Read from the package contract; the Convey source is not in the workspace.
-- **[assumption] The Docker Compose stacks describe a local development environment, not
+These are the same eight assumptions carried in the consolidated ABQ table at the end of this
+document, in the same order and under the same ids. The ABQ table is the source of truth; this list
+gives each one its in-context narrative.
+
+- **A1 — [assumption] Each service's `rabbitMq.exchange` value names the exchange it owns.** Used
+  throughout §2 to attribute publication to a capability. Consistent across the nine services that
+  declare a `rabbitMq` section (`pricing-service` declares none) and matched by `messages.json`, but
+  never asserted in a document.
+- **A2 — [assumption] Convey's `AddRedis()` binds `IDistributedCache` to Redis.** Underpins
+  CONFLICT-01 and CAP-11. Read from the package contract; the Convey source is not in the workspace.
+- **A3 — [assumption] The Docker Compose stacks describe a local development environment, not
   production.** They bind single-node infrastructure with default credentials and no replication.
   No file states its target environment.
-- **[assumption] A repository's presence in the clone set means it is in scope for this platform.**
-  Applied to `Pacco.Web` despite it being empty, which is why it appears in §6.2 rather than being
-  dropped.
-- **[assumption] Capability boundaries follow deployable service boundaries where a service owns a
-  distinct business responsibility.** This holds for CAP-01 and CAP-03 through CAP-11. It
-  deliberately does **not** hold for CAP-12 through CAP-16, which are cross-cutting platform
-  capabilities with no single owning service; each is labelled as such in §2.
-- **[assumption] Absence of a subscriber across all thirteen clones means the message has no
+- **A4 — [assumption] Absence of a subscriber across all thirteen clones means the message has no
   consumer.** Used for the CAP-05 and CAP-09 gaps above. Valid only if no consumer lives outside
   this workspace.
+- **A5 — [assumption] Capability boundaries follow deployable service boundaries where a service
+  owns a distinct business responsibility.** This holds for CAP-01 and CAP-03 through CAP-11. It
+  deliberately does **not** hold for CAP-12 through CAP-16, which are cross-cutting platform
+  capabilities with no single owning service; each is labelled as such in §2. It is also what makes
+  the `pricing-service` grouping in §2 note 4 an inference rather than evidence.
+- **A6 — [assumption] A repository's presence in the clone set means it is in scope for this
+  platform.** Applied to `Pacco.Web` despite it being empty, which is why it appears in §6.2 rather
+  than being dropped.
+- **A7 — [assumption] The role claim the gateway checks on its admin routes is the same role the
+  identity service issues in its tokens.** Needed to describe CAP-02's five `role: admin` gates as
+  effective. The gateway validates a token it does not mint, and no code path or test in the
+  workspace proves the two role vocabularies are the same.
+- **A8 — [assumption] Capability maturity and team ownership are genuinely unrecorded, not merely
+  unretrieved.** No source available to this stage held either attribute, so both are reported as
+  `[unknown]` platform-wide in §6.4 rather than estimated.
 
 ---
 
@@ -884,8 +920,8 @@ is, not what should change.
 - **Dependency surface.** Every HTTP-exposed service, plus Fabio, Consul and RabbitMQ. Highest
   fan-out of any component in the workspace.
 - **Observable quality signals.** Zero C# business logic — the entire capability is declarative
-  YAML, so a routing change requires no build. Against that: `allowedOrigins: ['*']` combined with
-  `allowCredentials: true`, and a committed signing key.
+  YAML, so a routing change requires no build. CORS is configured as `allowedOrigins: ['*']`
+  together with `allowCredentials: true`, and the token signing key is committed in the repository.
 
 ### CAP-03 — Customer Profile & Lifecycle Management
 
@@ -983,8 +1019,8 @@ is, not what should change.
 - **Dependency surface.** Broadest reach, narrowest exposure. Reachable only from the broker.
 - **Observable quality signals.** Compensation is implemented for exactly one of five steps. The
   saga runs under an empty identity context, so it bypasses the per-caller identity gates that
-  every other path enforces. No Jaeger, no Vault, and single-URL Fabio configuration — the least
-  instrumented service on the platform.
+  every other path enforces. It is configured with no `jaeger` section, no `vault` section, and a
+  single-URL Fabio block, where the other nine services each carry all three.
 
 ### CAP-11 — Operation Status Projection & Real-Time Notification
 
@@ -996,9 +1032,9 @@ is, not what should change.
 - **Dependency surface.** Redis (state + SignalR backplane), RabbitMQ (all exchanges), and three
   outbound protocols: REST, SignalR, gRPC.
 - **Observable quality signals.** Terminal states are protected against overwrite, so a late
-  duplicate cannot resurrect a completed operation. Against that: state is held only in a cache
-  with a 300-second sliding expiry, and any message arriving without a correlation id is silently
-  dropped with no log.
+  duplicate cannot resurrect a completed operation. State is held only in a cache with a 300-second
+  sliding expiry, and a message arriving without a correlation id returns early without being
+  recorded or logged.
 
 ### CAP-12 — Asynchronous Messaging & Event Distribution
 
@@ -1008,9 +1044,9 @@ is, not what should change.
   templates). Contract ownership is unclear — the catalogue lives inside `operations-service`, a
   consumer.
 - **Dependency surface.** Every service except `pricing-service`.
-- **Observable quality signals.** Uniform conventions across all ten services. Transactional
-  inbox/outbox configured in seven. No schema registry, no contract validation, and payload classes
-  duplicated per consumer.
+- **Observable quality signals.** Uniform conventions across the nine services that declare a
+  `rabbitMq` section. Transactional inbox/outbox configured in seven. No schema registry, no
+  contract validation, and payload classes duplicated per consumer.
 
 ### CAP-13 — Service Discovery & Load Balancing
 
@@ -1036,7 +1072,7 @@ is, not what should change.
 ### CAP-15 — Secrets & Service-Identity Management
 
 - **Coupling / isolation.** Split across two mechanisms with no shared implementation: Vault
-  configuration in ten services, and a certificate ACL in exactly one.
+  configuration in nine services, and a certificate ACL in exactly one.
 - **Boundary clarity.** Weak. The ACL is declared in `customers-service`'s `appsettings.json`
   alongside ordinary application settings, and enforcement lives in a third-party package.
 - **Dependency surface.** Vault, plus the certificate-attaching HTTP client in
@@ -1144,40 +1180,54 @@ inference.
 
 ### Assumptions
 
-| ID | Assumption | Why it was needed | Impact if wrong |
-|----|------------|-------------------|-----------------|
-| A1 | Each service's `rabbitMq.exchange` value names the exchange that service owns and publishes to | Used to attribute every published event to an owning capability in §2 | Ownership attribution in §2 would shift for the affected capability, and the messaging topology in CAP-12 would be misdrawn |
-| A2 | Convey's `AddRedis()` makes `IDistributedCache` resolve to Redis rather than to an in-memory store | Underpins the finding that operation status lives in Redis (CONFLICT-01, CAP-11) | Operation status would be per-instance and lost on every restart, making CAP-11 far less reliable than described |
-| A3 | The Docker Compose stacks describe a local development environment, not production | Needed because no manifest declares its target environment | Production would be running single-node infrastructure with default credentials, changing the risk picture for CAP-15 and CAP-16 |
-| A4 | A message with no subscriber anywhere in the thirteen cloned repositories genuinely has no consumer | Basis for the unconsumed-event gaps on CAP-05 and the no-trigger gap on CAP-09 | Those gaps would be false, and consumers would exist in code outside this workspace |
-| A5 | Capability boundaries follow deployable service boundaries where a service owns a distinct business responsibility | The organising principle for CAP-01 and CAP-03 through CAP-11 | Capabilities would need regrouping, though the underlying evidence per service stays valid |
-| A6 | `Pacco.Web` being present in the clone set means it is in scope for this platform even though it holds no source | Kept it visible as unverifiable rather than dropping it silently | A frontend capability exists that this baseline does not cover at all |
-| A7 | The role claim the gateway checks on its admin routes is the same role the identity service issues in its tokens | Needed to describe the admin gates in CAP-02 as effective | Admin-only routes would either reject everyone or admit everyone, and CAP-02's access enforcement would not work as described |
-| A8 | Capability maturity and team ownership are genuinely unrecorded, not merely unretrieved | No source available to this stage held either attribute | Both would be recoverable from a system this stage did not reach, and the two platform-wide unknowns in §6.4 would be answerable |
+| ID | Assumption | Why it was needed | Impact if wrong | Validation Path |
+|----|------------|-------------------|-----------------|-----------------|
+| A1 | Each service's `rabbitMq.exchange` value names the exchange that service owns and publishes to | Used to attribute every published event to an owning capability in §2 | Ownership attribution in §2 would shift for the affected capability, and the messaging topology in CAP-12 would be misdrawn | Inspect the live RabbitMQ management API (`GET /api/exchanges`) and compare declared exchanges and their bindings against the `rabbitMq.exchange` value in each service's `appsettings.json` |
+| A2 | Convey's `AddRedis()` makes `IDistributedCache` resolve to Redis rather than to an in-memory store | Underpins the finding that operation status lives in Redis (CONFLICT-01, CAP-11) | Operation status would be per-instance and lost on every restart, making CAP-11 far less reliable than described | Read the `Convey.Persistence.Redis` 0.4.x source or decompiled package to confirm the `IDistributedCache` registration; or run `operations-service`, drive one operation, and check for an `operations:requests:{id}` key in Redis |
+| A3 | The Docker Compose stacks describe a local development environment, not production | Needed because no manifest declares its target environment | Production would be running single-node infrastructure with default credentials, changing the risk picture for CAP-15 and CAP-16 | Ask a platform operator which manifest deploys production, or obtain the production deployment definition (resolved together with B3) |
+| A4 | A message with no subscriber anywhere in the thirteen cloned repositories genuinely has no consumer | Basis for the unconsumed-event gaps on CAP-05 and the no-trigger gap on CAP-09 | Those gaps would be false, and consumers would exist in code outside this workspace | Inspect queue bindings for the `vehicles` and `deliveries` exchanges on the running broker; a binding with no repository behind it proves a consumer outside this workspace |
+| A5 | Capability boundaries follow deployable service boundaries where a service owns a distinct business responsibility | The organising principle for CAP-01 and CAP-03 through CAP-11 | Capabilities would need regrouping, though the underlying evidence per service stays valid | Review this capability list with a platform architect or domain owner; a capability catalogue, if one is ever produced, supersedes it |
+| A6 | `Pacco.Web` being present in the clone set means it is in scope for this platform even though it holds no source | Kept it visible as unverifiable rather than dropping it silently | A frontend capability exists that this baseline does not cover at all | Check the repository's commit history and default branch upstream, and ask the scope owner for issue 12998 whether a web client exists elsewhere |
+| A7 | The role claim the gateway checks on its admin routes is the same role the identity service issues in its tokens | Needed to describe the admin gates in CAP-02 as effective | Admin-only routes would either reject everyone or admit everyone, and CAP-02's access enforcement would not work as described | Decode a token minted by `identity-service` for an admin user and confirm the claim name and value match the `claims.role` gate in `ntrada.yml`; or call one admin route end to end |
+| A8 | Capability maturity and team ownership are genuinely unrecorded, not merely unretrieved | No source available to this stage held either attribute | Both would be recoverable from a system this stage did not reach, and the two platform-wide unknowns in §6.4 would be answerable | Query an enterprise capability catalogue or portfolio system and an engineering directory, if either exists for this organisation (see Q10, Q11) |
 
 ### Blockers
 
-| ID | Blocker | Why it blocks | Who or what can unblock it |
-|----|---------|---------------|---------------------------|
-| B1 | **[ACTION NOW]** Nobody in the available sources can say whether `ordermaker-service` runs in any real environment. It has no gateway route, appears in neither process manifest, and can only be reached by publishing directly to the message broker | CAP-10 is described as a current capability. If it is dead code, a capability that spans four other capabilities is being carried into every later stage for no reason | A platform owner or operator confirming whether the service is deployed and whether anything actually sends it work |
-| B2 | **[ACTION NOW]** Five Vault unseal keys, a Vault root token, and the gateway's token signing key are committed in plaintext in the repositories | This is a live security exposure independent of any architecture work, and it also determines whether CAP-15 is a working control or a placeholder | A platform or security owner confirming whether these are throwaway local values, and rotating them if they are not |
-| B3 | **[handled later by runtime and deployment validation]** No production runtime manifest exists in any repository — no Kubernetes, Helm, or Terraform | Scaling, replica counts, failover, and network policy for every capability cannot be established from these sources at any confidence | A stage with access to the deployment platform itself, rather than to source repositories |
-| B4 | **[ACTION NOW]** Four gateway routing configurations exist and nothing states which one production uses. The synchronous and asynchronous variants are behaviourally different systems, not environment variants | CAP-02's actual behaviour, and whether twenty operations reach services over HTTP or over the message broker, both depend on the answer | A platform owner confirming the value of `NTRADA_CONFIG` in the running environment |
+**On the Owner column.** No repository in this workspace records a named owner for anything — there
+is no `CODEOWNERS`, `CONTRIBUTING.md`, or team manifest in any of the thirteen clones (see Q11).
+The Owner column therefore names the **role that must supply the answer**, and assigning a person to
+that role is itself part of resolving the blocker. Target dates are **proposed** by this stage
+relative to the analysis date of 2026-09-04; none is an agreed commitment.
+
+| ID | Blocker | Blocks | Why it blocks | Owner | Resolution Path | Target Date |
+|----|---------|--------|---------------|-------|-----------------|-------------|
+| B1 | **[ACTION NOW]** Nobody in the available sources can say whether `ordermaker-service` runs in any real environment. It has no gateway route, appears in neither process manifest, and can only be reached by publishing directly to the message broker | CAP-10 in §§1–8; the four capabilities it commands (CAP-04, CAP-05, CAP-06, CAP-07) inherit an unverified inbound writer; any later stage that scopes or prioritises CAP-10 | CAP-10 is described as a current capability. If it is dead code, a capability that spans four other capabilities is being carried into every later stage for no reason | Platform owner / operator for the Pacco runtime (no named individual recorded — see Q11) | Confirm whether `ordermaker-service` is deployed in any environment, and inspect the `ordermaker` exchange on the running broker for a publisher; if it is deployed but unreachable, record it as dead code and mark CAP-10 accordingly | 2026-09-11 (proposed) |
+| B2 | **[ACTION NOW]** Five Vault unseal keys, a Vault root token, and the gateway's token signing key are committed in plaintext in the repositories | CAP-15's status as a real control rather than a placeholder; any security review of CAP-01 and CAP-02 that depends on the token signing key being secret | This is a live security exposure independent of any architecture work, and it also determines whether CAP-15 is a working control or a placeholder | Security owner for the Pacco platform (no named individual recorded — see Q11) | Confirm whether the committed values are throwaway local-development credentials; if they are not, rotate the Vault root token and unseal keys and the JWT signing key, and purge them from history | 2026-09-08 (proposed) — treat as immediate if the values are live |
+| B3 | **[handled later by runtime and deployment validation]** No production runtime manifest exists in any repository — no Kubernetes, Helm, or Terraform | Every scaling, availability, and network-policy statement about all sixteen capabilities; the evidence-strength ceiling recorded at the end of §5; assumption A3 | Scaling, replica counts, failover, and network policy for every capability cannot be established from these sources at any confidence | The runtime and deployment validation stage (owner assigned when that stage is scheduled) | Obtain read access to the deployment platform itself and re-derive the topology there, rather than from source repositories | n/a — resolves when the runtime and deployment validation stage runs; no action required from this stage |
+| B4 | **[ACTION NOW]** Four gateway routing configurations exist and nothing states which one production uses. The synchronous and asynchronous variants are behaviourally different systems, not environment variants | CAP-02's described behaviour; whether CAP-11 is on the critical path for 20 write operations or merely observational; the runtime flows drawn in `architecture-views.md` | CAP-02's actual behaviour, and whether twenty operations reach services over HTTP or over the message broker, both depend on the answer | Platform owner / operator for the Pacco runtime (no named individual recorded — see Q11) | Read the effective `NTRADA_CONFIG` value in each running environment and record which `ntrada*.yml` is authoritative per environment | 2026-09-11 (proposed) |
 
 ### Open Questions
 
-| ID | Question | Why it matters | Where the answer would come from |
-|----|----------|----------------|----------------------------------|
-| Q1 | **[ACTION NOW]** What starts a delivery? Nothing in any repository sends `deliveries-service` a message or calls it, other than a person calling the endpoint directly | CAP-09 sits in the middle of the order lifecycle. If its trigger is manual, that is a significant fact about how the platform actually runs | A platform owner, or an integration living outside these thirteen repositories |
-| Q2 | **[ACTION NOW]** Are the discount percentages in `CustomerDiscountsService` and the twenty-order VIP threshold the intended business rules? Both are hard-coded, uncommented, untested, and undocumented | These two numbers set what every customer pays. Nothing in the codebase confirms they are deliberate | Whoever owns pricing for the business |
-| Q3 | **[ACTION NOW]** Is losing operation status acceptable? Operation status is held only in a cache entry that expires five minutes after it was last touched, and is lost entirely if the cache restarts | A customer watching a long-running order would simply stop receiving updates. Whether that is a defect or an accepted design choice changes how CAP-11 should be read | A platform owner or the original author |
-| Q4 | **[handled later by data and integration analysis]** Should the copies of customer data held by `orders-service` and `availability-service` be reconciled when a customer changes? They are built once from the customer-created event and never updated | Two capabilities can act on a stale customer state or a stale VIP flag | A stage that examines data flow and consistency requirements across services |
-| Q5 | **[handled later by data and integration analysis]** How does the Pact contract file get from the `orders-service` consumer test to the `parcels-service` provider test? No broker, shared path, or build step references one | Determines whether the platform's only contract test actually protects the boundary between CAP-06 and CAP-07 | A stage with access to the build pipeline, or the engineer who set the tests up |
-| Q6 | **[handled later by runtime and deployment validation]** What do the messages `operations-service` receives actually look like on the wire? Its message types are built at runtime with no fields, so nothing static can show their content | CAP-11's real input contract is unknowable from source alone | Observing live message traffic |
-| Q7 | **[handled later by security review]** Is the certificate access list in `customers-service` enforced, or only declared? The rule is written in configuration but the code that would apply it lives in a third-party package outside this workspace | Determines whether service-to-service access control in CAP-15 is real | A security review, or a test against a running environment |
-| Q8 | **[handled later by data and integration analysis]** How is a database schema changed once a service is live? Only one service creates an index at startup, and no service has any migration or versioning tooling | Nine capabilities own data with no evidenced path for changing its shape | A platform owner, or a stage that examines data lifecycle |
-| Q9 | **[ACTION NOW]** What do the customer states `Suspicious` and `Locked` mean, and what should set them? Both make a customer unable to reserve anything, but no code ever sets either | An unreachable blocking state in CAP-03 either indicates missing behaviour or a leftover | Whoever owns customer operations for the business |
-| Q10 | **[handled later by capability and domain modelling]** Is capability maturity recorded anywhere outside these repositories? No maturity information was retrievable for any capability, so all sixteen are marked unknown | A later stage that needs maturity to prioritise will find nothing here | A capability catalogue or portfolio system, if one exists |
-| Q11 | **[handled later by capability and domain modelling]** Which team owns each capability? No repository contains a code-owners file, a contributing guide, or any team reference | §2 maps capabilities to services, which is evidenced, but cannot map them to people | An engineering directory or team-ownership record maintained outside the code |
-| Q12 | **[handled later by security review]** Why does the order-making automation run with no user identity, bypassing the ownership checks every customer request passes through? | Requests made by this capability are not subject to the per-caller checks described in CAP-04 and CAP-07 | A security review, or the engineer who wrote the saga |
+**On the Decision Owner column.** As with the Blockers table, no named individual is recorded
+anywhere in the workspace (Q11). Decision Owner names the **role empowered to settle the question**;
+naming a person to it is part of answering. A *Proposed Answer* is this stage's best reading of the
+evidence, offered so the owner can confirm or reject rather than start from nothing — it is **not**
+a finding, and nothing elsewhere in this baseline rests on it.
+
+| ID | Question | Why it matters | Proposed Answer (if any) | Decision Owner | Where the answer would come from |
+|----|----------|----------------|--------------------------|----------------|----------------------------------|
+| Q1 | **[ACTION NOW]** What starts a delivery? Nothing in any repository sends `deliveries-service` a message or calls it, other than a person calling the endpoint directly | CAP-09 sits in the middle of the order lifecycle. If its trigger is manual, that is a significant fact about how the platform actually runs | Likely genuinely manual today: the service subscribes to no external event and declares no inbound command, which is a consistent shape rather than a missing handler. Not asserted — an external integration would look identical from inside this workspace | Platform owner for the Pacco runtime | A platform owner, or an integration living outside these thirteen repositories |
+| Q2 | **[ACTION NOW]** Are the discount percentages in `CustomerDiscountsService` and the twenty-order VIP threshold the intended business rules? Both are hard-coded, uncommented, untested, and undocumented | These two numbers set what every customer pays. Nothing in the codebase confirms they are deliberate | None. The values are internally consistent (a monotonic ladder plus a VIP uplift) but nothing in the workspace distinguishes deliberate business rules from placeholder constants | Business owner for pricing | Whoever owns pricing for the business |
+| Q3 | **[ACTION NOW]** Is losing operation status acceptable? Operation status is held only in a cache entry that expires five minutes after it was last touched, and is lost entirely if the cache restarts | A customer watching a long-running order would simply stop receiving updates. Whether that is a defect or an accepted design choice changes how CAP-11 should be read | Probably an accepted design choice for a status projection: the expiry is explicitly configured (`requests.expirySeconds: 300`) rather than defaulted, and CAP-11 writes no domain state. Whether five minutes suits the real order lifecycle is the actual question | Platform owner, or the original author of `operations-service` | A platform owner or the original author |
+| Q4 | **[handled later by data and integration analysis]** Should the copies of customer data held by `orders-service` and `availability-service` be reconciled when a customer changes? They are built once from the customer-created event and never updated | Two capabilities can act on a stale customer state or a stale VIP flag | Likely an oversight rather than a design: `customer_state_changed` and `customer_became_vip` are both published and both declared in `messages.json`, yet no handler exists for either in any repository | Data and integration analysis stage, with the `orders-service` and `availability-service` owners | A stage that examines data flow and consistency requirements across services |
+| Q5 | **[handled later by data and integration analysis]** How does the Pact contract file get from the `orders-service` consumer test to the `parcels-service` provider test? No broker, shared path, or build step references one | Determines whether the platform's only contract test actually protects the boundary between CAP-06 and CAP-07 | Likely nothing transports it today, so the two suites run independently against separately committed files. Both `PACT/` directories exist and both reference Pactify 1.1.0, but neither `.travis.yml` mentions a broker or a shared artifact | Data and integration analysis stage, or the engineer who set the tests up | A stage with access to the build pipeline, or the engineer who set the tests up |
+| Q6 | **[handled later by runtime and deployment validation]** What do the messages `operations-service` receives actually look like on the wire? Its message types are built at runtime with no fields, so nothing static can show their content | CAP-11's real input contract is unknowable from source alone | Partial: the payloads are whatever each publishing service serialises, and CAP-11 reads only the correlation id and the saga-state header — so the body may not matter to it at all. That reading is unverified | Runtime and deployment validation stage | Observing live message traffic |
+| Q7 | **[handled later by security review]** Is the certificate access list in `customers-service` enforced, or only declared? The rule is written in configuration but the code that would apply it lives in a third-party package outside this workspace | Determines whether service-to-service access control in CAP-15 is real | Probably enforced: `Convey.WebApi.Security` is referenced by exactly the two services that participate, and `availability-service`'s client attaches a certificate on the one call the ACL covers, which would be pointless otherwise. The package source is not in the workspace, so this is inference | Security review stage | A security review, or a test against a running environment |
+| Q8 | **[handled later by data and integration analysis]** How is a database schema changed once a service is live? Only one service creates an index at startup, and no service has any migration or versioning tooling | Nine capabilities own data with no evidenced path for changing its shape | Likely relies on MongoDB's schemaless documents absorbing shape changes, with no explicit migration step at all. No tooling of any kind was found to contradict or confirm this | Platform owner, with the data and integration analysis stage | A platform owner, or a stage that examines data lifecycle |
+| Q9 | **[ACTION NOW]** What do the customer states `Suspicious` and `Locked` mean, and what should set them? Both make a customer unable to reserve anything, but no code ever sets either | An unreachable blocking state in CAP-03 either indicates missing behaviour or a leftover | None. The states are reachable only through the admin state-change endpoint, so they may be intended as purely manual interventions rather than dead code — but no evidence supports either reading | Business owner for customer operations | Whoever owns customer operations for the business |
+| Q10 | **[handled later by capability and domain modelling]** Is capability maturity recorded anywhere outside these repositories? No maturity information was retrievable for any capability, so all sixteen are marked unknown | A later stage that needs maturity to prioritise will find nothing here | None. No capability catalogue entry for this platform was retrievable by this stage; whether that means none exists or none was reachable is itself unresolved (A8) | Capability and domain modelling stage | A capability catalogue or portfolio system, if one exists |
+| Q11 | **[handled later by capability and domain modelling]** Which team owns each capability? No repository contains a code-owners file, a contributing guide, or any team reference | §2 maps capabilities to services, which is evidenced, but cannot map them to people | None. This question also gates the Owner and Decision Owner columns in these tables, which currently name roles rather than people | Capability and domain modelling stage, with engineering leadership | An engineering directory or team-ownership record maintained outside the code |
+| Q12 | **[handled later by security review]** Why does the order-making automation run with no user identity, bypassing the ownership checks every customer request passes through? | Requests made by this capability are not subject to the per-caller checks described in CAP-04 and CAP-07 | Likely a pragmatic choice so the saga can act across customers, since it constructs an empty `UserContext` explicitly rather than omitting one. Whether that was intended to carry a service identity instead is unknown | Security review stage, with the `ordermaker-service` author | A security review, or the engineer who wrote the saga |
+| Q13 | **[ACTION NOW]** Are `vehicle_added` and `vehicle_updated` meant to have consumers? Both are published and declared in `messages.json`, but only `vehicle_deleted` has a subscriber anywhere in the thirteen clones | `orders-service` reads vehicle data synchronously at assignment time and stores the resulting price on the order, so a later vehicle price or capacity change never reaches an existing order (CAP-05, CAP-07) | Likely deliberate for pricing, since the order captures its price at assignment by design — but that makes the two events unused rather than pending. Subject to A4 | Platform owner, with the `vehicles-service` and `orders-service` owners | A platform owner, or the running broker's queue bindings for the `vehicles` exchange |
+| Q14 | **[ACTION NOW]** Where does `ordermaker-service` keep its saga state, and is losing it acceptable? `Extensions.cs` calls `AddChronicle()` with no persistence backend and no `Chronicle.Persistence.*` package | A restart mid-saga would strand an in-flight order in a partially built state, and CAP-10's single compensation path would not fire (CAP-10) | Almost certainly in-memory, which is Chronicle's default when no persistence is registered. If CAP-10 turns out to be dead code (B1) the question is moot, so resolve B1 first | Platform owner, with the `ordermaker-service` author | Chronicle's package defaults, plus a restart test against a running saga |
 
