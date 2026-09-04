@@ -83,7 +83,7 @@ graph TD
     gw -->|"HTTP downstream in sync mode ntrada.yml [confirmed]"| backends
     gw -->|"publishes 20 write routes as commands in async mode ntrada-async.yml [confirmed]"| rabbit
     idsvc -->|"reads and writes via IMongoRepository [confirmed]"| idmongo
-    idsvc -->|"UseAccessTokenValidator token revocation [confirmed]"| idredis
+    idsvc -->|"UseAccessTokenValidator token revocation [inferred]"| idredis
     idsvc -->|"publishes signed_up and signed_in to identity exchange [confirmed]"| rabbit
 ```
 
@@ -97,6 +97,16 @@ registers `AddNtrada`); the four `ntrada*.yml` route files — `ntrada.yml`, `nt
 `AddMongoRepository<RefreshTokenDocument, Guid>("refreshTokens")`);
 `Pacco.Services.Identity.Infrastructure/Auth/JwtProvider.cs`, `PasswordService.cs`, `Rng.cs`;
 `repo-summary/Pacco.APIGateway.md` §7, §8, §10; `repo-summary/Pacco.Services.Identity.md` §6, §7, §8.
+
+**Why the Redis edge is `[inferred]`, not `[confirmed]`:** the only in-repo evidence is the
+registration `AddRedis()` (`Pacco.Services.Identity.Infrastructure/Extensions.cs:82`) and the
+middleware `UseAccessTokenValidator()` (same file, line 97), plus one call to
+`IAccessTokenService.DeactivateAsync(...)` (`Pacco.Services.Identity.Api/Program.cs:59`).
+`IAccessTokenService` and its storage backing live in the **Convey.Security** package, not in this
+repository, so no source here shows a revocation entry actually being written to Redis. That is a
+single registration-level proof, and the same two-proof rule this document applied to demote the
+other six services' Redis edges applies here — hence `[inferred]`. See §3.3 for the matching
+sequence-diagram note.
 
 **Gaps / unknowns:** the `identity` exchange is **not** among the six the gateway publishes to, so
 no command reaches `identity-service` from the edge — yet `Program.cs` calls
@@ -133,7 +143,7 @@ graph TD
     orders -->|"IMongoRepository read and write [confirmed]"| ordb
     parcels -->|"IMongoRepository read and write [confirmed]"| padb
     deliveries -->|"IMongoRepository read and write [confirmed]"| dedb
-    orders -->|"publishes 9 events and 10 rejected events to orders exchange [confirmed]"| rabbit
+    orders -->|"publishes 9 events and 11 rejected events to orders exchange [confirmed]"| rabbit
     parcels -->|"publishes parcel_added and parcel_deleted to parcels exchange [confirmed]"| rabbit
     deliveries -->|"publishes 4 events to deliveries exchange [confirmed]"| rabbit
     rabbit -->|"orders subscribes to 7 external events [confirmed]"| orders
@@ -258,7 +268,7 @@ graph TD
     caller -->|"POST orders no gateway route exists [unknown]"| om
     om -->|"GET resource by id - httpClient.type empty so not via Fabio [confirmed]"| avail
     om -->|"GET vehicles then FirstOrDefault [confirmed]"| vehicles
-    om -->|"publishes create_order add_parcel_to_order assign_vehicle_to_order approve_order cancel_order to orders exchange [confirmed]"| rabbit
+    om -->|"publishes create_order add_parcel_to_order assign_vehicle_to_order cancel_order to orders exchange [confirmed]"| rabbit
     om -->|"publishes reserve_resource to availability exchange [confirmed]"| rabbit
     om -->|"publishes make_order_completed and make_order_rejected to ordermaker exchange [confirmed]"| rabbit
     rabbit -->|"subscribes order_created parcel_added_to_order vehicle_assigned_to_order order_approved resource_reserved [confirmed]"| om
@@ -275,11 +285,22 @@ graph TD
 `Convey.MessageBrokers.Outbox`, no `Convey.Tracing.Jaeger`, no `Convey.Secrets.Vault`);
 `Pacco/compose/services.yml:78-85`; `Pacco/compose/prometheus/prometheus.yml:38-40`.
 
+**`approve_order` is declared but never published.** `Commands/External/ApproveOrder.cs` defines an
+`ApproveOrder : ICommand` type, but a repository-wide grep for `ApproveOrder` returns **that file
+alone** — `AIOrderMakingSaga.cs` never publishes it. The saga's relationship to order approval runs
+in the **opposite** direction: it implements `ISagaAction<OrderApproved>` and *consumes* the inbound
+`order_approved` event (line 121). The command is therefore an unused contract, recorded as a gap in
+§6 (GAP-24), not a runtime edge. The saga's complete publish set is `CreateOrder` (line 63),
+`AddParcelToOrder` (74), `AssignVehicleToOrder` (103), `ReserveResource` (113), `MakeOrderCompleted`
+(124) and `CancelOrder` (141, compensation only).
+
 **Two deliberate modelling choices in this diagram.** First, the caller node is drawn as an
 **unknown** because there is genuinely no evidenced entry path: `ordermaker-service` appears in no
 `ntrada*.yml` module and in neither PM2 manifest, while both Compose stacks start it on port 5015
-and the gateway lists it under `depends_on`. `depends_on` is a **container start-ordering**
-relationship, not a runtime call, so it is not drawn as an edge here — it belongs to §4. Second,
+and **`operations-service`** lists it under `depends_on` (`Pacco/compose/services.yml:51-67`). The
+`api-gateway` service block (lines 4-13) has **no** `depends_on` key at all. `depends_on` is a
+**container start-ordering** relationship, not a runtime call, so it is not drawn as an edge here —
+it belongs to §4. Second,
 `Redis` is **not** drawn: `AddRedis()` is registered but no Redis read or write is evidenced in this
 repository, and Chronicle is not configured to use it.
 
@@ -297,7 +318,7 @@ graph TD
     subgraph "Operation Observation"
         ops["operations-service<br/>repo Pacco.Services.Operations<br/>HTTP SignalR gRPC in one process"]
     end
-    rabbit["RabbitMQ<br/>all 8 exchanges 87 messages"]
+    rabbit["RabbitMQ<br/>all 8 exchanges 80 messages"]
     opsredis["Redis operations prefix<br/>expirySeconds 300 + SignalR backplane"]
 
     gw -->|"GET operation by id HTTP downstream [confirmed]"| ops
@@ -310,8 +331,9 @@ graph TD
 **Evidence references:** `Pacco.Services.Operations.Api/Program.cs` (dispatcher endpoint,
 `MapHub<PaccoHub>("/pacco")`, `MapGrpcService<GrpcServiceHost>()`);
 `Infrastructure/Subscriptions.cs` (emits a field-less type per message name with
-`System.Reflection.Emit` and subscribes reflectively); `messages.json` (8 exchanges, 26 commands,
-30 events, 31 rejected events); `Handlers/Generic{Command,Event,RejectedEvent}Handler.cs`;
+`System.Reflection.Emit` and subscribes reflectively); `messages.json` (8 exchanges, 24 commands,
+29 events, 27 rejected events — 80 message names in total);
+`Handlers/Generic{Command,Event,RejectedEvent}Handler.cs`;
 `Hubs/PaccoHub.cs`; `Operations.proto`; `wwwroot/ui/js/app.js`
 (`withUrl('http://localhost:5005/pacco')`, `invoke('initializeAsync', jwt)`); `appsettings.json`
 (`requests.expirySeconds: 300`, Redis prefix `operations:`); `Pacco.Services.Operations.Api.csproj`
@@ -326,7 +348,7 @@ read line by line, so the store role is inferred rather than confirmed. MongoDB 
 diagram entirely because a configured-but-unregistered database is not an evidenced runtime
 dependency. See §6 GAP-14.
 
-**Gaps / unknowns:** the wire payload of all 87 subscriptions is `[unknown]` — the emitted types
+**Gaps / unknowns:** the wire payload of all 80 subscriptions is `[unknown]` — the emitted types
 have no fields, so only message **names** are bound (§6 GAP-15). Whether the SignalR hub or the
 gRPC stream scopes results per caller is `[unknown]` (§6 GAP-16) — `GetOperationResponse` carries a
 `userId` and `SubscribeOperations` takes no filter argument.
@@ -336,7 +358,7 @@ gRPC stream scopes results per caller is `[unknown]` (§6 GAP-16) — `GetOperat
 ## 2. Service Dependency Graph
 
 The platform-level dependency graph is split into **two diagrams by integration mechanism**, because
-merging synchronous HTTP with 87 asynchronous messages through one broker node produces an
+merging synchronous HTTP with 80 asynchronous messages through one broker node produces an
 unreadable graph and blurs which hop is which. Both diagrams together are the service dependency
 graph; neither contains a deployment, packaging, or ownership relationship.
 
@@ -423,7 +445,7 @@ graph LR
     customers -->|"customer_created became_vip state_changed [confirmed]"| xcu
     avail -->|"resource_reserved and 4 more [confirmed]"| xav
     vehicles -->|"vehicle_added updated deleted [confirmed]"| xve
-    orders -->|"9 events and 10 rejected events [confirmed]"| xor
+    orders -->|"9 events and 11 rejected events [confirmed]"| xor
     parcels -->|"parcel_added parcel_deleted [confirmed]"| xpa
     deliveries -->|"delivery_started completed failed registration_added [confirmed]"| xde
     om -->|"make_order_completed make_order_rejected [confirmed]"| xom
@@ -448,9 +470,24 @@ graph LR
 ```
 
 To keep the diagram legible only three of the eight `operations-service` observation edges are
-drawn. `operations-service` subscribes to **all 87 messages on all 8 exchanges** via
+drawn. `operations-service` subscribes to **all 80 messages on all 8 exchanges** via
 `Infrastructure/Subscriptions.cs` reading `messages.json` — `[confirmed]`; the remaining five edges
 are identical in kind and are omitted for readability, not for lack of evidence.
+
+**Message-catalogue totals, counted from `messages.json`** (`Pacco.Services.Operations.Api/messages.json`):
+8 exchanges carrying **24 commands, 29 events and 27 rejected events — 80 message names**.
+Per exchange: `availability` 4/5/4, `customers` 2/3/2, `deliveries` 4/4/3, `identity` 2/2/2,
+`ordermaker` 0/1/1, `orders` 7/9/10, `parcels` 2/2/2, `vehicles` 3/3/3 (commands/events/rejected).
+
+One discrepancy between the catalogue and the code is worth recording: `messages.json` lists **10**
+rejected events for `orders-service`, but `Pacco.Services.Orders.Application/Events/Rejected/`
+contains **11** classes — the catalogue omits `complete_order_rejected` (`CompleteOrderRejected.cs`).
+Two of the 11 are the non-`*Rejected*`-suffixed `OrderForDeliveryNotFound` and
+`OrderForReservedVehicleNotFound` variants, both of which *are* present in the catalogue. The
+diagram edges above therefore read **11** for what `orders-service` publishes (the code is
+authoritative for publishes), while the 27/80 catalogue totals reflect `messages.json` as written —
+which is also the exact set `operations-service` binds, so `complete_order_rejected` is published
+but **not observed**. See §6 GAP-15.
 
 **Version divergence observed:** every service pins `Convey` `0.4.*` and the gateway pins
 `Ntrada 0.4.*`, so **no divergence in the shared framework version was observed** across the
@@ -652,7 +689,7 @@ sequenceDiagram
     GW->>GW: validate signature against the symmetric issuerSigningKey [confirmed]
     GW->>ORD: downstream rewritten to orders with customerId taken from the user_id claim [confirmed]
     Note over GW,ORD: read scoping is applied by gateway URL rewriting, not by the service [confirmed]
-    ID->>RDS: access token revocation list via UseAccessTokenValidator [confirmed]
+    ID->>RDS: access token revocation list via UseAccessTokenValidator [inferred]
 ```
 
 **Evidence:** `ntrada*.yml` module `identity` (all four routes are HTTP `downstream` in **both**
@@ -668,6 +705,16 @@ with `validIssuer: pacco`, `validateAudience: false`, symmetric `issuerSigningKe
 wide is stated in `repo-summary/Pacco.Services.Identity.md` §6 as a contractual, not referential,
 coupling — treated as `[confirmed]` at the narrative level, `[unknown]` at the field level since no
 identifier mapping code was cited.
+
+The final Redis hop is `[inferred]`, not `[confirmed]`, and is drawn outside the request ordering
+because no source in this repository shows *when* it happens. The in-repo evidence is exactly three
+lines: `AddRedis()` (`Identity.Infrastructure/Extensions.cs:82`), `UseAccessTokenValidator()`
+(same file, line 97) and one `IAccessTokenService.DeactivateAsync(...)` call
+(`Identity.Api/Program.cs:59`). `IAccessTokenService` and the store it writes to are supplied by the
+**Convey.Security** package, which is not part of this workspace — so that Redis is the revocation
+backing store is a reasonable reading of the registration, not something the code here proves. This
+is the same single-registration situation that led §1.1 and §2 to demote the other six services'
+Redis edges, and it is labelled consistently. See §1.1.
 
 **Unknowns:** the three token-management routes — `POST access-tokens/revoke`,
 `POST refresh-tokens/use`, `POST refresh-tokens/revoke` — have **no gateway route in any of the four
@@ -689,30 +736,36 @@ sequenceDiagram
     participant AV as "availability-service"
     participant MQO as "RabbitMQ orders exchange"
     participant ORD as "orders-service"
+    participant MQA as "RabbitMQ availability exchange"
 
     CALLER->>OM: POST orders dispatching MakeOrder [unknown]
     OM->>OM: AIOrderMakingHandler starts the saga correlating on OrderId [confirmed]
-    OM->>VEH: GET vehicles then FirstOrDefault - placeholder selection [confirmed]
-    VEH-->>OM: vehicle list [confirmed]
-    OM->>AV: GET resource by id for reservation selection [confirmed]
-    AV-->>OM: resource [confirmed]
+    Note over OM: HandleAsync(MakeOrder) line 56 - records ParcelId OrderId CustomerId
     OM->>MQO: publish create_order with Saga header and an empty user context [confirmed]
     MQO->>ORD: deliver create_order [confirmed]
     ORD->>MQO: publish order_created [confirmed]
     MQO->>OM: deliver order_created - saga action [confirmed]
+    Note over OM: HandleAsync(OrderCreated) line 71 - fans out one command per stored parcel id
     loop For each parcel id held in the saga state
         OM->>MQO: publish add_parcel_to_order [confirmed]
         MQO->>ORD: deliver add_parcel_to_order [confirmed]
         ORD->>MQO: publish parcel_added_to_order [confirmed]
         MQO->>OM: deliver parcel_added_to_order tracked in AddedParcelIds [confirmed]
     end
-    OM->>MQO: publish assign_vehicle_to_order once AllPackagesAddedToOrder is true [confirmed]
+    Note over OM: HandleAsync(ParcelAddedToOrder) line 84 - returns early until AllPackagesAddedToOrder
+    OM->>VEH: GET vehicles then FirstOrDefault - placeholder selection [confirmed]
+    VEH-->>OM: vehicle list - saga stores VehicleId [confirmed]
+    OM->>AV: GET resource by id for reservation selection [confirmed]
+    AV-->>OM: resource - saga stores ReservationDate and ReservationPriority [confirmed]
+    OM->>MQO: publish assign_vehicle_to_order [confirmed]
     MQO->>ORD: deliver assign_vehicle_to_order [confirmed]
     ORD->>MQO: publish vehicle_assigned_to_order [confirmed]
     MQO->>OM: deliver vehicle_assigned_to_order [confirmed]
-    OM->>MQO: publish approve_order - trigger point inferred [inferred]
+    Note over OM: HandleAsync(VehicleAssignedToOrder) line 112
+    OM->>MQA: publish reserve_resource VehicleId CustomerId date priority [confirmed]
     MQO->>OM: deliver order_approved completing the saga [confirmed]
-    OM->>OM: publish make_order_completed OrderId CustomerId on its own exchange [confirmed]
+    Note over OM: HandleAsync(OrderApproved) line 121 - then CompleteAsync()
+    OM->>OM: publish make_order_completed OrderId on its own exchange [confirmed]
 ```
 
 **Evidence:** `Pacco.Services.OrderMaker/Sagas/AIOrderMakingSaga.cs` —
@@ -726,12 +779,33 @@ sequenceDiagram
 the `FirstOrDefault()`); `Services/Clients/AvailabilityServiceClient.cs`;
 `Services/ResourceReservationsService.cs`; `Pacco.Services.OrderMaker/Program.cs`.
 
-**Assumptions / inferences:** the `approve_order` publish is `[inferred]` in **position only** — that
-the saga publishes it is `[confirmed]` from the command list, but the summary's ordered walkthrough
-stops at "proceeds toward approval", so the exact trigger is not evidenced. The `reserve_resource`
-command is **also published by this saga onto the `availability` exchange** `[confirmed]`, but its
-position in the ordering is not evidenced and it is therefore **deliberately not drawn** rather than
-placed speculatively.
+**The ordering above is read directly from the five handler bodies, not inferred.** Each `Note over
+OM` names the handler and its line number in `Sagas/AIOrderMakingSaga.cs`, so the sequence can be
+checked against the source line by line. Two points that a naive reading of the command list gets
+wrong:
+
+- **The two HTTP lookups happen late, not up front.** `GetBestAsync()` on `VehiclesServiceClient`
+  (line 93) and `_resourceReservationsService.GetBestAsync(...)` (line 98) are both inside
+  `HandleAsync(ParcelAddedToOrder)`, *after* the `if (!Data.AllPackagesAddedToOrder) return;` guard
+  at lines 87-90. They therefore run once, after the last parcel is acknowledged — not before
+  `create_order`. An earlier revision of this document drew them first; that was wrong.
+- **`reserve_resource` is drawn, and its position is evidenced.** It is the sole statement of
+  `HandleAsync(VehicleAssignedToOrder)` (line 112-119), publishing onto the **`availability`**
+  exchange — hence the separate `MQA` participant. An earlier revision omitted it on the stated
+  grounds that its position was unevidenced; the handler body evidences it exactly.
+
+**`approve_order` is not published by this saga, and has no producer anywhere in the workspace.**
+`Commands/External/ApproveOrder.cs` declares the type, but a repository-wide grep returns that file
+alone — the saga never publishes it, and it implements `ISagaAction<OrderApproved>`, *consuming* the
+inbound event rather than triggering it. Nor does any other component produce the command:
+`orders-service` **subscribes** to it (`Orders.Infrastructure/Extensions.cs:95`,
+`SubscribeCommand<ApproveOrder>()`) and its `ApproveOrderHandler` is what publishes `order_approved`,
+but no `ntrada-async.yml` route carries an `approve_order` routing key (the `orders` module publishes
+only `create_order`, `delete_order`, `add_parcel_to_order`, `delete_parcel_from_order` and
+`assign_vehicle_to_order`) and no service publishes it. **The saga therefore has no evidenced path
+to its own terminal state**: it waits on `order_approved`, which only `ApproveOrderHandler` emits,
+which only an unproduced command can trigger. This is recorded as an unused-contract gap in §6
+(GAP-24) and is a stronger finding than the missing entry point alone.
 
 **Unknowns:** the first message has no evidenced sender — `ordermaker-service` has no module in any
 of the four gateway configurations and appears in neither PM2 manifest, while both Compose stacks
@@ -841,7 +915,7 @@ graph TD
     CLIENT["external client"]
     CLIENT -->|"published port 5000"| GW
     CLIENT -->|"published port 5005 for the SignalR hub"| OPS
-    GW -->|"depends_on - container start ordering only"| OM
+    OPS -->|"depends_on - container start ordering only"| OM
     PROM -->|"scrapes the metrics endpoint"| GW
 ```
 
@@ -851,17 +925,26 @@ graph TD
   `pacco-network`.
 - `Pacco/compose/services.yml` and `Pacco/compose/services-local.yml` — the eleven service
   containers and their published ports; `ordermaker-service` at `services.yml:78-85` and
-  `services-local.yml:78-85`; the gateway's `depends_on` entry at `services.yml:65`.
+  `services-local.yml:78-85`; the **`operations-service`** `depends_on` block at `services.yml:51-67`,
+  which lists `ordermaker-service` at line 65.
 - `Pacco/compose/rabbitmq/Dockerfile` — the broker image, exposing 5672, 15672 and 15692.
-- `Pacco/compose/prometheus/prometheus.yml` — scrape targets, including `ordermaker-service` at
-  lines 38 to 40, and `docker.for.mac.localhost:5000/metrics-text` for the gateway.
+- `Pacco/compose/prometheus/prometheus.yml` — scrape targets, all of which are plain **container
+  names**: `api-gateway` at lines 10-12 (`targets: ['api-gateway']`) and `ordermaker-service` at
+  lines 38-40. No target in this file uses a host-mapped address.
+- `Pacco/docker-images.txt:377` — the only occurrence of the
+  `docker.for.mac.localhost:5000` scrape target in the workspace. It appears in an embedded sample
+  configuration in that text file, **not** in the live `compose/prometheus/prometheus.yml`.
 - `Pacco/compose/services.yml` — `NTRADA_CONFIG=ntrada-async.docker.yml` on the gateway container.
 
 **Reading notes and deliberate omissions**
 
-- The `depends_on` arrow is drawn **as a deployment relation and labelled as such**. It is not a
-  runtime call. `api-gateway` has no route to `ordermaker-service` in any configuration, so this
-  edge tells us the containers start in an order, nothing more.
+- The `depends_on` arrow runs from **`operations-service`**, not from the gateway. The single
+  `depends_on` block in `compose/services.yml` belongs to the `operations-service` definition
+  (lines 51-67) and lists eight services including `ordermaker-service`; the `api-gateway` block
+  (lines 4-13) has **no `depends_on` key at all**. It is drawn **as a deployment relation and
+  labelled as such** — not a runtime call. `api-gateway` has no route to `ordermaker-service` in any
+  configuration, so nothing here gives the service an evidenced caller; the GAP-2 conclusion is
+  unchanged, but it no longer rests on a gateway `depends_on` that does not exist.
 - The client-to-`operations-service` arrow on port 5005 is drawn because the browser code connects
   to that port directly rather than through the gateway `[confirmed]`.
 - Only one Prometheus edge is drawn, to the gateway, to keep the diagram legible. Prometheus scrapes
@@ -1008,12 +1091,13 @@ erDiagram
         Guid Id PK
         Guid CustomerId
         Guid VehicleId
-        string Status
-        decimal TotalPrice
+        OrderStatus Status
         DateTime CreatedAt
+        DateTime DeliveryDate
+        decimal TotalPrice
     }
     ORDER_PARCEL {
-        Guid ParcelId
+        Guid Id
         string Name
         string Variant
         string Size
@@ -1033,6 +1117,16 @@ never reconciled `[confirmed]` — see §2 and §6 GAP-23.
 Parcels are **embedded in the order document** `[confirmed]`, so an order carries its own snapshot of
 parcel data separate from the `parcels-service` copy.
 
+Field names and types above are transcribed from
+`Orders.Infrastructure/Mongo/Documents/OrderDocument.cs`. Two details matter for anyone reading the
+two parcel shapes side by side: the embedded `OrderDocument.Parcel` names its key **`Id`**, not
+`ParcelId` — it is the parcel's own identifier copied into the order, and an earlier revision of this
+document renamed it — and inside this embedded class `Variant` and `Size` really are **`string`**,
+whereas the owning `ParcelDocument` in §5.4 declares them as enums. The snapshot is a
+*stringified projection* of the source record, which is part of why the two copies can diverge.
+`Status` is the `OrderStatus` enum, and `DeliveryDate` is a nullable `DateTime?` set when a delivery
+is scheduled.
+
 ### 5.4 parcels-service — [Confidence: confirmed]
 
 ```mermaid
@@ -1040,11 +1134,13 @@ erDiagram
     PARCEL {
         Guid Id PK
         Guid CustomerId
-        Guid OrderId
+        Variant Variant
+        Size Size
         string Name
-        string Variant
-        string Size
-        DateTime AddedAt
+        string Description
+        DateTime CreatedAt
+        Guid OrderId
+        bool AddedToOrder
     }
     CUSTOMER_REPLICA {
         Guid Id PK
@@ -1056,6 +1152,15 @@ erDiagram
 carries an `OrderId` **as a value written when the parcel is attached to an order**; the authoritative
 membership list is the embedded array inside the order document in §5.3. The two copies can diverge
 and nothing reconciles them `[confirmed]`.
+
+All nine fields are transcribed from
+`Parcels.Infrastructure/Mongo/Documents/ParcelDocument.cs`. `Variant` and `Size` are the **enums**
+`Pacco.Services.Parcels.Core.Entities.Variant` and `.Size`, not strings — the string forms in the
+§5.3 embedded snapshot are a projection made when the parcel is copied into an order. The timestamp
+is **`CreatedAt`**; there is no `AddedAt` field, despite an earlier revision of this document naming
+one. `OrderId` is nullable (`Guid?`) and is paired with the redundant boolean `AddedToOrder`, so
+attachment state is stored **twice in the same document** with no constraint keeping the two in
+agreement — a row with `AddedToOrder == true` and a null `OrderId` is representable.
 
 ### 5.5 deliveries-service — [Confidence: confirmed]
 
@@ -1184,6 +1289,8 @@ the alternative was to draw a relationship that the code does not prove, and omi
 | GAP-6 | `Availability.Application` names the command `ReleaseResourceReservation` and the rejection `ReleaseResourceReservationRejected`, which serialise under `snakeCase` conventions to `release_resource_reservation` and `release_resource_reservation_rejected`. | `messages.json` records `release_resource`, and `ntrada-async.yml` sets `routing_key: release_resource`. | The class names are authoritative for what the service binds. The routing key the gateway publishes and the queue the service binds **do not match**. Recorded, **not reconciled**. |
 | GAP-17 | No shared contracts package exists. `CustomerCreated` is **four independent C# classes** in four repositories; `ResourceReserved` is three. Compatibility rests on `messages.json`, which is hand-maintained. | — | A field added on one side is silently absent on the other. This is the mechanism by which GAP-6 became possible. |
 | GAP-22 | `Pacco/docker-images.txt` documents SQL Server, PostgreSQL, InfluxDB, Elasticsearch, Kibana and Logstash. | The runbook presents them as platform infrastructure. | **No service uses any of them** — `influxEnabled: false` and `elk.enabled: false` everywhere, every persistence registration is MongoDB. Excluded from all diagrams. Whether this is a **Future/Intended State (Not Implemented)** or a leftover is `[unknown]`. |
+| GAP-24 | **`approve_order` has no producer anywhere in the workspace, yet the order-making saga cannot terminate without it.** `OrderMaker/Commands/External/ApproveOrder.cs` declares the command and is referenced by nothing — a workspace-wide grep returns that file alone. `AIOrderMakingSaga.cs` never publishes it; it implements `ISagaAction<OrderApproved>` and consumes the resulting event. | `orders-service` **subscribes** to the command (`Orders.Infrastructure/Extensions.cs:95`) and `ApproveOrderHandler` is the only emitter of `order_approved`. `messages.json` lists `approve_order` under the `orders` exchange. | No `ntrada-async*.yml` route carries an `approve_order` routing key — the `orders` module publishes only `create_order`, `delete_order`, `add_parcel_to_order`, `delete_parcel_from_order` and `assign_vehicle_to_order` — and no service publishes it. The saga blocks at `HandleAsync(OrderApproved)` forever, so §3.4 has **no evidenced path to `CompleteAsync()`**. Recorded, **not reconciled**: whether the trigger is a missing gateway route, a missing operator tool, or **Future/Intended State (Not Implemented)** is `[unknown]`. |
+| GAP-25 | The message catalogue under-reports `orders-service` by one rejected event. `messages.json` lists **10** rejected events for the `orders` exchange, but `Orders.Application/Events/Rejected/` contains **11** classes — `complete_order_rejected` (`CompleteOrderRejected.cs`) is absent from the catalogue. | `Pacco.Services.Operations.Api/messages.json` (orders `rejectedEvents`, 10 entries); `Orders.Application/Events/Rejected/` (11 files). | `Operations.Api/Infrastructure/Subscriptions.cs` binds **exactly** the names in `messages.json`, so `complete_order_rejected` is published by `orders-service` and **observed by nothing**. A failed order completion is invisible to the one component that exists to make outcomes visible. This is GAP-17's hand-maintained-catalogue risk materialising a second time, after GAP-6. |
 
 ### 6.4 Unconsumed and unreconciled data
 
@@ -1206,7 +1313,7 @@ the alternative was to draw a relationship that the code does not prove, and omi
 
 | ID | Gap | Evidence | Why it matters |
 |---|---|---|---|
-| GAP-15 | The wire payloads of all 87 `operations-service` subscriptions are unknown. `Subscriptions.cs` emits **field-less types** at runtime through `AssemblyBuilder.DefineDynamicAssembly` and subscribes reflectively. | `Operations.Api/Infrastructure/Subscriptions.cs` | The one component that sees every message deserialises none of their contents, so it cannot be used as a contract oracle. |
+| GAP-15 | The wire payloads of all 80 `operations-service` subscriptions are unknown. `Subscriptions.cs` emits **field-less types** at runtime through `AssemblyBuilder.DefineDynamicAssembly` and subscribes reflectively. The 80 is counted directly from `messages.json`: 8 exchanges carrying **24 commands, 29 events and 27 rejected events**. | `Operations.Api/Infrastructure/Subscriptions.cs`; `Operations.Api/messages.json` (availability 4/5/4, customers 2/3/2, deliveries 4/4/3, identity 2/2/2, ordermaker 0/1/1, orders 7/9/10, parcels 2/2/2, vehicles 3/3/3 as commands/events/rejected) | The one component that sees every message deserialises none of their contents, so it cannot be used as a contract oracle. The count also bounds what is observable at all: the binding set is exactly `messages.json`, so anything missing from that file — see GAP-25 — is unobserved. |
 | GAP-16 | Whether the SignalR hub or the gRPC `SubscribeOperations` stream scopes results to the requesting caller. | `Operations.Api/Hubs/PaccoHub.cs`; `Operations.proto` | If unscoped, one user observes other users' operation outcomes. Not drawable either way. |
 | GAP-18 | How the Pact file travels between `orders-service` as consumer and `parcels-service` as provider. `Pactify` 1.1.0 is referenced on both sides with **no broker configured**. | Orders and Parcels test projects | The contract test cannot fail on a real breaking change unless the file is shared by some out-of-band means. |
 | GAP-11 | Whether `security.certificate.acl` is enforced or advisory. `customers-service` declares that `availability-service` holds the `customers:read` permission, and the caller attaches a certificate — but no enforcement middleware was observed. | `Customers.Api/appsettings.json`; `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` | The east-west authorisation boundary drawn in §3.2 may not actually be enforced. |
@@ -1230,12 +1337,12 @@ the alternative was to draw a relationship that the code does not prove, and omi
 | # | Assumption | Rationale | Impact if Wrong | Validation Path |
 |---|------------|-----------|-----------------|-----------------|
 | A1 | The HTTP responses drawn in §3.1 return the downstream result to the caller. | The route table proves the calls are proxied in sync mode, but no status code or body is recorded in the read evidence. | The sync flow in §3.1 would describe a fire-and-forget where a result is expected, changing how callers must be written. | Run the gateway with `ntrada.yml` and observe one `POST /orders` end to end. |
-| A2 | `approve_order` is published by the saga after `vehicle_assigned_to_order` is handled. | The command list proves the saga publishes it; the ordered walkthrough in the evidence stops at "proceeds toward approval". | The saga sequence in §3.4 would be out of order at its final step. | Read the body of `ISagaAction<VehicleAssignedToOrder>.HandleAsync` in `AIOrderMakingSaga.cs`. |
+| A2 | ~~`approve_order` is published by the saga after `vehicle_assigned_to_order` is handled.~~ **RETIRED — the validation was performed and the assumption was false.** `HandleAsync(VehicleAssignedToOrder)` (`AIOrderMakingSaga.cs:112-119`) publishes **`ReserveResource`**, not `ApproveOrder`, and the saga never publishes `ApproveOrder` anywhere. | The assumption was drawn from the *presence of the command class*, not from a publish site — an inference the evidence never supported. Reading the handler body settled it. | It was wrong, and §3.4 has been corrected: the fabricated `approve_order` step is removed and the real `reserve_resource` publish is drawn in its place. | **Closed.** The finding is carried forward as GAP-24 — the command has no producer in the workspace, so the saga has no evidenced route to completion. |
 | A3 | Handling `order_completed` is what updates the customer record, and possibly promotes to VIP. | The VIP rule lives in `Customers.Core/Entities/Customer.cs` and `customer_became_vip` is published, but no evidence names the trigger. | The last step of §3.5 attributes a state change to the wrong handler. | Read the `order_completed` handler in `Customers.Application/Events/External/Handlers/`. |
 | A4 | The identifier minted as `UserId` by `identity-service` is the same value used as `CustomerId` platform wide. | Stated as a contractual coupling in `repo-summary/Pacco.Services.Identity.md`, with no mapping code cited. | Every `CustomerId` link in §5.8 and every customer-scoped flow would be wrong. | Compare the id assignment in `Identity` sign-up with the `signed_up` handler in `customers-service`. |
 | A5 | `pricing-service` belongs to the Customer and Commercial subsystem. | The inventory itself assigns subsystem S4 only **medium** confidence. | §1.4 groups a service with the wrong bounded context. | Confirm ownership with whoever owns the pricing rules once an owner exists — see B5. |
 | A6 | Registering `AddRedis()` without evidenced usage means Redis is not an active runtime dependency for that service. | Applying the two-proof infrastructure rule: deployment presence plus code-level usage. Only two services show both. | Six services would have a hidden cache or state dependency missing from every diagram. | Search each service for an injected `IDistributedCache` or Redis client actually being called. |
-| A7 | Drawing three of the eight `operations-service` observation edges in §2.2, rather than all eight, does not misrepresent the topology. | `Subscriptions.cs` subscribes reflectively to all 87 messages on all 8 exchanges; drawing every edge made the graph unreadable. | A reader could conclude five exchanges are unobserved. The full scope is stated in prose beside the diagram. | None needed — the reflective subscription is `[confirmed]`. |
+| A7 | Drawing three of the eight `operations-service` observation edges in §2.2, rather than all eight, does not misrepresent the topology. | `Subscriptions.cs` subscribes reflectively to all 80 messages on all 8 exchanges; drawing every edge made the graph unreadable. | A reader could conclude five exchanges are unobserved. The full scope is stated in prose beside the diagram. | None needed — the reflective subscription is `[confirmed]`. |
 | A8 | The `GET pricing` and `GET vehicle by id` calls from `orders-service` belong to some order write path, but not to a step drawn in §3.1. | The client classes and outbound edges are confirmed; their calling handlers are not named in the evidence. | §3.1 is incomplete rather than incorrect — two real hops are missing from the sequence. | Read the constructor injections in the `CreateOrderHandler` and `AssignVehicleToOrderHandler` classes. |
 | A9 | Chronicle defaults to in-memory saga state when no persistence is configured. | No `Chronicle.Persistence.*` package is referenced and `AddChronicle()` takes no configuration. Treated as a library default, not as evidence. | GAP-12's severity is misjudged in either direction. | Check the `Chronicle` 3.2.1 package default, or observe whether an in-flight saga survives a restart. |
 | A10 | `docker-images.txt` records infrastructure that was never wired up, rather than infrastructure that was removed. | Both readings fit the evidence equally; neither is provable from the repositories. | A future reader may restore or delete the wrong thing. Both readings are stated in §4.4 rather than one being chosen. | Ask an original maintainer, once an owner exists — see B5. |
@@ -1267,8 +1374,10 @@ the alternative was to draw a relationship that the code does not prove, and omi
 | Q11 | **[handled later by architecture_baseline]** Should `orders-service` handle `vehicle_deleted` — GAP-8? | It stores `VehicleId` on every order and has no handler, while `availability-service` does. Orders can hold a dangling identifier with no detection path. | Probably yes, but this is a design decision, not a reading of the code. | Unassigned — see B5 |
 | Q12 | **[handled later by architecture_baseline]** Are the `customers` replicas in `orders-service` and `parcels-service` meant to be reconciled — GAP-23? | They are populated only by `customer_created` and never updated, so both drift permanently after the first customer change. | Unknown whether the staleness is accepted or overlooked. | Unassigned — see B5 |
 | Q13 | **[handled later by architecture_baseline]** Should the duplicated event contracts be replaced by a shared package — GAP-17? | `CustomerCreated` exists as four independent classes and `ResourceReserved` as three. This duplication is how the GAP-6 mismatch became possible. | A shared contracts package would prevent recurrence, but this is a change, not an observation, and is out of scope for a current-state document. | Unassigned — see B5 |
-| Q14 | **[handled later by architecture_baseline]** What are the wire payloads of the 87 messages `operations-service` subscribes to — GAP-15? | The one component that sees every message emits field-less types and deserialises nothing, so it cannot serve as a contract oracle. | The publishers' event classes are the only source. `messages.json` lists names, not fields. | Unassigned — see B5 |
+| Q14 | **[handled later by architecture_baseline]** What are the wire payloads of the 80 messages `operations-service` subscribes to — GAP-15? | The one component that sees every message emits field-less types and deserialises nothing, so it cannot serve as a contract oracle. | The publishers' event classes are the only source. `messages.json` lists names, not fields. | Unassigned — see B5 |
 | Q15 | **[handled later by architecture_baseline]** Do the SignalR hub and the gRPC stream scope results per caller — GAP-16? | If not, one user observes another user's operation outcomes. | Unknown. Not drawable either way, so §3.2 records it rather than asserting a boundary. | Unassigned — see B5 |
 | Q16 | **[handled later by architecture_baseline]** How does the Pact file travel between `orders-service` and `parcels-service` — GAP-18? | With no broker configured, the contract test cannot fail on a real breaking change unless the file is shared out of band. | No mechanism found in either repository. | Unassigned — see B5 |
 | Q17 | **[ACTION NOW]** Are the three unreachable `identity-service` token routes intended to be exposed — GAP-21? | Token refresh and revocation are implemented but have no gateway route in any configuration, so no external caller can reach them. | Either the routes are missing from the gateway or the endpoints are dead. Undetermined. | Unassigned — see B5 |
 | Q18 | **[handled later by architecture_baseline]** Do the datastores documented in `docker-images.txt` represent a Future/Intended State, or removed infrastructure — GAP-22? | Six documented components are used by no service. A future reader may restore or delete the wrong thing. | Both readings fit the evidence — see A10. Neither is asserted. The components are excluded from every diagram because the code is authoritative. | Unassigned — see B5 |
+| Q19 | **[ACTION NOW]** What is meant to publish `approve_order` — GAP-24? | This is the sharpest reachability hole in the platform. `orders-service` subscribes to the command and `ApproveOrderHandler` is the sole emitter of `order_approved`, which the order-making saga waits on to reach `CompleteAsync()`. No gateway route and no service publishes the command, so the saga as written **cannot terminate**. It compounds GAP-2: the flow has neither an evidenced entry point nor an evidenced exit. | Either a gateway route is missing from all four configurations, or an operator/approval tool exists outside this workspace, or the approval step was never finished. Undetermined from the code. | Unassigned — see B5 |
+| Q20 | **[ACTION NOW]** Should `complete_order_rejected` be added to `messages.json` — GAP-25? | `Subscriptions.cs` binds exactly the catalogue, so this rejected event is published by `orders-service` and observed by nothing — a failed order completion is invisible in the one component built to surface outcomes. Unlike GAP-6 this is a pure omission with no naming conflict, so it is cheap to fix. | Almost certainly yes — the other ten orders rejected events are all listed. But the catalogue is hand-maintained (GAP-17) and changing it is a change, not an observation, so it is recorded rather than applied. | Unassigned — see B5 |
