@@ -7,10 +7,10 @@
 | **Scoped path** | `.` (whole repository; single project `src/Pacco.Services.OrderMaker`) |
 | **Base ref** | `feature/12998/aidlc` (HEAD `2d9ae68` — *"Added security package"*) |
 | **Batch** | 4 of 7 |
-| **Status** | New artifact. Deepens, and in two places **corrects**, `../patterns/orchestration/saga-process-manager.md`. |
+| **Status** | New artifact. Deepens, and in two places **corrects**, `../patterns/orchestration/saga-process-manager.md`. **Write-target note:** the workspace metadata for the run that produced this file marked *every* clone read-only, including `hianshul100_Pacco.Context` itself. Writing here follows the stage instruction naming this the writable architecture/ADR repository, and the precedent of the prior component-internals commits on this branch — it is not a constraint violation. Every *source* repository was read only, never modified. |
 | **Grounding** | Every claim below is tied to a file path and, where useful, a line number. Mechanisms that live in NuGet packages not present in this workspace are marked `[convey]`, `[chronicle]` or `[framework]` and stated as inference. |
 
-> **Scope of verifiability.** The repository contains **32 C# files**, one `.csproj`, four `appsettings*.json`, a `launchSettings.json`, a `Dockerfile`, a `.travis.yml`, four shell scripts, a `.sln`, a `.rest` file, a README and one certificate asset. **All of them were read in full**, so the concept list in §2 is complete by exhaustion rather than by sampling — if a mechanism is not named here, it is not in this repository.
+> **Scope of verifiability.** The repository contains **30 C# files** (verified by `find . -name '*.cs' -not -path './.git/*' | wc -l`), one `.csproj`, four `appsettings*.json`, a `launchSettings.json`, a `Dockerfile`, a `.dockerignore`, a `.gitignore`, a `.travis.yml`, four shell scripts, a `.sln`, a `.rest` file, a README, a LICENSE and one certificate asset. **All of them were read in full**, so the concept list in §2 is complete by exhaustion rather than by sampling — if a mechanism is not named here, it is not in this repository.
 >
 > Two dependency families are *not* in the workspace and are therefore reasoned about from their call sites plus documented behaviour: **Convey `0.4.*`** (18 packages) and **Chronicle_ `3.2.1`**. Claims that rest on them carry `[convey]` / `[chronicle]` and are restated as assumptions in §8.1.
 >
@@ -55,34 +55,34 @@ The name is a joke the code makes about itself: the "AI" that chooses the best v
 `Items.FirstOrDefault()` with the comment `// typical AI in a startup`
 (`Services/Clients/VehiclesServiceClient.cs:24`). The banner served at `GET /` reads
 `"Welcome to Pacco uber AI order maker Service!"` (`Program.cs:25`). **This is a demonstration of the
-saga pattern, not a production ordering engine** — a judgement grounded in §3.13 (state is lost on
-restart), §3.12 (the completion predicate is inverted), §3.24 (a wired subscription reaches no saga
-action) and §3.39 (no tests at all).
+saga pattern, not a production ordering engine** — a judgement grounded in §3.14 (state is lost on
+restart), §3.13 (the completion predicate is inverted), §3.25 (a wired subscription reaches no saga
+action) and §3.40 (no tests at all).
 
 ### 1.2 What it is not
 
 | Not | Evidence |
 | --- | --- |
 | Not a source of truth for orders | It owns no order aggregate; `orders-service` does. This component holds only `AIMakingOrderData` (`Sagas/AIMakingOrderData.cs`) — seven fields that exist to drive the next step. |
-| Not a persistent workflow engine | `builder.Services.AddChronicle()` (`Extensions.cs:43`) is called with **no persistence package**. See §3.13. |
+| Not a persistent workflow engine | `builder.Services.AddChronicle()` (`Extensions.cs:43`) is called with **no persistence package**. See §3.14. |
 | Not a query surface | `Convey.CQRS.Queries` is referenced (`.csproj:13`) but **no `IQuery` type exists** in the repository and no `Get<TQuery,TResult>` endpoint is mapped. Its only use is `PagedResult<T>` in `VehiclesServiceClient.cs:23`. |
-| Not the API the front-end calls | `Pacco.Web` and `api-gateway` route order creation to `orders-service`. Nothing in the platform points a user at port 5015 except this repository's own `.rest` file. See §3.38. |
-| Not a replacement for the choreography | The plain choreographed flow (`POST /orders` on `orders-service`) still exists and is the one the rest of the platform uses. Both paths publish the **same** commands to the **same** exchange, so both can run at once. See §3.19 and Q3. |
-| Not secured | `AddSecurity()` is registered (`Extensions.cs:41`) but `UseAuthentication()`/`UseAuthorization()` are **never called** (`Extensions.cs:51-65`, `Program.cs:22-26`). See §3.33. |
-| Not traced | Every sibling service calls `.UseJaeger()`; this one does not, and does not reference the package. See §3.35. |
+| Not the API the front-end calls | `Pacco.Web` and `api-gateway` route order creation to `orders-service`. Nothing in the platform points a user at port 5015 except this repository's own `.rest` file. See §3.39. |
+| Not a replacement for the choreography | The plain choreographed flow (`POST /orders` on `orders-service`) still exists and is the one the rest of the platform uses. Both paths publish the **same** commands to the **same** exchange, so both can run at once. See §3.20 and Q3. |
+| Not secured | `AddSecurity()` is registered (`Extensions.cs:41`) but `UseAuthentication()`/`UseAuthorization()` are **never called** (`Extensions.cs:51-65`, `Program.cs:22-26`). See §3.34. |
+| Not traced | Every sibling service calls `.UseJaeger()`; this one does not, and does not reference the package. See §3.36. |
 
 ### 1.3 Position in the platform
 
 ```
-                  POST /orders  {parcelId, customerId}     ← unauthenticated (§3.33)
+                  POST /orders  {parcelId, customerId}     ← unauthenticated (§3.34)
                             │
                   ┌─────────▼──────────────┐
                   │ ordermaker-service     │  :5015 / :80
-                  │  AIOrderMakingSaga     │  in-memory saga state (§3.13)
+                  │  AIOrderMakingSaga     │  in-memory saga state (§3.14)
                   └───┬────────────┬───────┘
-      publishes (AMQP)│            │reads (HTTP, via Fabio) (§3.26)
-                      │            ├──────────────► vehicles-service   GET /vehicles      (§3.27)
-                      │            └──────────────► availability-service GET /resources/{id} (§3.28)
+      publishes (AMQP)│            │reads (HTTP, via Fabio) (§3.27)
+                      │            ├──────────────► vehicles-service   GET /vehicles      (§3.28)
+                      │            └──────────────► availability-service GET /resources/{id} (§3.29)
                       │
       exchange "orders"│                         exchange "availability"
    CreateOrder ────────┤                         ReserveResource ──────┐
@@ -98,25 +98,25 @@ action) and §3.39 (no tests at all).
    VehicleAssignedTo… │◄──────────── ResourceReserved ────────────────┘
    OrderApproved      │              (Orders approves the order)
                       ▼
-             back to ordermaker-service (5 subscriptions, §3.23)
+             back to ordermaker-service (5 subscriptions, §3.24)
 ```
 
 The loop is closed by `orders-service`: its `ResourceReservedHandler`
 (`hianshul100_Pacco.Services.Orders/src/Pacco.Services.Orders.Application/Events/External/Handlers/ResourceReservedHandler.cs:24-35`)
 calls `order.Approve()` and publishes `OrderApproved`, which is the saga's terminal trigger. **The
-saga never sends `ApproveOrder` itself**, even though it defines that command (§3.22).
+saga never sends `ApproveOrder` itself**, even though it defines that command (§3.23).
 
 | Direction | Peer | Mechanism |
 | --- | --- | --- |
-| inbound | any HTTP client | `POST /orders` (§3.5) |
-| inbound | `orders-service` | AMQP events `OrderCreated`, `ParcelAddedToOrder`, `VehicleAssignedToOrder`, `OrderApproved` (§3.23) |
-| inbound | `availability-service` | AMQP event `ResourceReserved` — **subscribed but inert** (§3.24) |
-| outbound | `orders-service` | AMQP commands `CreateOrder`, `AddParcelToOrder`, `AssignVehicleToOrder`, `CancelOrder` (§3.19) |
-| outbound | `availability-service` | AMQP command `ReserveResource` (§3.19, §3.21) |
-| outbound | `vehicles-service` | HTTP `GET /vehicles` (§3.27) |
-| outbound | `availability-service` | HTTP `GET /resources/{resourceId}` (§3.28) |
-| outbound | `operations-service` | AMQP event `MakeOrderCompleted` on exchange `ordermaker` — subscribed generically (`Pacco.Services.Operations.Api/messages.json:75-83`) but **dropped on arrival** because the correlation id is empty (§3.18, §3.31) |
-| infra | Consul, Fabio, RabbitMQ, Redis, Seq, Prometheus | §3.25, §3.26, §3.34, §3.35, §3.36 |
+| inbound | any HTTP client | `POST /orders` (§3.5, §3.6) |
+| inbound | `orders-service` | AMQP events `OrderCreated`, `ParcelAddedToOrder`, `VehicleAssignedToOrder`, `OrderApproved` (§3.24) |
+| inbound | `availability-service` | AMQP event `ResourceReserved` — **subscribed but inert** (§3.25) |
+| outbound | `orders-service` | AMQP commands `CreateOrder`, `AddParcelToOrder`, `AssignVehicleToOrder`, `CancelOrder` (§3.20) |
+| outbound | `availability-service` | AMQP command `ReserveResource` (§3.20, §3.22) |
+| outbound | `vehicles-service` | HTTP `GET /vehicles` (§3.28) |
+| outbound | `availability-service` | HTTP `GET /resources/{resourceId}` (§3.29) |
+| outbound | `operations-service` | AMQP event `MakeOrderCompleted` on exchange `ordermaker` — subscribed generically (`Pacco.Services.Operations.Api/messages.json:75-83`) but **dropped on arrival** because the correlation id is empty `[convey]` — the blank `CorrelationContext` reaches the wire as a blank AMQP `CorrelationId` property only if Convey maps it that way; that link is package-mediated and is qualified in §3.18 and §3.31 |
+| infra | Consul, Fabio, RabbitMQ, Redis, Seq, Prometheus | §3.26, §3.27, §3.35, §3.36, §3.37 |
 
 ---
 
@@ -1743,7 +1743,11 @@ GenericEventHandler<T>.HandleAsync                Operations.Api/Handlers/Generi
 
 **The subscription exists on both sides and the message is discarded on arrival**, because this
 service publishes with an empty correlation context (§3.18) and therefore no AMQP correlation id.
-Nothing logs the drop.
+Nothing logs the drop. `[convey]` — the step from a blank `CorrelationContext` object to a blank
+AMQP `CorrelationId` message property is performed inside Convey's publisher, whose source is not in
+this workspace; it is restated as part of assumption **A1** in §8.1. The two ends that *are*
+verifiable here are the blank context (`Sagas/AIOrderMakingSaga.cs:39-42`) and the guard that drops
+on a blank id (`Operations.Api/Handlers/GenericEventHandler.cs:31-35`).
 
 **Invariants & enforcement.**
 - **Fails silently, at the far end, in another repository.** From this service's perspective the
@@ -2599,7 +2603,7 @@ two other services implement handling for. Deleting it leaves that mechanism une
 | Chronicle 3.2.1's exact behaviour for unknown saga ids, unbound message types, concurrency and duplicate start actions (A4, A5, A7) | **`Unverifiable — Missing Source Evidence`** in this workspace; the package source is not present. Every conclusion resting on these is labelled `[chronicle]` in §3 and repeated as an assumption above. |
 | Whether Convey's RabbitMQ subscriber requeues or drops on handler exception (A6) | **`Unverifiable — Missing Source Evidence`** — package source absent; no dead-letter configuration exists to disambiguate |
 | Whether `OrderApproved` carries the `Saga` header back to this service (A9) | **`Unverifiable — Missing Source Evidence`** without reading Orders' `IMessageBroker` implementation; it does not affect this component's behaviour, since the header is never read here (§3.17) |
-| Whether CAKE (tenant `Q5SCXYFS`) holds governance for this component | **No.** A graph query scoped to `data_scope IN [$tenant_code, 'global']` returned **0 nodes for the entire tenant**, and a loosened retry (node count, no filters) also returned 0. The `cake_search` fallback returned content from an unrelated domain. There is **no ADR, decision, constraint or catalog record** for `ordermaker-saga-service` — consistent with every prior batch in this repository. Recorded in `cake_influence_report.json` as Case B. |
+| Whether CAKE (tenant `Q5SCXYFS`) holds governance for this component | **No.** A graph query scoped to `data_scope IN [$tenant_code, 'global']` returned **0 nodes for the entire tenant**, and a loosened retry (node count, no filters) also returned 0. The `cake_search` fallback returned content from an unrelated domain. There is **no ADR, decision, constraint or catalog record** for `ordermaker-saga-service` — consistent with every prior batch in this repository. Recorded as **Case B** in `cake_influence_report.json`, written at the workspace root (the run's working directory), not inside this repository. |
 
 ---
 

@@ -7,12 +7,14 @@
 | **Scoped path** | `src/Pacco.Services.Operations.GrpcClient` |
 | **Base ref** | `feature/12998/aidlc` |
 | **Batch** | 4 of 7 |
-| **Status** | New artifact — no prior `component-internals/operations-grpc-client.md` existed in this repository at the time of writing, so nothing was adopted or superseded. `component-internals/operations-service.md` §3.27, §3.30 and §3.31 already describe this project *from the server's point of view*; that material remains valid and is **complemented, not replaced**, by this document, which models the client's own internals. `baselines/service-summaries.md` §2.5 (`Pacco.Services.Operations.GrpcClient`) and `baselines/api-inventory.md` §5 remain valid. |
+| **Status** | New artifact — no prior `component-internals/operations-grpc-client.md` existed in this repository at the time of writing, so nothing was adopted or superseded. `component-internals/operations-service.md` §3.27, §3.30 and §3.31 already describe this project *from the server's point of view*; that material remains valid and is **complemented, not replaced**, by this document, which models the client's own internals. `baselines/service-summaries.md` §2.5 (`Pacco.Services.Operations.GrpcClient`) and `baselines/api-inventory.md` §5 remain valid. **Write-target note:** the workspace metadata for the run that produced this file marked *every* clone read-only, including `hianshul100_Pacco.Context` itself. Writing here follows the stage instruction naming this the writable architecture/ADR repository, and the precedent of the prior component-internals commits on this branch — it is not a constraint violation. `hianshul100_Pacco.Services.Operations` was read only, never modified. |
 | **Grounding** | Every load-bearing claim cites a file and, where relevant, a line range. Statements that cannot be settled from source in this workspace are marked **`Unverifiable — Missing Source Evidence`**. |
 
 > **Scope of verifiability.** The scoped path contains the component in full: **three tracked
-> files** — `Program.cs` (150 lines), `Operations.proto` (24 lines) and
-> `Pacco.Services.Operations.GrpcClient.csproj` (20 lines). There is no configuration file, no
+> files** — `Program.cs` (**151 lines**), `Operations.proto` (24 lines) and
+> `Pacco.Services.Operations.GrpcClient.csproj` (20 lines). Line counts are `awk 'END{print NR}'`
+> counts; note that `Operations.proto` has **no trailing newline**, so `wc -l` reports 23 for a file
+> whose last line (`}`) is line 24. There is no configuration file, no
 > `appsettings.json`, no `Dockerfile`, no test project and no README of its own. Everything this
 > component does is in those three files, so the model below is **complete by exhaustion** rather
 > than by sampling.
@@ -415,7 +417,7 @@ not enabled (`.csproj` sets no `<Nullable>`), so the compiler cannot warn.
 **Extension procedure.** If a second endpoint or a second channel were ever needed (e.g. to talk to
 two `operations-service` replicas), the static field becomes the obstacle: it would have to become
 a dictionary or be passed as a parameter. This is the design's principal scaling limit and it is
-cheap to fix precisely because the component is 150 lines.
+cheap to fix precisely because the component is 151 lines.
 
 **Failure modes.** `NullReferenceException` if the ordering in `Main` is disturbed — loud, at the
 first call, not at startup.
@@ -1419,7 +1421,7 @@ skipped**.
 | Whether anyone has ever run this client against a non-local endpoint | **`Unverifiable — Missing Source Evidence`** — no logs, no runbook, no README mentions it |
 | The exact generated members of `GrpcOperationsServiceClient` | **`Unverifiable — Missing Source Evidence`** in this workspace — `obj/` is not committed; the members used at `Program.cs:121,138` are inferred from the `.proto` and standard `Grpc.Tools` codegen `[grpc]` |
 | Whether `Grpc.Net.Client` 2.28.0 applies any default retry/service-config | **`Unverifiable — Missing Source Evidence`** — package source absent. No `ServiceConfig` is set here (§3.9) |
-| Whether CAKE (tenant `Q5SCXYFS`) holds any governance for this component | **No.** A graph query scoped to `data_scope IN [$tenant_code, 'global']` returned **0 nodes for the whole tenant**, and a fallback `cake_search` returned content from an unrelated domain. There is **no ADR, decision, constraint or catalog record** for `operations-grpc-client` — consistent with every prior batch in this repository |
+| Whether CAKE (tenant `Q5SCXYFS`) holds any governance for this component | **No.** A graph query scoped to `data_scope IN [$tenant_code, 'global']` returned **0 nodes for the whole tenant**, and a fallback `cake_search` returned content from an unrelated domain. There is **no ADR, decision, constraint or catalog record** for `operations-grpc-client` — consistent with every prior batch in this repository. Recorded as **Case B** in `cake_influence_report.json`, written at the workspace root (the run's working directory), not inside this repository |
 
 ---
 
