@@ -20,6 +20,20 @@
 
 ---
 
+## Contents
+
+1. [Purpose & boundary](#1-purpose--boundary)
+2. [Core concepts (exhaustive)](#2-core-concepts-exhaustive)
+3. [Per concept](#3-per-concept)
+4. [Primary control flows](#4-primary-control-flows)
+5. [Persistence & schema evolution](#5-persistence--schema-evolution)
+6. [Surface → internals map](#6-surface--internals-map)
+7. [Change/extension guide](#7-changeextension-guide)
+8. [Assumptions, Blockers & Open Questions (ABQ)](#8-assumptions-blockers--open-questions-abq)
+9. [Cross-references](#9-cross-references)
+
+---
+
 ## 1. Purpose & boundary
 
 ### 1.1 What this component is responsible for
