@@ -39,8 +39,10 @@ document; **ABQ** counts assumptions + blockers, and **Open Qs** counts the open
 | 6 | `operations-service` | [operations-service.md](operations-service.md) | `hianshul100_Pacco.Services.Operations` | `src/Pacco.Services.Operations.Api` | 3 of 7 | 45 | 23 | 9 |
 | 7 | `operations-grpc-client` | [operations-grpc-client.md](operations-grpc-client.md) | `hianshul100_Pacco.Services.Operations` | `src/Pacco.Services.Operations.GrpcClient` | 4 of 7 | 25 | 7 | 5 |
 | 8 | `ordermaker-saga-service` | [ordermaker-saga-service.md](ordermaker-saga-service.md) | `hianshul100_Pacco.Services.OrderMaker` | `.` (single project `src/Pacco.Services.OrderMaker`) | 4 of 7 | 40 | 15 | 8 |
+| 9 | `orders-service` | [orders-service.md](orders-service.md) | `hianshul100_Pacco.Services.Orders` | `.` | 5 of 7 | 46 | 14 | 10 |
+| 10 | `parcels-service` | [parcels-service.md](parcels-service.md) | `hianshul100_Pacco.Services.Parcels` | `.` | 5 of 7 | 40 | 16 | 8 |
 
-All eight were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
+All ten were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
 read-only and was never modified; the only writable repository in the discovery workspace is
 `hianshul100_Pacco.Context`, which holds this inventory.
 
@@ -53,10 +55,10 @@ they are compiled into, and modelled under, their owning host.
 
 | State | Count | Entries |
 |---|---|---|
-| **Modelled** | **8 / 14** | the eight rows in §1 (batches 1–4) |
-| **Not yet modelled** | **6 / 14** | `orders-service`, `parcels-service`, `pricing-service`, `vehicles-service`, `Pacco` (platform/environment repository, no deployable of its own), `Pacco.Web` (empty clone — README only) |
+| **Modelled** | **10 / 14** | the ten rows in §1 (batches 1–5) |
+| **Not yet modelled** | **4 / 14** | `pricing-service`, `vehicles-service`, `Pacco` (platform/environment repository, no deployable of its own), `Pacco.Web` (empty clone — README only) |
 
-Batches run two components each, so batches **5, 6 and 7** cover the six remaining entries. Until
+Batches run two components each, so batches **6 and 7** cover the four remaining entries. Until
 those land, an absence from §1 means *not yet modelled* — it does not mean the component was judged
 out of scope. The two entries that will not resolve into a conventional service model are called out
 in advance:
@@ -89,7 +91,7 @@ Two variations are in use and both are accepted:
   (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
   what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
   `Baseline reconciliation`). New models should prefer the `§8.4` form.
-- **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in seven models and
+- **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
   `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
   is identical.
 
@@ -105,7 +107,9 @@ Other conventions that hold across the folder:
   `service-summaries.md` G14/Q11), so the same question is not counted twice across artifacts.
 - A **maintenance contract** — a change to the component's internals must update its model in the
   same change — closes `customers-service.md`, `deliveries-service.md`,
-  `operations-grpc-client.md` and `ordermaker-saga-service.md`. It applies to every model in this
+  `operations-grpc-client.md`, `ordermaker-saga-service.md`, `orders-service.md` and
+  `parcels-service.md`; the last two state it as an explicit `§7.9` with a per-area table. It applies
+  to every model in this
   folder regardless of whether the individual document restates it; new models should state it
   explicitly.
 
@@ -116,6 +120,8 @@ Other conventions that hold across the folder:
 | `ordermaker-saga-service` vs `ordermaker-service` | The model is filed under `ordermaker-saga-service`, describing its role. The deployable name in `Pacco/compose/services.yml` is **`ordermaker-service`** (port `5015`), and it is absent from both PM2 manifests and from all four `ntrada*.yml` — see `service-summaries.md` §7.2 and gap **G2**. |
 | `operations-grpc-client` is not a deployable | `Pacco.Services.Operations.GrpcClient` appears in no compose file and no PM2 manifest. It is modelled as a component, not as a service (`service-summaries.md` §7.2). |
 | Two models, one repository | `operations-service.md` and `operations-grpc-client.md` both scope into `hianshul100_Pacco.Services.Operations`, at `src/…Operations.Api` and `src/…Operations.GrpcClient` respectively. They model the two halves of the same gRPC contract and cite each other rather than re-deriving it. |
+| The `orders` ↔ `parcels` PACT pair is disabled on both sides | The consumer test in `hianshul100_Pacco.Services.Orders` and the provider test in `hianshul100_Pacco.Services.Parcels` are each excluded from their own `.sln`, and the shared file-based `pacts` directory both point at exists in neither repository. The contract is verified by nobody — see `orders-service.md` §3.45 and `parcels-service.md` §3.38. Reviving one end alone is worse than reviving neither. |
+| `parcel_deleted` is published and consumed on different exchanges | `parcels-service` publishes it on exchange `parcels`; `orders-service` declares its matching external event as `[Message("deliveries")]`. The binding never matches, so the handler has never run (`orders-service.md` §3.33, `parcels-service.md` §3.19). Recorded here because it is invisible from either model alone. |
 | `pricing-service` is not a bounded context | When it is modelled in a later batch, expect no write model, no exchange and no Mongo database — `service-summaries.md` §3 records zero `rabbitMq` occurrences in its `appsettings.json`. |
 
 ## 5. How this folder relates to the rest of the inventory
