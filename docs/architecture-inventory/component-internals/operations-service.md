@@ -2132,7 +2132,7 @@ purpose.
 ```json
 "jwt": {
   "certificate": { "location": "certs/localhost.cer" },
-  "issuerSigningKey": "eiquief5phee9pazo0Faegaez9gohThailiur5woy2befiech1oarai4aiLi6ahVecah3ie9Aiz6Peij",
+  "issuerSigningKey": "<REDACTED — 80-character symmetric key, committed in plaintext at `appsettings.json:36`>",
   "expiryMinutes": 60,
   "issuer": "pacco",
   "validateAudience": false,
