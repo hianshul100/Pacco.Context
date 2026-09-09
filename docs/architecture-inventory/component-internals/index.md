@@ -41,8 +41,10 @@ document; **ABQ** counts assumptions + blockers, and **Open Qs** counts the open
 | 8 | `ordermaker-saga-service` | [ordermaker-saga-service.md](ordermaker-saga-service.md) | `hianshul100_Pacco.Services.OrderMaker` | `.` (single project `src/Pacco.Services.OrderMaker`) | 4 of 7 | 40 | 15 | 8 |
 | 9 | `orders-service` | [orders-service.md](orders-service.md) | `hianshul100_Pacco.Services.Orders` | `.` | 5 of 7 | 46 | 14 | 10 |
 | 10 | `parcels-service` | [parcels-service.md](parcels-service.md) | `hianshul100_Pacco.Services.Parcels` | `.` | 5 of 7 | 40 | 16 | 8 |
+| 11 | `pricing-service` | [pricing-service.md](pricing-service.md) | `hianshul100_Pacco.Services.Pricing` | `.` | 6 of 7 | 36 | 12 | 8 |
+| 12 | `vehicles-service` | [vehicles-service.md](vehicles-service.md) | `hianshul100_Pacco.Services.Vehicles` | `.` | 6 of 7 | 47 | 12 | 9 |
 
-All ten were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
+All twelve were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
 read-only and was never modified; the only writable repository in the discovery workspace is
 `hianshul100_Pacco.Context`, which holds this inventory.
 
@@ -55,19 +57,19 @@ they are compiled into, and modelled under, their owning host.
 
 | State | Count | Entries |
 |---|---|---|
-| **Modelled** | **10 / 14** | the ten rows in §1 (batches 1–5) |
-| **Not yet modelled** | **4 / 14** | `pricing-service`, `vehicles-service`, `Pacco` (platform/environment repository, no deployable of its own), `Pacco.Web` (empty clone — README only) |
+| **Modelled** | **12 / 14** | the twelve rows in §1 (batches 1–6) |
+| **Not yet modelled** | **2 / 14** | `Pacco` (platform/environment repository, no deployable of its own), `Pacco.Web` (empty clone — README only) |
 
-Batches run two components each, so batches **6 and 7** cover the four remaining entries. Until
-those land, an absence from §1 means *not yet modelled* — it does not mean the component was judged
-out of scope. The two entries that will not resolve into a conventional service model are called out
-in advance:
+Batches run two components each, so batch **7** covers the two remaining entries. Until it lands, an
+absence from §1 means *not yet modelled* — it does not mean the component was judged out of scope.
+Neither remaining entry will resolve into a conventional service model, and both were called out in
+advance:
 
-- **`Pacco`** has no `*.csproj` at all (`service-summaries.md` §3). Its model is an environment and
-  composition model, not a code-internals model.
-- **`Pacco.Web`** is a single-line `README.md` at commit `b3bf026` with no `src/`, no `package.json`
-  and no `Dockerfile`. There are no internals to model; whatever is written for it will be
-  **`Unverifiable — Missing Source Evidence`** by construction.
+1. **`Pacco`** has no `*.csproj` at all (`service-summaries.md` §3). Its model is an environment and
+   composition model, not a code-internals model.
+2. **`Pacco.Web`** is a single-line `README.md` at commit `b3bf026` with no `src/`, no `package.json`
+   and no `Dockerfile`. There are no internals to model; whatever is written for it will be
+   **`Unverifiable — Missing Source Evidence`** by construction.
 
 ## 3. Document conventions
 
@@ -87,13 +89,13 @@ document, see the variations below — plus a `Contents` list immediately after 
 
 Two variations are in use and both are accepted:
 
-- **Cross-references** appear as a top-level `## 9. Cross-references` in the batch-1 models
-  (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
-  what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
-  `Baseline reconciliation`). New models should prefer the `§8.4` form.
-- **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
-  `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
-  is identical.
+1. **Cross-references** appear as a top-level `## 9. Cross-references` in the batch-1 models
+   (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
+   what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
+   `Baseline reconciliation`). New models should prefer the `§8.4` form.
+2. **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
+   `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
+   is identical.
 
 Other conventions that hold across the folder:
 
@@ -112,6 +114,11 @@ Other conventions that hold across the folder:
    `parcels-service.md`; the last two state it as an explicit `§7.9` with a per-area table. It
    applies to every model in this folder regardless of whether the individual document restates it;
    new models should state it explicitly.
+5. **Enumerated points are written as numbered lists, not bullet lists**, so a reader and a reviewer
+   can refer to an individual point by its number. This index and the batch-6 models
+   (`pricing-service.md`, `vehicles-service.md`) follow the convention throughout; the models from
+   batches 1–5 still carry bullet lists in places and are to be converted the next time each is
+   revised. Tables remain the preferred form wherever the points share a common set of columns.
 
 ## 4. Naming notes and known discrepancies
 
@@ -122,7 +129,9 @@ Other conventions that hold across the folder:
 | Two models, one repository | `operations-service.md` and `operations-grpc-client.md` both scope into `hianshul100_Pacco.Services.Operations`, at `src/…Operations.Api` and `src/…Operations.GrpcClient` respectively. They model the two halves of the same gRPC contract and cite each other rather than re-deriving it. |
 | The `orders` ↔ `parcels` PACT pair is disabled on both sides | The consumer test in `hianshul100_Pacco.Services.Orders` and the provider test in `hianshul100_Pacco.Services.Parcels` are each excluded from their own `.sln`, and the shared file-based `pacts` directory both point at exists in neither repository. The contract is verified by nobody — see `orders-service.md` §3.45 and `parcels-service.md` §3.38. Reviving one end alone is worse than reviving neither. |
 | `parcel_deleted` is published and consumed on different exchanges | `parcels-service` publishes it on exchange `parcels`; `orders-service` declares its matching external event as `[Message("deliveries")]`. The binding never matches, so the handler has never run (`orders-service.md` §3.33, `parcels-service.md` §3.19). Recorded here because it is invisible from either model alone. |
-| `pricing-service` is not a bounded context | When it is modelled in a later batch, expect no write model, no exchange and no Mongo database — `service-summaries.md` §3 records zero `rabbitMq` occurrences in its `appsettings.json`. |
+| `pricing-service` is not a bounded context | **Confirmed in batch 6.** It has no write model, no exchange, no Mongo database and no persistence of any kind — one query, one HTTP client, one arithmetic service (`pricing-service.md` §3.17). `service-summaries.md` §3 had already recorded zero `rabbitMq` occurrences in its `appsettings.json`. |
+| The `vehicles` variant search cannot match a filtered query | `Vehicle`'s constructor ORs `Variants.Standard` into every vehicle, while `SearchVehiclesHandler` filters on `Variants == query.Variants` exactly. A vehicle created with `variants=2` is stored as `3` and is unfindable by `?variants=2`; searching by capacity alone forces `Variants == 0`, which no vehicle satisfies. Both return HTTP 200 with an empty page (`vehicles-service.md` §3.4, §3.18). Recorded here because the two halves live in different projects and neither is wrong on its own. |
+| Every service maps every failure to HTTP 400 | `ExceptionToResponseMapper` hard-codes `BadRequest` on all arms in each service modelled so far — `vehicles-service.md` §3.26, `pricing-service.md` §3.13, `customers-service.md` §3.18. There is no 404 and no 5xx anywhere in the platform's service surface. Changing it is a coordinated, cross-repository break, which is why it is recorded at the index rather than treated as a per-service defect. |
 
 ## 5. How this folder relates to the rest of the inventory
 
