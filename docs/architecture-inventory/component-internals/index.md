@@ -43,8 +43,9 @@ document; **ABQ** counts assumptions + blockers, and **Open Qs** counts the open
 | 10 | `parcels-service` | [parcels-service.md](parcels-service.md) | `hianshul100_Pacco.Services.Parcels` | `.` | 5 of 7 | 40 | 16 | 8 |
 | 11 | `pricing-service` | [pricing-service.md](pricing-service.md) | `hianshul100_Pacco.Services.Pricing` | `.` | 6 of 7 | 36 | 12 | 8 |
 | 12 | `vehicles-service` | [vehicles-service.md](vehicles-service.md) | `hianshul100_Pacco.Services.Vehicles` | `.` | 6 of 7 | 47 | 12 | 9 |
+| 13 | `platform-infrastructure-orchestration` | [platform-infrastructure-orchestration.md](platform-infrastructure-orchestration.md) | `hianshul100_Pacco` | `.` (no `*.csproj` — composition only) | 7 of 7 | 45 | 17 | 7 |
 
-All twelve were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
+All thirteen were inspected at base ref `feature/12998/aidlc`. Every source repository was cloned
 read-only and was never modified; the only writable repository in the discovery workspace is
 `hianshul100_Pacco.Context`, which holds this inventory.
 
@@ -57,19 +58,24 @@ they are compiled into, and modelled under, their owning host.
 
 | State | Count | Entries |
 |---|---|---|
-| **Modelled** | **12 / 14** | the twelve rows in §1 (batches 1–6) |
-| **Not yet modelled** | **2 / 14** | `Pacco` (platform/environment repository, no deployable of its own), `Pacco.Web` (empty clone — README only) |
+| **Modelled** | **13 / 14** | the thirteen rows in §1 (batches 1–7) |
+| **Not modelled** | **1 / 14** | `Pacco.Web` (empty clone — README only) |
 
-Batches run two components each, so batch **7** covers the two remaining entries. Until it lands, an
-absence from §1 means *not yet modelled* — it does not mean the component was judged out of scope.
-Neither remaining entry will resolve into a conventional service model, and both were called out in
-advance:
+1. **`Pacco`** was modelled in batch 7 as `platform-infrastructure-orchestration` (§1 row 13). It has
+   no `*.csproj` at all (`service-summaries.md` §3), so its model is an environment and composition
+   model rather than a code-internals model: the concepts are compose stacks, PM2 manifests, the
+   shared network, the container-name/DNS contract, image and tagging policy, and the workspace
+   assembly scripts. The component name differs from the repository name because the artifact models
+   a platform capability, not a codebase — see §4.
+2. **`Pacco.Web`** remains unmodelled. Batch 7's authoritative scope was a single component
+   (`platform-infrastructure-orchestration`), so `Pacco.Web` was not in it. The reason it was
+   deferred still holds: it is a single-line `README.md` at commit `b3bf026` with no `src/`, no
+   `package.json` and no `Dockerfile`, so there are no internals to model and any model written for
+   it would be **`Unverifiable — Missing Source Evidence`** by construction. Its surface is already
+   catalogued in `../repo-summary/Pacco.Web.md`. Whether it is in scope for the platform at all is
+   carried as Q-7 in `platform-infrastructure-orchestration.md` §8.3.
 
-1. **`Pacco`** has no `*.csproj` at all (`service-summaries.md` §3). Its model is an environment and
-   composition model, not a code-internals model.
-2. **`Pacco.Web`** is a single-line `README.md` at commit `b3bf026` with no `src/`, no `package.json`
-   and no `Dockerfile`. There are no internals to model; whatever is written for it will be
-   **`Unverifiable — Missing Source Evidence`** by construction.
+An absence from §1 means *not modelled* — it does not mean the component was judged out of scope.
 
 ## 3. Document conventions
 
@@ -93,9 +99,16 @@ Two variations are in use and both are accepted:
    (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
    what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
    `Baseline reconciliation`). New models should prefer the `§8.4` form.
-2. **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
+2. **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in ten models and
    `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
    is identical.
+3. **Sections 5 and 6 in a component with no code.** `platform-infrastructure-orchestration.md` is the
+   only model whose component publishes no route, message or RPC and persists no application data. It
+   keeps both sections and reinterprets them within the same contract: §5 covers the state the
+   component *owns* (network, volumes, container writable layers) and how the declared topology
+   evolves; §6 maps operator and tooling entry points — compose files, PM2 manifests, scripts — to the
+   internals they trigger, and adds a table of the contracts the component asserts on the other twelve
+   repositories. Any future model of a code-free component should follow that shape.
 
 Other conventions that hold across the folder:
 
@@ -131,6 +144,9 @@ Other conventions that hold across the folder:
 | `parcel_deleted` is published and consumed on different exchanges | `parcels-service` publishes it on exchange `parcels`; `orders-service` declares its matching external event as `[Message("deliveries")]`. The binding never matches, so the handler has never run (`orders-service.md` §3.33, `parcels-service.md` §3.19). Recorded here because it is invisible from either model alone. |
 | `pricing-service` is not a bounded context | **Confirmed in batch 6.** It has no write model, no exchange, no Mongo database and no persistence of any kind — one query, one HTTP client, one arithmetic service (`pricing-service.md` §3.17). `service-summaries.md` §3 had already recorded zero `rabbitMq` occurrences in its `appsettings.json`. |
 | The `vehicles` variant search cannot match a filtered query | `Vehicle`'s constructor ORs `Variants.Standard` into every vehicle, while `SearchVehiclesHandler` filters on `Variants == query.Variants` exactly. A vehicle created with `variants=2` is stored as `3` and is unfindable by `?variants=2`; searching by capacity alone forces `Variants == 0`, which no vehicle satisfies. Both return HTTP 200 with an empty page (`vehicles-service.md` §3.4, §3.18). Recorded here because the two halves live in different projects and neither is wrong on its own. |
+| `platform-infrastructure-orchestration` vs repository `Pacco` | The batch-7 model is filed under the capability it describes, not under its repository name, because the repository contains no code and the component it represents is the platform's composition layer. It is the only model in this folder whose name does not derive from a deployable or a project. |
+| `Pacco.APIGateway.Ocelot` is referenced by tooling that nothing else knows about | The retired Ocelot gateway appears in `Pacco.sln` as the 41st project reference and in the repository array of all five `scripts/git-*.sh`/`.ps1` files, but in neither the README clone list nor the discovery scope, and there is no such directory in the workspace. Every workspace-assembly run therefore fails on one repository — silently under `xargs -P 0`. See `platform-infrastructure-orchestration.md` §3.4 and Q-1. |
+| The platform has **seven** compose stacks, not eight | `../repo-summary/Pacco.md` says "8 stack definitions" / "eight compose entry points" at lines 41, 94 and 272. `compose/` holds seven `*.yml` stacks plus three image build contexts (`prometheus/`, `host-prometheus/`, `rabbitmq/`). Corrected with evidence in `platform-infrastructure-orchestration.md` §8.4.3, alongside three other reconciliations against that summary. |
 | Every service maps every failure to HTTP 400 | `ExceptionToResponseMapper` hard-codes `BadRequest` on all arms in each service modelled so far — `vehicles-service.md` §3.26, `pricing-service.md` §3.13, `customers-service.md` §3.18. There is no 404 and no 5xx anywhere in the platform's service surface. Changing it is a coordinated, cross-repository break, which is why it is recorded at the index rather than treated as a per-service defect. |
 
 ## 5. How this folder relates to the rest of the inventory
