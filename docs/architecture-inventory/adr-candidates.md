@@ -55,6 +55,58 @@ reconciled silently.
 | ADR-CANDIDATE-019 | Two internal service structures — layered domain split and single project | Other | medium | 002 | backlog |
 | ADR-CANDIDATE-020 | .NET Core 3.1 as the platform runtime baseline | Other | high | 002 | backlog |
 
+## Generated
+
+Batch 1 of the `adr_generation` stage was written on 2026-09-09 against branch
+`arch-discovery-21758174-49b6-4af2-9774-025561defc90`. It implemented the five candidates named in
+**Recommended First Batch** below, in the order given there. Question Q5 is settled by this batch: the
+generated records use sequential `ADR-NNN` ids that match this backlog's candidate numbering, and file
+names are descriptive kebab-case stems with no numeric prefix.
+
+| # | Candidate | ADR id | File under `docs/adr/` |
+|---|-----------|--------|------------------------|
+| 1 | ADR-CANDIDATE-002 — Convey as the platform standard in place of a shared internal library | `ADR-002` | `convey-toolkit-as-platform-standard.md` |
+| 2 | ADR-CANDIDATE-001 — Event-driven microservices with service-owned topic exchanges | `ADR-001` | `service-owned-topic-exchange-messaging.md` |
+| 3 | ADR-CANDIDATE-008 — Database per service on MongoDB, hand-mapped, with no migration tooling | `ADR-008` | `database-per-service-on-mongodb-hand-mapped.md` |
+| 4 | ADR-CANDIDATE-004 — A declarative configuration-driven gateway as the single north-south edge | `ADR-004` | `declarative-configuration-driven-api-gateway.md` |
+| 5 | ADR-CANDIDATE-006 — Authentication enforced at the edge, with fail-open in-service authorization | `ADR-006` | `edge-enforced-authentication-with-fail-open-authorization.md` |
+
+All five are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
+because no repository has an owner who could approve one.
+
+## Remaining backlog
+
+Fifteen candidates remain, in the order the next batches should take them. Each is written after
+everything it depends on, and every dependency listed here is either already generated above or earlier
+in this list.
+
+**Next batch (batch 2) — the five whose dependencies are all satisfied by batch 1:**
+
+1. ADR-CANDIDATE-003 — Message contracts by naming convention, with duplicated consumer DTOs (needs 001, 002 — both generated)
+2. ADR-CANDIDATE-005 — Dual-mode edge writes selected by configuration rather than by code (needs 001, 004 — both generated)
+3. ADR-CANDIDATE-007 — Split JWT trust root between the gateway and the domain services (needs 006 — generated)
+4. ADR-CANDIDATE-015 — Registry-mediated service discovery and name-based routing (needs 001, 002 — both generated)
+5. ADR-CANDIDATE-012 — Transactional outbox and inbox applied by handler decorator (needs 001, 008 — both generated)
+
+**Batch 3 — unblocked once batch 2 lands:**
+
+1. ADR-CANDIDATE-011 — An orchestrated saga for order creation, and its state durability (needs 003)
+2. ADR-CANDIDATE-013 — Contract-blind universal subscription by runtime type emission (needs 003)
+3. ADR-CANDIDATE-014 — Ephemeral operation status and the real-time client notification channels (needs 005, 013)
+4. ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI (needs 015)
+5. ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration (needs 015)
+
+**Batch 4 — the remainder:**
+
+1. ADR-CANDIDATE-009 — Event-carried customer replicas in place of synchronous customer reads (needs 003, 008)
+2. ADR-CANDIDATE-010 — Narrow synchronous point-reads as the bounded exception to messaging (needs 001, 008)
+3. ADR-CANDIDATE-018 — Repository per service, with independent per-repository release (needs 002, 017)
+4. ADR-CANDIDATE-019 — Two internal service structures — layered domain split and single project (needs 002)
+5. ADR-CANDIDATE-020 — .NET Core 3.1 as the platform runtime baseline (needs 002)
+
+Q4 below still applies to items 1 and 2 of batch 4: write them together, and keep them separate only if
+each can state when the other applies.
+
 ## Candidate Details
 
 ### ADR-CANDIDATE-001: Event-driven microservices with service-owned topic exchanges
@@ -669,4 +721,4 @@ configuration values, and naming conventions are not decisions.
 | Q2 | **[ACTION NOW]** Is a client application planned for this platform? | `Pacco.Web` is an empty repository and no frontend exists anywhere, so no client decision was excluded as an implementation detail — there simply is none to record. If a client is planned, a twenty-first candidate is needed, and the edge decisions (004, 005, 006, 014) all currently assume a machine caller rather than a browser | If a client is planned, add the candidate before any client code is written, and derive its assumptions from ADR-CANDIDATE-005 and ADR-CANDIDATE-014, since both change what a caller has to handle | Platform owner |
 | Q3 | **[ACTION NOW]** Is the certificate check on `customers-service` actually enforced at runtime? | `pricing-service` calls it over HTTP and is not on its access list. Either the call is failing and nobody has noticed, or the enforcement is not really active — and ADR-CANDIDATE-016 says something different in each case | Call `customers-service` from `pricing-service` in a running environment without a certificate and observe the response before writing the ADR | Platform security owner |
 | Q4 | **[handled later by adr_generation]** Should candidates 009 and 010 be written as two records or merged into one "cross-service data access" record? | They are two answers to the same question and the platform uses both for the same customer data. Two records risk contradicting each other; one record risks burying the trade-off that distinguishes them | Keep them separate, and have each state explicitly when the other applies. Merge only if the first draft of one cannot be written without restating the other | `adr_generation` stage |
-| Q5 | **[handled later by adr_generation]** What id scheme should the generated ADRs use, and how should this backlog's `ADR-CANDIDATE-NNN` ids map onto it? | No ADR ids exist anywhere in scope, so there is no prefix to preserve and no collision to avoid. Downstream artifacts and the pattern catalog's empty **Related ADRs** columns will cite whatever is chosen, so the mapping has to be recorded once rather than inferred per file | Use sequential `ADR-001`…`ADR-020` matching this backlog's numbering, and record the mapping in the generated index so a reader can trace any ADR back to its candidate | `adr_generation` stage |
+| Q5 | **RESOLVED 2026-09-09 by `adr_generation` batch 1.** What id scheme should the generated ADRs use, and how should this backlog's `ADR-CANDIDATE-NNN` ids map onto it? | No ADR ids exist anywhere in scope, so there is no prefix to preserve and no collision to avoid. Downstream artifacts and the pattern catalog's empty **Related ADRs** columns will cite whatever is chosen, so the mapping has to be recorded once rather than inferred per file | Answered as proposed: sequential `ADR-NNN` ids matching this backlog's candidate numbering, carried in each ADR's metadata table, with descriptive kebab-case file names and no numeric prefix. The mapping is recorded in **Generated** above and extends there as later batches land | `adr_generation` stage |
