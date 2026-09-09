@@ -97,21 +97,21 @@ Two variations are in use and both are accepted:
 
 Other conventions that hold across the folder:
 
-- Pattern cross-references use `[[pattern-file-name]]`, matching `../patterns/`.
-- Committed credential material is cited **by path only**, adopting the rule already stated in
-  `../patterns/index.md`. Real secret values are not reproduced here: the one place that did — the
-  80-character symmetric `issuerSigningKey` quoted in `operations-service.md` §3.38 — is redacted to
-  its citation. Placeholder literals such as `vault.token: "secret"` and `logger.seq.apiKey:
-  "secret"` are quoted verbatim, because the fact that they are unchanged defaults *is* the evidence.
-- Open questions that restate a baseline gap name the baseline item they restate (e.g.
-  `service-summaries.md` G14/Q11), so the same question is not counted twice across artifacts.
-- A **maintenance contract** — a change to the component's internals must update its model in the
-  same change — closes `customers-service.md`, `deliveries-service.md`,
-  `operations-grpc-client.md`, `ordermaker-saga-service.md`, `orders-service.md` and
-  `parcels-service.md`; the last two state it as an explicit `§7.9` with a per-area table. It applies
-  to every model in this
-  folder regardless of whether the individual document restates it; new models should state it
-  explicitly.
+1. Pattern cross-references use `[[pattern-file-name]]`, matching `../patterns/`.
+2. Committed credential material is cited **by path only**, adopting the rule already stated in
+   `../patterns/index.md`. Real secret values are not reproduced here: the one place that did — the
+   80-character symmetric `issuerSigningKey` quoted in `operations-service.md` §3.38 — is redacted
+   to its citation. Placeholder literals such as `vault.token: "secret"` and
+   `logger.seq.apiKey: "secret"` are quoted verbatim, because the fact that they are unchanged
+   defaults *is* the evidence.
+3. Open questions that restate a baseline gap name the baseline item they restate (e.g.
+   `service-summaries.md` G14/Q11), so the same question is not counted twice across artifacts.
+4. A **maintenance contract** — a change to the component's internals must update its model in the
+   same change — closes `customers-service.md`, `deliveries-service.md`,
+   `operations-grpc-client.md`, `ordermaker-saga-service.md`, `orders-service.md` and
+   `parcels-service.md`; the last two state it as an explicit `§7.9` with a per-area table. It
+   applies to every model in this folder regardless of whether the individual document restates it;
+   new models should state it explicitly.
 
 ## 4. Naming notes and known discrepancies
 
