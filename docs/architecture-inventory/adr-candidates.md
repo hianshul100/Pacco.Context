@@ -10,9 +10,10 @@
 ## Scope and adoption of existing artifacts
 
 > This section describes the position when this backlog was written, before any ADR was generated.
-> As of 2026-09-09 the fifteen records listed under **Generated** below exist under `docs/adr/` in this
-> repository. Nothing outside it has changed: the thirteen service clones still hold no ADR, decision
-> record or RFC, and the governance catalog still holds no decision node for this platform.
+> As of 2026-09-09 all **twenty** records listed under **Generated** below exist under `docs/adr/` in
+> this repository — the backlog is fully generated. Nothing outside it has changed: the thirteen
+> service clones still hold no ADR, decision record or RFC, and the governance catalog still holds no
+> decision node for this platform.
 
 No Architecture Decision Record existed anywhere in scope, so **every candidate below is a new
 decision record, not a re-proposal of a settled one**. Two independent checks establish this:
@@ -99,7 +100,19 @@ all four of the named hand-offs that batch 2 left for it.
 | 14 | ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI | `ADR-016` | `vault-dynamic-database-credentials-and-service-pki.md` |
 | 15 | ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration | `ADR-017` | `compose-and-process-manager-deployment.md` |
 
-All fifteen are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
+Batch 4 was written on 2026-09-09 against the same branch. It implemented the five candidates listed as
+**Batch 4 — the remainder** in the previous revision of this file, in the order given there, and closes
+the backlog.
+
+| # | Candidate | ADR id | File under `docs/adr/` |
+|---|-----------|--------|------------------------|
+| 16 | ADR-CANDIDATE-009 — Event-carried customer replicas in place of synchronous customer reads | `ADR-009` | `event-carried-customer-replica-and-reconciliation.md` |
+| 17 | ADR-CANDIDATE-010 — Narrow synchronous point-reads as the bounded exception to messaging | `ADR-010` | `narrow-synchronous-point-reads-between-services.md` |
+| 18 | ADR-CANDIDATE-018 — Repository per service, with independent per-repository release | `ADR-018` | `repository-per-service-independent-release.md` |
+| 19 | ADR-CANDIDATE-019 — Two internal service structures — layered domain split and single project | `ADR-019` | `service-internal-structure-layered-or-single-project.md` |
+| 20 | ADR-CANDIDATE-020 — .NET Core 3.1 as the platform runtime baseline | `ADR-020` | `dotnet-core-31-as-platform-runtime-baseline.md` |
+
+All twenty are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
 because no repository has an owner who could approve one.
 
 Two things batch 2 settled, both by following the code rather than this backlog:
@@ -144,21 +157,54 @@ than trusting this backlog:
    patterns it instantiates, constrains or diverges from, and proposes the pattern updates its evidence
    supports — including the **Related ADRs** entries, which remain `None` in the catalog itself.
 
+## What batch 4 settled
+
+Batch 4 answered both hand-offs it inherited and corrected five statements in this backlog by reading
+source rather than trusting the summaries recorded here:
+
+1. **Q4 is resolved as proposed.** Candidates 009 and 010 are two records, not one. Each states when
+   the other applies: `ADR-009` §2 names the synchronous read as the answer whenever the caller needs
+   a customer's attributes rather than only their existence, and `ADR-010` §2 names the replica as the
+   answer whenever an existence check is all that is required. Neither draft needed to restate the
+   other, which was the merge condition Q4 set.
+2. **Q1's shape was followed again.** All five records describe the current state, state in their
+   Decision section what they do and do not ratify, and name what must change — `ADR-020` is written
+   explicitly to be superseded.
+3. **The replicas hold no customer data.** The `Customer` records in `orders-service` and
+   `parcels-service` carry an id and nothing else, so they are existence registries rather than data
+   copies. `availability-service`'s handler is a deliberate no-op and `deliveries-service` has no
+   external-event directory at all. This contradicts both this file's candidate 009 description and
+   the pattern catalog's service list, and the conflict is stated in `ADR-009` §6.1.
+4. **A locked or suspicious customer still passes both gates.** Because the replicas store only ids,
+   the `customer_became_vip` and `customer_state_changed` events have no consumer anywhere, and the
+   owning aggregate's state is invisible to the services that gate on it. This is recorded as
+   `ADR-009`'s sharpest consequence and is a live correctness finding, not a design preference.
+5. **There are seven synchronous edges, not eight, and two of them are not point-reads.** One is a
+   price computation and one reads an unbounded vehicle collection and takes the first item.
+   `ADR-010` admits the computation as a second permitted shape and forbids the collection read.
+6. **The eleven pipelines are not identical.** `availability-service` is the one repository whose
+   pipeline never runs its tests, and it holds the platform's five richest test projects. `ADR-018`
+   records this, and `ADR-020` §4.3 notes it makes the runtime migration materially riskier.
+7. **The aggregate solution cannot load.** It references a gateway project in a repository that does
+   not exist in the workspace. Recorded in `ADR-018` §6.1.
+8. **There are three internal service structures, not two.** Seven layered services, three
+   single-project deployables, and `operations-service` as a two-project outlier that this backlog and
+   the architecture baseline both counted among the layered set. `ADR-019` keeps the candidate's title
+   but corrects the count in its Context and §6.1.
+9. **Pattern Drift is not reportable for any record in this batch**, because every entry in
+   `patterns/index.md` still carries status `Candidate`. Each record instead names the patterns it
+   instantiates, constrains or diverges from, and proposes the pattern updates its evidence supports.
+
 ## Remaining backlog
 
-Five candidates remain. Each is written after everything it depends on, and every dependency listed here
-is already generated above.
+**None.** All twenty candidates have been generated; see **Generated** above for the full
+candidate-to-ADR mapping. Two kinds of work remain, and neither is a candidate in this backlog:
 
-**Batch 4 — the remainder:**
-
-1. ADR-CANDIDATE-009 — Event-carried customer replicas in place of synchronous customer reads (needs 003, 008)
-2. ADR-CANDIDATE-010 — Narrow synchronous point-reads as the bounded exception to messaging (needs 001, 008)
-3. ADR-CANDIDATE-018 — Repository per service, with independent per-repository release (needs 002, 017)
-4. ADR-CANDIDATE-019 — Two internal service structures — layered domain split and single project (needs 002)
-5. ADR-CANDIDATE-020 — .NET Core 3.1 as the platform runtime baseline (needs 002)
-
-Q4 below still applies to items 1 and 2 of batch 4: write them together, and keep them separate only if
-each can state when the other applies.
+1. **Approval.** All twenty records are `Status: Proposed` and blocker B4 stops every one of them from
+   moving further. Naming repository owners is the single action that unblocks the whole set.
+2. **New candidates, if the platform changes.** Q2 below still stands: if a client application is
+   planned, it needs a twenty-first candidate, because the edge records (004, 005, 006, 014) all assume
+   a machine caller.
 
 ## Candidate Details
 
@@ -776,5 +822,5 @@ configuration values, and naming conventions are not decisions.
 | Q1 | **[ACTION NOW]** Should a candidate that describes a current state nobody is happy with be written as an ADR recording that state, or as an ADR proposing the fix? | Several candidates describe something that works but has a known defect — the authorization guard that is skipped for unauthenticated callers (006), the split token trust root (007), replicas that are never reconciled (009). Recording them as-is blesses the defect; recording the fix means the ADR does not describe the running system | Record the current state and its consequences, and add an explicit "known defect / supersession expected" note naming what must change. That keeps the ADR true about today without endorsing it | Platform owner |
 | Q2 | **[ACTION NOW]** Is a client application planned for this platform? | `Pacco.Web` is an empty repository and no frontend exists anywhere, so no client decision was excluded as an implementation detail — there simply is none to record. If a client is planned, a twenty-first candidate is needed, and the edge decisions (004, 005, 006, 014) all currently assume a machine caller rather than a browser | If a client is planned, add the candidate before any client code is written, and derive its assumptions from ADR-CANDIDATE-005 and ADR-CANDIDATE-014, since both change what a caller has to handle | Platform owner |
 | Q3 | **[ACTION NOW]** Is the certificate check on `customers-service` actually enforced at runtime? | `pricing-service` calls it over HTTP and is not on its access list. Either the call is failing and nobody has noticed, or the enforcement is not really active — and ADR-CANDIDATE-016 says something different in each case | Call `customers-service` from `pricing-service` in a running environment without a certificate and observe the response before writing the ADR | Platform security owner |
-| Q4 | **[handled later by adr_generation]** Should candidates 009 and 010 be written as two records or merged into one "cross-service data access" record? | They are two answers to the same question and the platform uses both for the same customer data. Two records risk contradicting each other; one record risks burying the trade-off that distinguishes them | Keep them separate, and have each state explicitly when the other applies. Merge only if the first draft of one cannot be written without restating the other | `adr_generation` stage |
+| Q4 | **RESOLVED 2026-09-09 by `adr_generation` batch 4.** Should candidates 009 and 010 be written as two records or merged into one "cross-service data access" record? | They are two answers to the same question and the platform uses both for the same customer data. Two records risk contradicting each other; one record risks burying the trade-off that distinguishes them | Answered as proposed: kept separate as `ADR-009` and `ADR-010`, each stating in its Decision section when the other applies. The merge condition was not met — neither draft needed to restate the other. Batch 4 also found the trade-off is sharper than this row assumed, because the replicas hold only ids and no customer data at all | `adr_generation` stage |
 | Q5 | **RESOLVED 2026-09-09 by `adr_generation` batch 1.** What id scheme should the generated ADRs use, and how should this backlog's `ADR-CANDIDATE-NNN` ids map onto it? | No ADR ids exist anywhere in scope, so there is no prefix to preserve and no collision to avoid. Downstream artifacts and the pattern catalog's empty **Related ADRs** columns will cite whatever is chosen, so the mapping has to be recorded once rather than inferred per file | Answered as proposed: sequential `ADR-NNN` ids matching this backlog's candidate numbering, carried in each ADR's metadata table, with descriptive kebab-case file names and no numeric prefix. The mapping is recorded in **Generated** above and extends there as later batches land | `adr_generation` stage |
