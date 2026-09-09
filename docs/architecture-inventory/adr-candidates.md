@@ -10,7 +10,7 @@
 ## Scope and adoption of existing artifacts
 
 > This section describes the position when this backlog was written, before any ADR was generated.
-> As of 2026-09-09 the ten records listed under **Generated** below exist under `docs/adr/` in this
+> As of 2026-09-09 the fifteen records listed under **Generated** below exist under `docs/adr/` in this
 > repository. Nothing outside it has changed: the thirteen service clones still hold no ADR, decision
 > record or RFC, and the governance catalog still holds no decision node for this platform.
 
@@ -87,7 +87,19 @@ Batch 2 was written on 2026-09-09 against the same branch. It implemented the fi
 | 9 | ADR-CANDIDATE-015 — Registry-mediated service discovery and name-based routing | `ADR-015` | `registry-mediated-discovery-and-name-based-routing.md` |
 | 10 | ADR-CANDIDATE-012 — Transactional outbox and inbox applied by handler decorator | `ADR-012` | `transactional-outbox-inbox-by-handler-decorator.md` |
 
-All ten are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
+Batch 3 was written on 2026-09-09 against the same branch. It implemented the five candidates listed as
+**Next batch (batch 3)** in the previous revision of this file, in the order given there, and picked up
+all four of the named hand-offs that batch 2 left for it.
+
+| # | Candidate | ADR id | File under `docs/adr/` |
+|---|-----------|--------|------------------------|
+| 11 | ADR-CANDIDATE-011 — An orchestrated saga for order creation, and its state durability | `ADR-011` | `orchestrated-saga-for-order-creation.md` |
+| 12 | ADR-CANDIDATE-013 — Contract-blind universal subscription by runtime type emission | `ADR-013` | `contract-blind-universal-message-subscription.md` |
+| 13 | ADR-CANDIDATE-014 — Ephemeral operation status and the real-time client notification channels | `ADR-014` | `ephemeral-operation-status-and-push-notification.md` |
+| 14 | ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI | `ADR-016` | `vault-dynamic-database-credentials-and-service-pki.md` |
+| 15 | ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration | `ADR-017` | `compose-and-process-manager-deployment.md` |
+
+All fifteen are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
 because no repository has an owner who could approve one.
 
 Two things batch 2 settled, both by following the code rather than this backlog:
@@ -99,30 +111,43 @@ Two things batch 2 settled, both by following the code rather than this backlog:
 2. **Candidate 007's evidence was wider than this backlog recorded.** See the correction to blocker B1
    below.
 
+## What batch 3 settled
+
+Batch 3 answered all four hand-offs it inherited, and established four facts by reading source rather
+than trusting this backlog:
+
+1. `ADR-003` Q3 — whether the message manifest should be generated — is carried forward as `ADR-013`
+   rule 4 and question Q1, which states generation as the target and identifies the obstacle: no build
+   step can see all eleven repositories under the current release model. It now belongs to batch 4's
+   record on the build and release path.
+2. `ADR-005` Q3 — whether the edge write mode should be per route — is carried as `ADR-014` Q4, with the
+   trade-off stated: a per-route choice would have to be maintained across four gateway configuration
+   files. It now belongs to batch 4's record on the gateway configuration set.
+3. `ADR-007` Q4 — per-service identity certificates as a decision distinct from the token signing root —
+   is answered by `ADR-016`, which records that nine services request a certificate role, roles exist for
+   two, and exactly one call path enforces a certificate.
+4. `ADR-012` Q4 — saga state durability kept separate from the outbox — is answered by `ADR-011`, which
+   records that no persistence backend is configured and no persistence package is referenced, and makes
+   durability a precondition of deploying the coordinator anywhere shared.
+5. **The order-creation saga has no producer.** Its only trigger is an unauthenticated HTTP route on the
+   coordinator's own port; no service publishes the start command and no gateway configuration reaches
+   the route. This refines gap G2 and is recorded as `ADR-011` blocker B3.
+6. **The manifest counts in this file were wrong.** The corrected figures — 24 commands, 29 events and
+   27 rejected events, 80 in total — are applied above in candidate 013's evidence and in assumption A3,
+   and the conflict is stated in `ADR-013` §6.1 rather than reconciled silently.
+7. **Blocker B3 of this backlog now has evidence on both sides.** `ADR-017` records that the two
+   application stacks select different gateway configurations and that the two deployment paths define
+   different numbers of applications, so the question of which configuration production uses cannot be
+   answered from the workspace at all.
+8. **Pattern Drift is not reportable for any record in this batch**, because every entry in
+   `patterns/index.md` still carries status `Candidate`. Each of the five records instead names the
+   patterns it instantiates, constrains or diverges from, and proposes the pattern updates its evidence
+   supports — including the **Related ADRs** entries, which remain `None` in the catalog itself.
+
 ## Remaining backlog
 
-Ten candidates remain, in the order the next batches should take them. Each is written after everything
-it depends on, and every dependency listed here is either already generated above or earlier in this
-list.
-
-**Next batch (batch 3) — the five whose dependencies are all satisfied by batches 1 and 2:**
-
-1. ADR-CANDIDATE-011 — An orchestrated saga for order creation, and its state durability (needs 001, 003 — both generated)
-2. ADR-CANDIDATE-013 — Contract-blind universal subscription by runtime type emission (needs 003 — generated)
-3. ADR-CANDIDATE-014 — Ephemeral operation status and the real-time client notification channels (needs 005 — generated; 013 — earlier in this batch)
-4. ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI (needs 015 — generated)
-5. ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration (needs 001, 015 — both generated)
-
-Four batch-2 records leave named work for batch 3, and it should be picked up rather than rediscovered:
-
-1. `ADR-003` Q3 asks whether `messages.json` should be generated rather than hand-maintained, and hands
-   the decision to ADR-CANDIDATE-013, which owns the manifest's consumer.
-2. `ADR-005` Q3 asks whether the edge write mode should be per route rather than per gateway, and hands
-   it to ADR-CANDIDATE-014, which owns the outcome-notification channel the asynchronous mode needs.
-3. `ADR-007` Q4 asks that the token signing root and the per-service identity certificates be kept as
-   two distinct decisions, and hands the second to ADR-CANDIDATE-016.
-4. `ADR-012` Q4 asks that the saga's state durability be kept separate from the outbox, and hands it to
-   ADR-CANDIDATE-011.
+Five candidates remain. Each is written after everything it depends on, and every dependency listed here
+is already generated above.
 
 **Batch 4 — the remainder:**
 
@@ -442,8 +467,11 @@ The manifest is also a hand-maintained copy of names owned by eight other reposi
 generation or validation step, so it can silently fall out of date. The lasting impact is that the
 platform's one cross-cutting observer is structurally incapable of validating what it observes.
 **Evidence:** `Pacco.Services.Operations.Api/Infrastructure/Subscriptions.cs` emits subscription
-types at runtime from the names in `messages.json`, which enumerates eight exchanges, 26 commands, 30
-events and 31 rejected events; the generic command, event and rejected-event handlers under
+types at runtime from the names in `messages.json`, which enumerates eight exchanges, 24 commands, 29
+events and 27 rejected events — 80 names in total. (This corrects an earlier revision of this file,
+which recorded 26, 30 and 31; the entries were counted directly from the manifest while writing
+`ADR-013`, and the conflict is stated in that record's §6.1.) The generic command, event and
+rejected-event handlers under
 `Handlers/` receive them. The field-less consequence is gap G5 in `repo-inventory.md` §6, marked
 **Unknown — requires runtime capture**, and is analysed in `baselines/architecture-baseline.md` §3.3
 and `baselines/api-inventory.md` §9.5. Pattern:
@@ -729,7 +757,7 @@ configuration values, and naming conventions are not decisions.
 |---|------------|-----------|-----------------|-----------------|
 | A1 | The thirteen cloned repositories at base ref `feature/12998/aidlc` are the whole platform, so no candidate here duplicates a decision recorded somewhere outside this workspace | The gateway route table, the compose stacks and the process manifests all resolve to services inside this set, and nothing in any repository points outside it | A decision already recorded elsewhere would be re-proposed as new, and the `adr_generation` stage would write a record that conflicts with an existing one | Ask the platform owner whether any deployable, or any decision log, exists outside these repositories |
 | A2 | The absence of ADRs is genuine and not a search artifact | Two independent checks agree: the file system holds no ADR, decision-record or RFC file in any of the fourteen clones, and the governance catalog for tenant `Q5SCXYFS` returned zero rows for an unscoped node count as well as for ADR, Decision and Constraint queries | Every candidate would need re-checking against the missed records before any is written, and ids assigned here could collide with an existing id space | Confirm with the platform owner that no decision log is kept in a wiki, ticket system or document store outside the repositories |
-| A3 | The message manifest in `operations-service` is a faithful list of the platform's messages | It enumerates eight exchanges and roughly 87 message names that match the publisher and subscriber classes found independently in the other repositories | Candidates 003 and 013 would understate or overstate the contract surface, and the "no validation step" finding could be wrong | Generate the message list from the publisher and subscriber types in each service and compare it to the manifest |
+| A3 | The message manifest in `operations-service` is a faithful list of the platform's messages | It enumerates eight exchanges and 80 message names that match the publisher and subscriber classes found independently in the other repositories. The count was verified while writing `ADR-013`; an earlier revision of this row said "roughly 87", which was a miscount | Candidates 003 and 013 would understate or overstate the contract surface, and the "no validation step" finding could be wrong | Partly validated: the counts are now exact, and one name — the saga coordinator's rejection message — has no publisher anywhere. Still open: generate the message list from the publisher and subscriber types in each service and compare it to the manifest |
 | A4 | The compose stacks describe developer environments rather than any deployed environment | Every infrastructure component is a single container with no replication or quorum, and the committed registry address is a Windows Docker Desktop host alias | ADR-CANDIDATE-017 would misdescribe the platform's actual runtime, and its list of undefined operational properties would be wrong | Ask whoever operates the platform which manifest, if either, produced the environment currently running |
 
 ### Blockers
