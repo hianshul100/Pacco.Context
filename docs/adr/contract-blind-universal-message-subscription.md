@@ -133,8 +133,10 @@ Five rules follow from the decision and are part of it:
 
 ### 4.3 Neutral / follow-on
 
-1. ✅ The manifest deliberately omits the observer's own exchange, which is correct: the observer would
-   otherwise subscribe to its own progress notifications.
+1. ❓ The manifest has no group for the observer's own exchange (evidence 11). `[INFERRED]` that this is
+   deliberate rather than an omission, because subscribing to it would make the observer consume its own
+   progress notifications; nothing in any clone states the intent, so the reason is assumed (assumption
+   A1).
 2. ✅ The three generic handlers are what make the technique useful rather than merely clever; the
    handlers, not the emitted types, are where the observer's behaviour lives (`ADR-014` §1).
 3. ✅ The observer subscribes to the coordinator's exchange (`ADR-011`) like any other, so orchestrated
@@ -152,13 +154,14 @@ Five rules follow from the decision and are part of it:
 3. **Constrains the pattern's scope.** The catalog warns against extending the technique to any
    component that consumes payloads. Rule 2 states that limit as a boundary of the decision, and rule 1
    confines the technique to one named service.
-4. **Depends on `integration/name-matched-message-contracts.md`.** Name-only matching is the
-   precondition: a field-less emitted type can subscribe correctly only because the routing key is
-   derived from the type's name and nothing else. If contract matching ever became structural, this
-   record would be invalidated in full.
-5. **Depends on `integration/service-owned-exchange-topology.md`.** The manifest's top-level grouping is
-   one entry per service exchange, so the manifest is a direct restatement of that topology and drifts
-   with it.
+4. **Depends on the decision recorded in `ADR-003`** (`docs/adr/message-contracts-by-naming-convention.md`).
+   Name-only matching is the precondition: a field-less emitted type can subscribe correctly only because
+   the routing key is derived from the type's name and nothing else. If contract matching ever became
+   structural, this record would be invalidated in full. The catalog holds no separate pattern for
+   name-based contract matching, so the dependency is on the ADR rather than on a pattern file.
+5. **Depends on `integration/service-owned-topic-exchange-messaging.md`.** The manifest's top-level
+   grouping is one entry per service exchange, so the manifest is a direct restatement of that topology
+   and drifts with it.
 6. **Pattern Drift: not applicable.** Every entry in `docs/architecture-inventory/patterns/index.md`
    currently carries status `Candidate`. Drift is reportable only against an `Approved` pattern, so no
    drift is recorded for this ADR.
@@ -209,29 +212,28 @@ Five rules follow from the decision and are part of it:
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This section records what this document assumes, what is blocking it, and what still needs an answer.
-> Items here are not decided. Treat every entry as open until an owner closes it.
+> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
 
 ### Assumptions
 
-| ID | Assumption | Why we made it | Impact if wrong |
-| --- | --- | --- | --- |
-| A1 | The manifest is meant to list every message on the platform, not a chosen subset. | It groups by every service exchange except the observer's own, and covers all three message kinds for each. | If it is a curated subset, the drift risk in negative consequence 1 is a design choice rather than a defect, and decision rule 4 becomes unnecessary. |
-| A2 | The observer never needs a payload value from any message. | The emitted types are field-less by construction (evidence 6), and the reporting behaviour uses only the message name and headers (`ADR-014` §1). | If a reported operation ever needs a value from the message, the technique cannot supply it, and that component needs real contracts — which rule 2 already anticipates. |
-| A3 | The eighty names in the manifest correspond to real published messages, apart from the one identified exception. | Spot checks matched manifest names to publishing services for each exchange, and only the coordinator's rejection message had no publisher. | If more names are stale, the observer holds more subscriptions that can never fire, and the manifest is less trustworthy as the platform's message inventory than context point 3 claims. |
+| # | Assumption | Rationale | Impact if Wrong | Validation Path |
+| --- | --- | --- | --- | --- |
+| A1 | The manifest is meant to list every message on the platform, not a chosen subset | It groups by every service exchange except the observer's own, and covers all three message kinds for each | If it is a curated subset, the drift risk in negative consequence 1 is a design choice rather than a defect, and decision rule 4 becomes unnecessary | Compare the manifest's names against the message classes declared in the ten publishing repositories and list every name that exists in code but not in the manifest |
+| A2 | The observer never needs a payload value from any message | The emitted types are field-less by construction (evidence 6), and the reporting behaviour uses only the message name and headers (`ADR-014` §1) | If a reported operation ever needs a value from the message, the technique cannot supply it, and that component needs real contracts — which rule 2 already anticipates | Review the caller-facing progress surface with the platform owner and confirm no field beyond message name, correlation id and state is required |
+| A3 | The eighty names in the manifest correspond to real published messages, apart from the one identified exception | Spot checks matched manifest names to publishing services for each exchange, and only the coordinator's rejection message had no publisher | If more names are stale, the observer holds more subscriptions that can never fire, and the manifest is less trustworthy as the platform's message inventory than context point 3 claims | Run A1's comparison in the other direction: list every manifest name with no publisher in any of the fourteen clones |
 
 ### Blockers
 
-| ID | Blocker | Who is affected | Owner |
-| --- | --- | --- | --- |
-| B1 | No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders. | Every ADR in the set. | **[handled later by the architecture PR review stage]** — the reviewer assigns deciders when the batch is reviewed as a whole. |
-| B2 | The published inventory's message counts disagree with the manifest, so any planning that used the higher figure is off by seven messages. | Anyone sizing work against the message inventory. | **[ACTION NOW]** — the author of this batch records the correct counts in evidence 10, states the conflict in §6.1, and corrects the backlog document in the same change. |
+| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
+| --- | --- | --- | --- | --- | --- |
+| B1 | **[handled later by the architecture PR review stage]** No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders | This ADR leaving `Proposed`, and rules 4 and 5 in §2, which both need someone accountable for the manifest | Platform owner (unassigned) | Name an owner per subsystem using the six groupings in `docs/architecture-inventory/repo-inventory.md` §4 and record them in this repository; the reviewer assigns deciders when the batch is reviewed as a whole | TBD |
+| B2 | **[ACTION NOW]** The published inventory's message counts disagree with the manifest, so any planning that used the higher figure is off by seven messages | Any sizing done against the message inventory, and the two other inventory documents that carry approximate figures | Platform owner | The counts in `docs/architecture-inventory/adr-candidates.md` are corrected to 24/29/27 in this change; confirm the corrected figures, then run A1's comparison so the inventory is verified rather than recounted by hand next time | TBD |
 
 ### Open Questions
 
-| ID | Question | Why it matters | Owner |
-| --- | --- | --- | --- |
-| Q1 | Should the manifest be generated from the publishing services' compiled contracts at build time? | This is the question `ADR-003` handed to this record. Generation removes the drift in negative consequence 1, but it needs a build step that can see eleven repositories, which the current independent-release model (`ADR-017`) does not provide. | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** |
-| Q2 | Should a missing or empty manifest stop the service from starting? | Rule 5 says it should. The counter-argument is that a degraded observer is better than a service that will not boot, and nobody has stated which failure the platform prefers. | **[ACTION NOW]** — both readings are stated here with their consequences, for the deciders assigned under B1 to choose between. |
-| Q3 | Should the manifest be moved out of the observer's source tree, given that it describes the whole platform rather than one service? | It is the platform's only message inventory (context point 3) but lives in, and is deployed with, one consumer. Moving it changes who is responsible for keeping it current. | **[handled later by the architecture PR review stage]** |
+| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** Should the manifest be generated from the publishing services' compiled contracts at build time? | This is the question `ADR-003` handed to this record. Generation removes the drift in negative consequence 1, but it needs a build step that can see eleven repositories, which the current independent-release model (`ADR-017`) does not provide | Have each publishing repository emit its own message-name list as a build artifact, and have the observer's build concatenate them — so no build needs to see more than one repository | Platform owner |
+| Q2 | **[ACTION NOW]** Should a missing or empty manifest stop the service from starting? | Rule 5 says it should. The counter-argument is that a degraded observer is better than a service that will not boot, and nobody has stated which failure the platform prefers | Fail startup. A silently empty observer takes the platform's only progress-reporting surface offline while every health signal stays green, which is harder to detect than a service that does not start | Platform owner |
+| Q3 | **[handled later by the architecture PR review stage]** Should the manifest be moved out of the observer's source tree, given that it describes the whole platform rather than one service? | It is the platform's only message inventory (context point 3) but lives in, and is deployed with, one consumer. Moving it changes who is responsible for keeping it current | Leave it where it is until Q1 is answered; if the manifest becomes generated, ownership moves to the publishing repositories and the question resolves itself | Platform owner |
 

@@ -136,8 +136,11 @@ Six rules follow from the decision and are part of it:
    it is part of the platform depends entirely on which path is used.
 4. ✅ **There is no production deployment description at all.** Everything present describes one host,
    with no health checks, no replicas and no placement.
-5. ✅ **Most infrastructure state is discarded on restart.** Discovery registrations, broker definitions,
-   metrics, traces and logs have no volumes, so a restart of the infrastructure stack loses them.
+5. ❓ **Most infrastructure state is discarded on restart.** What is observed is that only the data store
+   and the cache declare named volumes, and that five other declarations are present but commented out
+   (evidence 13). `[INFERRED]` that discovery registrations, broker definitions, metrics, traces and logs
+   are therefore lost on a restart of the infrastructure stack; whether each of those components keeps
+   anything worth losing has not been verified against a running environment (assumption A3).
 6. ✅ **The data store runs with authentication disabled**, which means the dynamically issued database
    credentials of `ADR-016` are being issued against a store that would accept an unauthenticated
    connection.
@@ -227,32 +230,31 @@ Six rules follow from the decision and are part of it:
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This section records what this document assumes, what is blocking it, and what still needs an answer.
-> Items here are not decided. Treat every entry as open until an owner closes it.
+> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
 
 ### Assumptions
 
-| ID | Assumption | Why we made it | Impact if wrong |
-| --- | --- | --- | --- |
-| A1 | These definitions are the whole of the platform's deployment description. | A search across all fourteen clones found no orchestration, infrastructure-as-code, chart or cluster definition of any kind (evidence 16). | If a deployment description exists outside the workspace, rule 6 may already be satisfied and several negative consequences apply only to development. |
-| A2 | The container path is the primary one and the process-manager path is a secondary option. | The container stacks are more complete — eleven applications against ten — and are what the platform guidance describes. | If the process-manager path is primary, the saga coordinator is not part of the platform at all, which would settle `ADR-011`'s deployment question by removal. |
-| A3 | The commented-out volume declarations were disabled for developer convenience rather than by mistake. | They are present, complete and adjacent to the two that are enabled, which reads as a deliberate toggle. | If they were disabled accidentally, restarting infrastructure loses state that someone expects to survive, and the fix is one uncommenting rather than a design change. |
+| # | Assumption | Rationale | Impact if Wrong | Validation Path |
+| --- | --- | --- | --- | --- |
+| A1 | These definitions are the whole of the platform's deployment description | A search across all fourteen clones found no orchestration, infrastructure-as-code, chart or cluster definition of any kind (evidence 16) | If a deployment description exists outside the workspace, rule 6 may already be satisfied and several negative consequences apply only to development | Ask the platform owner whether any deployment description is held outside these repositories, and inspect it if one exists |
+| A2 | The container path is the primary one and the process-manager path is a secondary option | The container stacks are more complete — eleven applications against ten — and are what the platform guidance describes | If the process-manager path is primary, the saga coordinator is not part of the platform at all, which would settle `ADR-011`'s deployment question by removal | Ask the platform owner which path is used to start the platform outside a developer machine, if either is |
+| A3 | The commented-out volume declarations were disabled for developer convenience rather than by mistake | They are present, complete and adjacent to the two that are enabled, which reads as a deliberate toggle | If they were disabled accidentally, restarting infrastructure loses state that someone expects to survive, and the fix is one uncommenting rather than a design change | Ask whoever commented them out; failing that, restart the infrastructure stack and record which components come back empty — which also settles the ❓ on consequence 4.2.5 |
 
 ### Blockers
 
-| ID | Blocker | Who is affected | Owner |
-| --- | --- | --- | --- |
-| B1 | No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders. | Every ADR in the set. | **[handled later by the architecture PR review stage]** — the reviewer assigns deciders when the batch is reviewed as a whole. |
-| B2 | It cannot be stated which gateway configuration the platform runs, because the two application stacks select different ones. | Every record that depends on the write mode, including `ADR-004`, `ADR-005` and `ADR-014`. | **[ACTION NOW]** — the conflict, its evidence and its consequence are recorded in §6.1 item 1 and consequence 4.2.1, and rule 5 states that one file must own the choice. |
-| B3 | It cannot be stated whether the saga coordinator is deployed, because the two deployment paths disagree. | `ADR-011`, which carries the same blocker, and anyone trying to exercise order creation. | **[ACTION NOW]** — recorded in §6.1 item 2 with the full footprint on both sides, so the inconsistency is visible in this batch rather than assumed away. |
-| B4 | There is no production deployment description, so no record in this set can state how the platform behaves outside a developer machine. | Every record whose consequences depend on scale, restart behaviour or failure handling. | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** — deciding a production platform is a separate decision and needs its own record. |
+| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
+| --- | --- | --- | --- | --- | --- |
+| B1 | **[handled later by the architecture PR review stage]** No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders | This ADR leaving `Proposed`, and rules 5 and 6 in §2, which both need someone accountable for the environment definitions | Platform owner (unassigned) | Name an owner per subsystem using the six groupings in `docs/architecture-inventory/repo-inventory.md` §4 and record them in this repository; the reviewer assigns deciders when the batch is reviewed as a whole | TBD |
+| B2 | **[ACTION NOW]** It cannot be stated which gateway configuration the platform runs, because the two application stacks select different ones | Every record that depends on the write mode, including `ADR-004` B2, `ADR-005` and `ADR-014` B3 | Platform owner | Decide which mode the platform runs (question Q1), set it in one file, make the other stack read that file or delete it, and record the answer here so the dependent records can cite one place | TBD |
+| B3 | **[ACTION NOW]** It cannot be stated whether the saga coordinator is deployed, because the container stacks include it and both process manifests omit it | `ADR-011` B3, which carries the same blocker, and anyone trying to exercise order creation | Platform owner | Decide whether `ordermaker-service` is part of the platform. If it is, add it to both process manifests and give it a gateway route; if it is not, remove it from the container stacks and the metrics scrape list | TBD |
+| B4 | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** There is no production deployment description, so no record in this set can state how the platform behaves outside a developer machine | Every record whose consequences depend on scale, restart behaviour or failure handling | Platform owner (unassigned) | Decide a production platform in its own record (question Q3), then describe health checks, replicas and persistence there rather than stretching these definitions | TBD |
 
 ### Open Questions
 
-| ID | Question | Why it matters | Owner |
-| --- | --- | --- | --- |
-| Q1 | Which file should own the gateway's mode, and which mode should it select? | Rule 5 requires one owner. Selecting the synchronous mode makes `ADR-014`'s observer largely unused; selecting the asynchronous one makes it load-bearing. | **[ACTION NOW]** — the two options and what each implies are stated here, for the deciders assigned under B1 to choose between. |
-| Q2 | Should the eleven applications be defined once and included, rather than restated across four files? | The restatement has already drifted once (consequence 4.2.2), and the drift is what makes B3 unanswerable. | **[handled later by the architecture PR review stage]** |
-| Q3 | Should the platform move to a container orchestrator, and when? | It is the direct answer to rule 6 and removes the single-host limit, the missing health checks and the missing replica counts together — but it is a project, not a configuration change. | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** |
-| Q4 | Should the data store run with authentication enabled in the developer environment? | Leaving it open means the dynamically issued credentials of `ADR-016` are never actually required, so a service that failed to obtain one would still connect and nobody would notice. | **[ACTION NOW]** — recorded as consequence 4.2.6 with its evidence, so the interaction between the two records is visible rather than left to be discovered. |
+| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | **[ACTION NOW]** Which file should own the gateway's mode, and which mode should it select? | Rule 5 requires one owner. Selecting the synchronous mode makes `ADR-014`'s observer largely unused; selecting the asynchronous one makes it load-bearing | Let the published-image stack own it and keep the asynchronous mode: the observer, the correlation id and the push channel are all built for it, and the synchronous mode leaves three services with no purpose | Platform owner |
+| Q2 | **[handled later by the architecture PR review stage]** Should the eleven applications be defined once and included, rather than restated across four files? | The restatement has already drifted once (consequence 4.2.2), and the drift is what makes B3 unanswerable | Define the applications once and have each stack extend it, so the container and process paths cannot disagree about how many deployables exist | Platform owner |
+| Q3 | **[handled later by the batch 4 authoring stage, in the record covering the build and release path]** Should the platform move to a container orchestrator, and when? | It is the direct answer to rule 6 and removes the single-host limit, the missing health checks and the missing replica counts together — but it is a project, not a configuration change | Not before there is a shared environment to run; when there is, adopt one and record it separately, because it also answers `ADR-016` rule 6 and question Q1 there | Platform owner |
+| Q4 | **[ACTION NOW]** Should the data store run with authentication enabled in the developer environment? | Leaving it open means the dynamically issued credentials of `ADR-016` are never actually required, so a service that failed to obtain one would still connect and nobody would notice | Enable it. It is one uncommented pair of lines (evidence 14) and it is the only way the credential mechanism `ADR-016` describes is exercised at all before a shared environment exists | Platform owner |
 

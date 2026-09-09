@@ -55,10 +55,12 @@ earlier steps.
 4. ✅ **It also makes two synchronous calls mid-process.** On the parcel-completion step it calls
    Vehicles for the best vehicle and Availability for the next free date before publishing the next
    command (`…/Sagas/AIOrderMakingSaga.cs:92-101`), so the saga is not purely message-driven.
-5. ✅ **Saga state is held by whatever the library defaults to.** The composition root registers the
-   saga library with one call and no persistence configuration
-   (`…/Pacco.Services.OrderMaker/Extensions.cs:43`), and the project references the saga package but no
-   persistence package for it (`…/Pacco.Services.OrderMaker.csproj:8-28`).
+5. ❓ **Saga state is held by whatever the library defaults to.** What is observed is the absence of any
+   configuration: the composition root registers the saga library with one call and no persistence
+   configuration (`…/Pacco.Services.OrderMaker/Extensions.cs:43`), and the project references the saga
+   package but no persistence package for it (`…/Pacco.Services.OrderMaker.csproj:8-28`).
+   `[INFERRED]` that the default is therefore an in-process store; the library is a package reference
+   with no source in this workspace, so the default itself is not observable here (assumption A1).
 6. ✅ **Four of the five compensation methods do nothing.** Only the parcel step compensates, by
    publishing a cancellation; the other four return a completed task
    (`…/Sagas/AIOrderMakingSaga.cs:134-152`).
@@ -98,9 +100,10 @@ Five rules follow from the decision and are part of it:
 3. ✅ **Participants stay unaware they are in a saga.** They receive ordinary commands on their own
    exchanges and publish ordinary events; nothing in Orders, Parcels, Vehicles or Availability
    references the coordinator.
-4. 🎯 **Saga state must be durable before this service is deployed anywhere shared.** The default store
-   loses in-flight orders on restart. Until a persistence backend is configured, an order can be left
-   half-created with no record that the process ever started.
+4. 🎯 **Saga state must be durable before this service is deployed anywhere shared.** No persistence
+   backend is configured at all, so durability is whatever the library's unexamined default provides
+   (❓, assumption A1). Until a backend is configured deliberately, an order can be left half-created
+   with no record that the process ever started.
 5. 🎯 **Every step that can be undone must have a compensation.** Four of the five compensation methods
    are empty today, so a failure after the reservation step leaves a scarce resource reserved for an
    order that will never exist.
@@ -131,9 +134,11 @@ Five rules follow from the decision and are part of it:
 
 ### 4.2 Negative
 
-1. ✅ **In-flight orders are lost on restart.** `[INFERRED]` no persistence is configured and no
-   persistence package is referenced, so state lives in the process. A restart between step one and
-   step five leaves an order created, parcels possibly attached, and nothing that will ever finish it.
+1. ❓ **In-flight orders are lost on restart.** `[INFERRED]` from the observed absence of persistence
+   configuration and of any persistence package reference (evidence 12, 13); the store the library falls
+   back to is not observable in this workspace, so this is the consequence *if* assumption A1 holds. On
+   that reading, a restart between step one and step five leaves an order created, parcels possibly
+   attached, and nothing that will ever finish it. Validation path is in assumption A1.
 2. ✅ **A late failure strands a reserved resource.** With four of five compensations empty, a failure
    after the reservation step releases nothing.
 3. ✅ **The coordinator breaks the exchange-ownership rule.** It publishes into four other services'
@@ -173,12 +178,12 @@ Five rules follow from the decision and are part of it:
 3. **Constrains the pattern on compensation completeness.** The catalog notes four of five compensation
    methods are empty. Decision rule 5 makes filling them a precondition rather than an improvement,
    because the reservation step consumes a scarce resource.
-4. **Deliberately diverges from `integration/service-owned-exchange-topology.md`.** Every other
+4. **Deliberately diverges from `integration/service-owned-topic-exchange-messaging.md`.** Every other
    deployable publishes only messages it owns. The coordinator publishes into four foreign exchanges by
    design, because a coordinator that owned its own commands would need every participant to subscribe
    to it — which would make the participants saga-aware and defeat rule 3. The divergence is accepted
    and is scoped to this one service.
-5. **Deliberately diverges from `reliability/transactional-outbox-inbox-decorator.md`.** The coordinator
+5. **Deliberately diverges from `data/transactional-outbox-handler-decorator.md`.** The coordinator
    applies neither decorator. That is coherent with owning no database — there is no local transaction to
    make atomic with the publish — but it means the coordinator is the least reliable publisher on the
    platform, and the divergence is a gap rather than a simplification.
@@ -237,31 +242,30 @@ Five rules follow from the decision and are part of it:
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This section records what this document assumes, what is blocking it, and what still needs an answer.
-> Items here are not decided. Treat every entry as open until an owner closes it.
+> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
 
 ### Assumptions
 
-| ID | Assumption | Why we made it | Impact if wrong |
-| --- | --- | --- | --- |
-| A1 | The saga library's default store keeps state in the running process only. | No persistence backend is configured and no persistence package is referenced (evidence 12, 13); an in-memory default is the only remaining possibility. | If the library defaults to a durable store, negative consequence 1 and decision rule 4 are unnecessary, and blocker B2's severity drops. |
-| A2 | The coordinator is intended to run as part of the platform, not as a discarded experiment. | It is defined in both container stacks, given a port, and scraped for metrics. | If it is an experiment, this record should be marked superseded and the coordinator removed from the container stacks and the metrics job list. |
-| A3 | Order creation is the only process on the platform that needs orchestration. | No other repository references the saga library, and no other multi-service ordered sequence appears in the message flow. | If a second such process exists or is planned, the "exception requires a named reason" rule needs a written test rather than a single example. |
+| # | Assumption | Rationale | Impact if Wrong | Validation Path |
+| --- | --- | --- | --- | --- |
+| A1 | The saga library's default store keeps state in the running process only | No persistence backend is configured and no persistence package is referenced (evidence 12, 13). The library is a package reference with no source in this workspace, so the default is inferred rather than read — which is why §1 point 5 and §4.2.1 carry ❓ | If the library defaults to a durable store, negative consequence 1 and decision rule 4 are unnecessary, and blocker B2's severity drops | Read the saga package's registration code at the pinned version, or start the coordinator, begin an order, restart the process and check whether the next message in the sequence is still matched to the saga |
+| A2 | The coordinator is intended to run as part of the platform, not as a discarded experiment | It is defined in both container stacks, given a host port, and scraped for metrics | If it is an experiment, this record should be marked superseded and the coordinator removed from the container stacks and the metrics job list | Ask the platform owner whether `ordermaker-service` is meant to be deployed; `ADR-017` carries the same question from the deployment side |
+| A3 | Order creation is the only process on the platform that needs orchestration | No other repository references the saga library, and no other multi-service ordered sequence appears in the message flow | If a second such process exists or is planned, the "exception requires a named reason" rule needs a written test rather than a single example | Review the product backlog with the platform owner for any planned multi-service sequence with a compensating step |
 
 ### Blockers
 
-| ID | Blocker | Who is affected | Owner |
-| --- | --- | --- | --- |
-| B1 | No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders. | Every ADR in the set. | **[handled later by the architecture PR review stage]** — the reviewer assigns deciders when the batch is reviewed as a whole. |
-| B2 | Saga state durability is unresolved, so it cannot be stated whether an in-flight order survives a restart. | Anyone deploying the coordinator outside a developer machine. | **[ACTION NOW]** — the author of this batch records the position in decision rule 4 and marks the service development-only until a persistence backend is configured. |
-| B3 | The process has no producer: the only way to start it is an unauthenticated HTTP call to the coordinator's own port, and no gateway route reaches it. | Anyone trying to exercise order creation from a client. | **[ACTION NOW]** — recorded in context point 7 and consequence 4.3.2; the choice between adding a gateway route and removing the coordinator is `ADR-017`'s to make. |
+| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
+| --- | --- | --- | --- | --- | --- |
+| B1 | **[handled later by the architecture PR review stage]** No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders | This ADR leaving `Proposed`, and every rule in §2 that needs someone accountable | Platform owner (unassigned) | Name an owner per subsystem using the six groupings in `docs/architecture-inventory/repo-inventory.md` §4 and record them in this repository; the reviewer assigns deciders when the batch is reviewed as a whole | TBD |
+| B2 | **[ACTION NOW]** Saga state durability is unresolved, so it cannot be stated whether an in-flight order survives a restart | Decision rule 4, and any deployment of the coordinator outside a developer machine | Platform owner | Run assumption A1's validation path to establish the actual default, then either configure a persistence backend or mark the coordinator development-only in the container stacks | TBD |
+| B3 | **[ACTION NOW]** The process has no producer: the only way to start it is an unauthenticated HTTP call to the coordinator's own port, and no gateway route reaches it | Any attempt to exercise order creation from a client, and the deployment question `ADR-017` B3 carries | Platform owner | Decide with `ADR-017` whether to add an authenticated `orders` gateway route to the coordinator or to remove the coordinator, and record the outcome in both records | TBD |
 
 ### Open Questions
 
-| ID | Question | Why it matters | Owner |
-| --- | --- | --- | --- |
-| Q1 | Which persistence backend should hold saga state, given the coordinator deliberately owns no database? | A store for the coordinator reopens the "owns no data" rule, so the answer shapes decision rule 2 as well as rule 4. | **[handled later by the batch 4 authoring stage, in the record covering storage and reliability]** |
-| Q2 | Should the four empty compensations be filled, or should the failing steps be made impossible to reach instead? | Filling them is work; making them unreachable changes the participants. Both are valid and they lead to different services changing. | **[handled later by the architecture PR review stage]** |
-| Q3 | Should the coordinator act as an identified caller rather than with an empty user context? | Every command it publishes bypasses the receiving handlers' ownership checks, which is the concrete form of the gap `ADR-006` records. | **[handled later by the batch 4 authoring stage, in the record covering service-to-service identity]** |
-| Q4 | Is the resource-reserved subscription meant to be removed, or is `orders-service`'s approval meant to move into the coordinator? | One is deleting dead code; the other moves a business decision across a service boundary. | **[ACTION NOW]** — raised here with both readings and their evidence, for the deciders assigned under B1 to choose between. |
+| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | **[handled later by the batch 4 authoring stage, in the record covering storage and reliability]** Which persistence backend should hold saga state, given the coordinator deliberately owns no database? | A store for the coordinator reopens the "owns no data" rule, so the answer shapes decision rule 2 as well as rule 4 | Use the platform's existing document database with a saga-state collection, and treat it as process state rather than domain data so rule 2 is preserved | Platform owner |
+| Q2 | **[handled later by the architecture PR review stage]** Should the four empty compensations be filled, or should the failing steps be made impossible to reach instead? | Filling them is work; making them unreachable changes the participants. Both are valid and they lead to different services changing | Fill the reservation step's compensation first, because it is the only step that holds a scarce resource, and decide the remaining three once saga durability is settled | Platform owner |
+| Q3 | **[handled later by the batch 4 authoring stage, in the record covering service-to-service identity]** Should the coordinator act as an identified caller rather than with an empty user context? | Every command it publishes bypasses the receiving handlers' ownership checks, which is the concrete form of the gap `ADR-006` records | Give the coordinator a service identity and propagate the originating caller from the start command, so the participants' ownership guards have something to check | Platform owner |
+| Q4 | **[ACTION NOW]** Is the resource-reserved subscription meant to be removed, or is `orders-service`'s approval meant to move into the coordinator? | One is deleting dead code; the other moves a business decision across a service boundary. Until it is answered, a reader of the coordinator sees a sixth step that does not exist | Remove the subscription and the forwarding handler: approval already works in `orders-service` (evidence 19), and moving it would make the coordinator decide rather than sequence, against decision rule 2 | Platform owner |
 

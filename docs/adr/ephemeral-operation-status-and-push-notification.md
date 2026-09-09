@@ -65,8 +65,8 @@ no result. This record decides how the caller gets the result.
    (`…/Operations.proto:5-8`, `…/Infrastructure/GrpcServiceHost.cs:15-41`).
 8. ✅ **Neither the pull endpoint nor the stream checks who is asking.** The read route is exposed
    through the gateway with authentication switched off
-   (`hianshul100_Pacco.APIGateway/ntrada-async.yml:321-334`) and performs no ownership check; the stream
-   applies no identity filter at all.
+   (`hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/ntrada-async.yml:321-334`) and performs no
+   ownership check; the stream applies no identity filter at all.
 
 ### 1.1 What this record does *not* cover
 
@@ -135,9 +135,12 @@ Six rules follow from the decision and are part of it:
    them rather than each receiving all of it — so a second subscriber silently degrades the first.
 4. ✅ **Messages without a correlation id vanish.** Both generic handlers return silently in that case,
    so a progress signal is lost with nothing logged.
-5. ✅ **A misconfigured backplane value degrades the service quietly.** Anything other than the expected
-   value starts the hub with no shared backplane, which behaves correctly on one instance and drops
-   notifications as soon as there are two.
+5. ❓ **A misconfigured backplane value degrades the service quietly.** What is observed is the branch:
+   anything other than the expected value starts the hub with no shared backplane and no warning
+   (evidence 10). `[INFERRED]` that the effect is correct behaviour on one instance and dropped
+   notifications as soon as there are two — the platform runs one observer instance in both container
+   stacks (`ADR-017`), so the two-instance behaviour is reasoned from the backplane's purpose rather
+   than observed here.
 6. ✅ **A blank token on the hub does not stop the connection.** The connection is disconnected but
    execution continues into the token-parsing path, and the failure is swallowed by the surrounding
    error handling — so a caller can reach the hub in an unexpected state.
@@ -202,7 +205,7 @@ Six rules follow from the decision and are part of it:
 | 13 | A blank token disconnects but does not stop execution, and the parse failure is swallowed | ✅ | `…/Hubs/PaccoHub.cs:18-42` |
 | 14 | The read route returns an operation with no ownership check | ✅ | `…/Pacco.Services.Operations.Api/Program.cs:32-43` |
 | 15 | The hub and the streaming service are mapped alongside it | ✅ | `…/Pacco.Services.Operations.Api/Program.cs:46-47` |
-| 16 | The read route is published through the gateway with authentication off | ✅ | `hianshul100_Pacco.APIGateway/ntrada-async.yml:321-334`; `hianshul100_Pacco.APIGateway/ntrada.yml:277-290` |
+| 16 | The read route is published through the gateway with authentication off | ✅ | `hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/ntrada-async.yml:321-334`; `hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:277-290` |
 | 17 | The stream is fed by a per-instance queue, loops without cancellation, and applies no identity filter | ✅ | `…/Infrastructure/GrpcServiceHost.cs:15-41` |
 | 18 | The service contract offers a unary read and a server stream | ✅ | `…/Pacco.Services.Operations.Api/Operations.proto:5-8` |
 | 19 | The sample stream client disables server certificate validation | ✅ | `hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.GrpcClient/Program.cs:35-39` |
@@ -230,31 +233,30 @@ Six rules follow from the decision and are part of it:
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This section records what this document assumes, what is blocking it, and what still needs an answer.
-> Items here are not decided. Treat every entry as open until an owner closes it.
+> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
 
 ### Assumptions
 
-| ID | Assumption | Why we made it | Impact if wrong |
-| --- | --- | --- | --- |
-| A1 | Nothing on the platform needs an operation after the caller has seen it. | No component in any of the fourteen clones reads an operation other than the caller-facing routes and the push channel. | If reporting, billing or support needs operation history, the cache-only decision is wrong and alternative 1 becomes the correct answer. |
-| A2 | Callers of the asynchronous write path can hold a real-time connection. | The push channel is the primary channel by rule 4, and the only client asset in the workspace connects to it. | If important callers cannot, the read route becomes primary — and it is the surface with no ownership check, which would make consequence 4.2.2 far more serious. |
-| A3 | The three hundred second expiry is long enough for a normal write to complete and be reported. | The write path is a handful of message hops within one broker, so completion is expected in seconds. | If a process can legitimately run longer — order creation waits on a reservation, see `ADR-011` — its operation expires before it finishes and the caller is told nothing. |
+| # | Assumption | Rationale | Impact if Wrong | Validation Path |
+| --- | --- | --- | --- | --- |
+| A1 | Nothing on the platform needs an operation after the caller has seen it | No component in any of the fourteen clones reads an operation other than the caller-facing routes and the push channel | If reporting, billing or support needs operation history, the cache-only decision is wrong and alternative 1 becomes the correct answer | Ask the platform owner whether any reporting, billing or support process needs to answer "what happened to this request" after the fact |
+| A2 | Callers of the asynchronous write path can hold a real-time connection | The push channel is the primary channel by rule 4, and the only client asset in the workspace connects to it | If important callers cannot, the read route becomes primary — and it is the surface with no ownership check, which would make consequence 4.2.2 far more serious | Confirm with the platform owner which client types call the write path, and whether any of them are server-to-server integrations that cannot hold a connection |
+| A3 | The three hundred second expiry is long enough for a normal write to complete and be reported | The write path is a handful of message hops within one broker, so completion is expected in seconds | If a process can legitimately run longer — order creation waits on a reservation, see `ADR-011` — its operation expires before it finishes and the caller is told nothing | Measure the elapsed time from acknowledgement to terminal state for each write route in a running environment, including a full order-creation saga |
 
 ### Blockers
 
-| ID | Blocker | Who is affected | Owner |
-| --- | --- | --- | --- |
-| B1 | No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders. | Every ADR in the set. | **[handled later by the architecture PR review stage]** — the reviewer assigns deciders when the batch is reviewed as a whole. |
-| B2 | Anyone holding a correlation id can read the matching operation through an unauthenticated gateway route with no ownership check. | Every caller of the asynchronous write path. | **[ACTION NOW]** — recorded as consequence 4.2.2 with its evidence and stated as a target in decision rule 5, so the gap is visible in this batch rather than carried silently. |
-| B3 | It is unresolved which gateway configuration production uses, so it cannot be stated whether the asynchronous write path this record completes is the live one. | Anyone reasoning about how writes behave in production. | **[handled later by the batch 4 authoring stage, in the record covering the deployment path]** — the two container stacks disagree, as recorded in `ADR-017`. |
+| # | Blocker | Blocks | Owner | Resolution Path | Target Date |
+| --- | --- | --- | --- | --- | --- |
+| B1 | **[handled later by the architecture PR review stage]** No repository in the workspace names an owner, a team or a review group, so this record cannot list deciders | This ADR leaving `Proposed`, and rules 5 and 6 in §2, which both need someone accountable | Platform owner (unassigned) | Name an owner per subsystem using the six groupings in `docs/architecture-inventory/repo-inventory.md` §4 and record them in this repository; the reviewer assigns deciders when the batch is reviewed as a whole | TBD |
+| B2 | **[ACTION NOW]** Anyone holding a correlation id can read the matching operation through an unauthenticated gateway route with no ownership check | Decision rule 5, and any statement that the platform's read surfaces are authenticated at the edge (`ADR-006`) | Platform security owner | Turn `auth` on for the `operations` route family in all four gateway configurations, then filter the read route and the stream by the caller identity the gateway binds into the request | TBD |
+| B3 | **[handled later by the batch 4 authoring stage, in the record covering the deployment path]** It is unresolved which gateway configuration production uses, so it cannot be stated whether the asynchronous write path this record completes is the live one | Whether this record describes live behaviour or an available mode, and the same question in `ADR-004` B2 and `ADR-017` B2 | Platform owner (unassigned) | Read `NTRADA_CONFIG` in each environment and record the answer once, in `ADR-017`, with this record and `ADR-005` referring to it | TBD |
 
 ### Open Questions
 
-| ID | Question | Why it matters | Owner |
-| --- | --- | --- | --- |
-| Q1 | Should the read route and the stream restrict results to the caller who created the operation? | Rule 5 says they should. Doing it needs a caller identity on both surfaces, which the read route does not currently receive because the gateway route is open. | **[ACTION NOW]** — stated as decision rule 5 with the evidence for the current behaviour, for the deciders assigned under B1 to schedule. |
-| Q2 | Is three hundred seconds a deliberate bound, and does it hold for long-running processes? | If a process can outlive its operation entry, the caller is silently left without a result — which is assumption A3's failure mode. | **[handled later by the architecture PR review stage]** |
-| Q3 | Should the streaming surface be removed rather than repaired? | It duplicates the push channel, has no identity filter, never terminates, and splits its output between concurrent subscribers. Removing it is less work than fixing it, but something may depend on it. | **[ACTION NOW]** — both options are stated here with the defects that motivate the question, for the deciders assigned under B1 to choose between. |
-| Q4 | Should the edge write mode be selectable per route rather than per gateway configuration? | This is the question `ADR-005` handed to this record. A per-route choice would let reads and simple writes answer directly while long processes use the observer, but it splits one clear rule into a per-route decision that has to be maintained across four configuration files. | **[handled later by the batch 4 authoring stage, in the record covering the gateway configuration set]** |
+| # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
+| --- | --- | --- | --- | --- |
+| Q1 | **[ACTION NOW]** Should the read route and the stream restrict results to the caller who created the operation? | Rule 5 says they should. Doing it needs a caller identity on both surfaces, which the read route does not currently receive because the gateway route is open | Yes — authenticate the route at the edge and store the creating user alongside the operation, so both the read route and the stream can filter on it as the push channel already does | Platform security owner |
+| Q2 | **[handled later by the architecture PR review stage]** Is three hundred seconds a deliberate bound, and does it hold for long-running processes? | If a process can outlive its operation entry, the caller is silently left without a result — which is assumption A3's failure mode | Measure first (A3's validation path), then set the expiry to comfortably exceed the slowest observed process and record the reason next to the setting | Platform owner |
+| Q3 | **[ACTION NOW]** Should the streaming surface be removed rather than repaired? | It duplicates the push channel, has no identity filter, never terminates, and splits its output between concurrent subscribers. Removing it is less work than fixing it, but something may depend on it | Remove it. The push channel serves the same consumer shape and is already identity-aware; the only known consumer is a sample client that is not deployed (consequence 4.3.3) | Platform owner |
+| Q4 | **[handled later by the batch 4 authoring stage, in the record covering the gateway configuration set]** Should the edge write mode be selectable per route rather than per gateway configuration? | This is the question `ADR-005` handed to this record. A per-route choice would let reads and simple writes answer directly while long processes use the observer, but it splits one clear rule into a per-route decision that has to be maintained across four configuration files | Keep the mode per configuration until B3 is closed; a per-route split multiplies the ambiguity that B3 already records rather than resolving it | Platform owner |
 
