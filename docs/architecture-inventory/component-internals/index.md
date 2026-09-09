@@ -65,11 +65,11 @@ absence from §1 means *not yet modelled* — it does not mean the component was
 Neither remaining entry will resolve into a conventional service model, and both were called out in
 advance:
 
-- **`Pacco`** has no `*.csproj` at all (`service-summaries.md` §3). Its model is an environment and
-  composition model, not a code-internals model.
-- **`Pacco.Web`** is a single-line `README.md` at commit `b3bf026` with no `src/`, no `package.json`
-  and no `Dockerfile`. There are no internals to model; whatever is written for it will be
-  **`Unverifiable — Missing Source Evidence`** by construction.
+1. **`Pacco`** has no `*.csproj` at all (`service-summaries.md` §3). Its model is an environment and
+   composition model, not a code-internals model.
+2. **`Pacco.Web`** is a single-line `README.md` at commit `b3bf026` with no `src/`, no `package.json`
+   and no `Dockerfile`. There are no internals to model; whatever is written for it will be
+   **`Unverifiable — Missing Source Evidence`** by construction.
 
 ## 3. Document conventions
 
@@ -89,13 +89,13 @@ document, see the variations below — plus a `Contents` list immediately after 
 
 Two variations are in use and both are accepted:
 
-- **Cross-references** appear as a top-level `## 9. Cross-references` in the batch-1 models
-  (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
-  what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
-  `Baseline reconciliation`). New models should prefer the `§8.4` form.
-- **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
-  `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
-  is identical.
+1. **Cross-references** appear as a top-level `## 9. Cross-references` in the batch-1 models
+   (`api-gateway`, `availability-service`) and as a `### 8.4` subsection in batches 2–4, titled for
+   what it holds in that document (`Cross-references`, `Related patterns`, `Explicitly unverifiable`,
+   `Baseline reconciliation`). New models should prefer the `§8.4` form.
+2. **Section 2/3 titles** are `Core concepts (exhaustive)` / `Per concept` in nine models and
+   `Core concepts` / `Concept-by-concept model` in `ordermaker-saga-service.md`. The content contract
+   is identical.
 
 Other conventions that hold across the folder:
 
@@ -114,6 +114,11 @@ Other conventions that hold across the folder:
    `parcels-service.md`; the last two state it as an explicit `§7.9` with a per-area table. It
    applies to every model in this folder regardless of whether the individual document restates it;
    new models should state it explicitly.
+5. **Enumerated points are written as numbered lists, not bullet lists**, so a reader and a reviewer
+   can refer to an individual point by its number. This index and the batch-6 models
+   (`pricing-service.md`, `vehicles-service.md`) follow the convention throughout; the models from
+   batches 1–5 still carry bullet lists in places and are to be converted the next time each is
+   revised. Tables remain the preferred form wherever the points share a common set of columns.
 
 ## 4. Naming notes and known discrepancies
 

@@ -79,34 +79,34 @@ on the platform:
 
 ### 1.2 What this component explicitly is **not**
 
-- **Not a bounded context.** It owns no aggregate, no invariant over persisted state, and no
-  lifecycle. `Core/Entities/Customer.cs` is a request-scoped calculation input, not an entity with
-  identity — it does not even keep the id it is handed (§3.3). `service-summaries.md` §2.4 already
-  states this; this document confirms it from the code and adds the reason.
-- **Not the owner of the discount inputs.** VIP status and the completed-order set are
-  `customers-service` data, read over HTTP on every call (§3.9). This service has **no cache, no
-  replica and no fallback**: if `customers-service` is unavailable, pricing is unavailable.
-- **Not an authenticator or an authorizer.** There is no `AddJwt`, no `UseAuthentication`, no
-  `UseAuthorization` and no `[Authorize]` anywhere in `src/`. The `jwt` block in `appsettings.json`
-  and the committed `certs/localhost.cer` are **inert configuration no code reads** (§3.21). The
-  only security registration is `AddSecurity()` (`…Api/Infrastructure/Extensions.cs:37`), which
-  registers Convey's cryptography helpers and is **never injected anywhere** (§3.22). Access control
-  happens exclusively at the gateway (§3.33).
-- **Not a certificate-presenting client.** Unlike `availability-service`, which attaches a
-  Vault-PKI client certificate before calling `customers-service`
-  (`hianshul100_Pacco.Services.Availability/…/Clients/CustomersServiceClient.cs:16-34`), this
-  service's client constructor takes **only** `IHttpClient` and `HttpClientOptions` and sets no
-  headers (`…Api/Services/Clients/CustomersServiceClient.cs:13-17`). It calls a service that has
-  certificate authentication switched on. See **B-1** and **Q-1**.
-- **Not a currency-aware calculator.** `decimal` is used throughout, but no currency code, no
-  rounding, no minor-unit handling and no locale appear anywhere. The service returns full-precision
-  `decimal` products (§3.35).
-- **Not idempotency-sensitive.** It performs no writes, so repeat calls are harmless — but it is also
-  **not** deterministic across time, because the answer depends on `customers-service` state at the
-  moment of the call.
-- **Not tested.** There is no test project. `scripts/test.sh` runs `dotnet test`, which over this
-  solution discovers nothing and exits successfully — a green CI step that asserts nothing (§3.30).
-- **Not an aggregator.** It calls one service. It does not fan out, join, or orchestrate.
+1. **Not a bounded context.** It owns no aggregate, no invariant over persisted state, and no
+   lifecycle. `Core/Entities/Customer.cs` is a request-scoped calculation input, not an entity with
+   identity — it does not even keep the id it is handed (§3.3). `service-summaries.md` §2.4 already
+   states this; this document confirms it from the code and adds the reason.
+2. **Not the owner of the discount inputs.** VIP status and the completed-order set are
+   `customers-service` data, read over HTTP on every call (§3.9). This service has **no cache, no
+   replica and no fallback**: if `customers-service` is unavailable, pricing is unavailable.
+3. **Not an authenticator or an authorizer.** There is no `AddJwt`, no `UseAuthentication`, no
+   `UseAuthorization` and no `[Authorize]` anywhere in `src/`. The `jwt` block in `appsettings.json`
+   and the committed `certs/localhost.cer` are **inert configuration no code reads** (§3.21). The
+   only security registration is `AddSecurity()` (`…Api/Infrastructure/Extensions.cs:37`), which
+   registers Convey's cryptography helpers and is **never injected anywhere** (§3.22). Access control
+   happens exclusively at the gateway (§3.33).
+4. **Not a certificate-presenting client.** Unlike `availability-service`, which attaches a
+   Vault-PKI client certificate before calling `customers-service`
+   (`hianshul100_Pacco.Services.Availability/…/Clients/CustomersServiceClient.cs:16-34`), this
+   service's client constructor takes **only** `IHttpClient` and `HttpClientOptions` and sets no
+   headers (`…Api/Services/Clients/CustomersServiceClient.cs:13-17`). It calls a service that has
+   certificate authentication switched on. See **B-1** and **Q-1**.
+5. **Not a currency-aware calculator.** `decimal` is used throughout, but no currency code, no
+   rounding, no minor-unit handling and no locale appear anywhere. The service returns full-precision
+   `decimal` products (§3.35).
+6. **Not idempotency-sensitive.** It performs no writes, so repeat calls are harmless — but it is also
+   **not** deterministic across time, because the answer depends on `customers-service` state at the
+   moment of the call.
+7. **Not tested.** There is no test project. `scripts/test.sh` runs `dotnet test`, which over this
+   solution discovers nothing and exits successfully — a green CI step that asserts nothing (§3.30).
+8. **Not an aggregator.** It calls one service. It does not fan out, join, or orchestrate.
 
 ### 1.3 The single-transport boundary
 
@@ -342,15 +342,15 @@ changing this method.
 
 **Invariants & enforcement.**
 
-- **`CompletedOrders` is dereferenced without a null check.** If `customers-service` returns a
-  customer whose `completedOrders` is absent or `null`, `.Count()` throws
-  `ArgumentNullException`. That is **not** an `AppException`, so `ExceptionToResponseMapper` falls
-  through to its generic arm and the caller receives `400 {code:"error", reason:"There was an
-  error."}` (§3.13) — a 400 for what is a server-side null dereference. The one-character fix is
-  `dto.CompletedOrders?.Count() ?? 0`.
-- **`.Count()` on `IEnumerable<Guid>` is O(n)** but enumerates a materialised array here, so cost is
-  negligible.
-- The `id` argument is passed and then discarded by the constructor (§3.3).
+1. **`CompletedOrders` is dereferenced without a null check.** If `customers-service` returns a
+   customer whose `completedOrders` is absent or `null`, `.Count()` throws
+   `ArgumentNullException`. That is **not** an `AppException`, so `ExceptionToResponseMapper` falls
+   through to its generic arm and the caller receives `400 {code:"error", reason:"There was an
+   error."}` (§3.13) — a 400 for what is a server-side null dereference. The one-character fix is
+   `dto.CompletedOrders?.Count() ?? 0`.
+2. **`.Count()` on `IEnumerable<Guid>` is O(n)** but enumerates a materialised array here, so cost is
+   negligible.
+3. The `id` argument is passed and then discarded by the constructor (§3.3).
 
 **Extension procedure.** To weight the discount by anything other than raw count, this is the seam:
 change `Customer` to carry the collection (or a derived score), change this mapping, then change
@@ -389,12 +389,12 @@ class holds nothing.
 
 **Invariants & enforcement.**
 
-- Bands are **contiguous and exhaustive** over the integers — verified by reading the chain: every
-  `int` lands in exactly one arm. Negative counts fall to the `0.0m` initialiser.
-- The ladder is **monotonic** in completed orders.
-- **Nothing enforces that the bands stay contiguous.** Editing `> 3` to `> 5` opens a silent gap
-  where counts 4–5 fall through to `0.0m` — no exception, no log, just a smaller discount. There is
-  no test to catch it (§3.30).
+1. Bands are **contiguous and exhaustive** over the integers — verified by reading the chain: every
+   `int` lands in exactly one arm. Negative counts fall to the `0.0m` initialiser.
+2. The ladder is **monotonic** in completed orders.
+3. **Nothing enforces that the bands stay contiguous.** Editing `> 3` to `> 5` opens a silent gap
+   where counts 4–5 fall through to `0.0m` — no exception, no log, just a smaller discount. There is
+   no test to catch it (§3.30).
 
 **Extension procedure.** To make the ladder configurable: introduce an options type bound from
 `appsettings.json`, register it in `…Api/Infrastructure/Extensions.cs`, and inject it here. Note the
@@ -418,12 +418,12 @@ duplicated nowhere and documented nowhere, the only statement of the business ru
 
 **Invariants & enforcement.**
 
-- The composed discount is bounded: maximum `0.10 + 0.10 = 0.20`, minimum `0.00`. **This bound is
-  emergent, not asserted** — no clamp exists. Raise the top band to `0.95` and add the VIP bonus and
-  the service will happily return `1.05`, producing a *negative* discounted price, which the `> 0`
-  fallback (§3.8) then converts back into the full price. The failure is invisible.
-- The bonus is **additive, not multiplicative** — a VIP with 10+ orders pays 80% of list, not
-  `0.9 × 0.9 = 81%`. Worth stating because both readings are plausible from the field name.
+1. The composed discount is bounded: maximum `0.10 + 0.10 = 0.20`, minimum `0.00`. **This bound is
+   emergent, not asserted** — no clamp exists. Raise the top band to `0.95` and add the VIP bonus and
+   the service will happily return `1.05`, producing a *negative* discounted price, which the `> 0`
+   fallback (§3.8) then converts back into the full price. The failure is invisible.
+2. The bonus is **additive, not multiplicative** — a VIP with 10+ orders pays 80% of list, not
+   `0.9 × 0.9 = 81%`. Worth stating because both readings are plausible from the field name.
 
 **Extension procedure.** Any new bonus should be added here and a clamp
 (`Math.Min(discount, MaxDiscount)`) introduced at the same time; the clamp is the missing invariant,
@@ -436,8 +436,8 @@ was renamed upstream (§3.4) removes the bonus with no diagnostic.
 
 **Definition.** In the handler (`…Api/Queries/Handlers/GetOrderPricingHandler.cs:35,41-46`):
 
-- `orderDiscountPrice = query.OrderPrice - customerDiscount * query.OrderPrice`
-- the DTO's `OrderDiscountPrice` is set to `orderDiscountPrice > 0 ? orderDiscountPrice : query.OrderPrice`
+1. `orderDiscountPrice = query.OrderPrice - customerDiscount * query.OrderPrice`
+2. the DTO's `OrderDiscountPrice` is set to `orderDiscountPrice > 0 ? orderDiscountPrice : query.OrderPrice`
 
 **Representation & storage.** `decimal` throughout — the correct choice for money, and consistently
 applied (`OrderPrice`, `CustomerDiscount`, `OrderDiscountPrice` are all `decimal`). No rounding is
@@ -596,13 +596,13 @@ of exception types in the assembly, unbounded growth is not a practical risk.
 
 **Invariants & enforcement.**
 
-- **`Code` is authoritative when set, derived otherwise.** The derivation is a fallback, not a
-  convention check: nothing verifies that an explicit `Code` matches what the derivation would
-  produce. Here it happens to: `CustomerNotFoundException` → `customer_not_found` either way.
-- The cache is keyed on `Type`, and the first observed instance's `Code` wins for all later instances.
-  Since `Code` is a fixed initialiser on the only subclass, this is currently safe. **An
-  `AppException` subclass whose `Code` varied per instance would be silently pinned to whichever value
-  was thrown first** — a real trap for anyone adding a parameterised code.
+1. **`Code` is authoritative when set, derived otherwise.** The derivation is a fallback, not a
+   convention check: nothing verifies that an explicit `Code` matches what the derivation would
+   produce. Here it happens to: `CustomerNotFoundException` → `customer_not_found` either way.
+2. The cache is keyed on `Type`, and the first observed instance's `Code` wins for all later instances.
+   Since `Code` is a fixed initialiser on the only subclass, this is currently safe. **An
+   `AppException` subclass whose `Code` varied per instance would be silently pinned to whichever value
+   was thrown first** — a real trap for anyone adding a parameterised code.
 
 **Extension procedure.** Subclass `AppException`, set `Code` with an initialiser (not a
 constructor-computed value, per the caching caveat), and — if the caller needs a status other than
@@ -666,15 +666,15 @@ the request, dispatches, and serializes the returned `OrderPricingDto` `[convey]
 
 **Invariants & enforcement.**
 
-- **The query type must have a public parameterless constructor and settable properties.** Both hold
-  (§3.1). Nothing enforces it; a query with get-only properties would bind to defaults silently —
-  this is exactly the failure `vehicles-service` exhibits on its AMQP delete path
-  (`component-internals/vehicles-service.md` §3.13).
-- **The handler must be discoverable.** `AddQueryHandlers()` scans the assembly
-  (`…Api/Infrastructure/Extensions.cs:29`) `[convey]`; a handler in a different assembly would not be
-  found, and the failure surfaces as a DI resolution error at request time, not at startup.
-- There is **no route-level authorization**: `UseDispatcherEndpoints` accepts an optional auth
-  argument in other services, and it is not used here.
+1. **The query type must have a public parameterless constructor and settable properties.** Both hold
+   (§3.1). Nothing enforces it; a query with get-only properties would bind to defaults silently —
+   this is exactly the failure `vehicles-service` exhibits on its AMQP delete path
+   (`component-internals/vehicles-service.md` §3.13).
+2. **The handler must be discoverable.** `AddQueryHandlers()` scans the assembly
+   (`…Api/Infrastructure/Extensions.cs:29`) `[convey]`; a handler in a different assembly would not be
+   found, and the failure surfaces as a DI resolution error at request time, not at startup.
+3. There is **no route-level authorization**: `UseDispatcherEndpoints` accepts an optional auth
+   argument in other services, and it is not used here.
 
 **Extension procedure.** A new read is three files: the query, the handler, and one line in
 `Program.cs`. A new *write* would be a much larger change — this service has no command dispatcher,
@@ -1046,15 +1046,15 @@ no `vault.lease` section: a rotated value takes effect only on restart.
 
 **Invariants & enforcement.**
 
-- **KV overrides are invisible in the repository.** Any key in this document's tables can be
-  different at runtime if `kv/pricing-service/settings` sets it. That includes
-  `httpClient.services.customers`. Nothing in the code logs the effective value.
-- **Vault is disabled in both non-production profiles**: `appsettings.local.json:37-44` and
-  `appsettings.docker.json:75-84` set `enabled: false` for the section and both sub-sections. So the
-  *only* profile that exercises Vault is the base one — the least-tested path.
-- PKI is enabled and unused: a certificate is requested at startup and discarded. That is a
-  **wasted Vault round-trip on every boot** and, more importantly, a strong signal that certificate
-  authentication was intended here (§3.34).
+1. **KV overrides are invisible in the repository.** Any key in this document's tables can be
+   different at runtime if `kv/pricing-service/settings` sets it. That includes
+   `httpClient.services.customers`. Nothing in the code logs the effective value.
+2. **Vault is disabled in both non-production profiles**: `appsettings.local.json:37-44` and
+   `appsettings.docker.json:75-84` set `enabled: false` for the section and both sub-sections. So the
+   *only* profile that exercises Vault is the base one — the least-tested path.
+3. PKI is enabled and unused: a certificate is requested at startup and discarded. That is a
+   **wasted Vault round-trip on every boot** and, more importantly, a strong signal that certificate
+   authentication was intended here (§3.34).
 
 **Extension procedure.** To make this service present its Vault certificate to `customers-service`,
 the change is: read the issued certificate from Convey's Vault integration and attach it as a header
@@ -1177,15 +1177,15 @@ can document `GET /pricing` at all despite there being no action method.
 
 **Invariants & enforcement.** Two things to know:
 
-- **It is enabled in every profile**, including `docker` (`appsettings.docker.json:66-74`), and
-  neither `local` nor `docker` turns it off. The API documentation is therefore reachable from
-  anywhere that can reach port 5008 — which is also anywhere that can call the service
-  unauthenticated (§3.21).
-- `includeSecurity: true` adds an authorization affordance to the generated document, describing a
-  security scheme this service does not implement (§3.21) — a second place where the repository
-  advertises auth it does not have.
-- `/docs` is **not** in `logger.excludePaths` or `jaeger.excludePaths`, so documentation hits are
-  logged and traced like real traffic.
+1. **It is enabled in every profile**, including `docker` (`appsettings.docker.json:66-74`), and
+   neither `local` nor `docker` turns it off. The API documentation is therefore reachable from
+   anywhere that can reach port 5008 — which is also anywhere that can call the service
+   unauthenticated (§3.21).
+2. `includeSecurity: true` adds an authorization affordance to the generated document, describing a
+   security scheme this service does not implement (§3.21) — a second place where the repository
+   advertises auth it does not have.
+3. `/docs` is **not** in `logger.excludePaths` or `jaeger.excludePaths`, so documentation hits are
+   logged and traced like real traffic.
 
 Note the contrast with services that publish message contracts: this service does **not** call
 `UsePublicContracts<T>()` (compare `component-internals/vehicles-service.md` §3.34), because it has no
@@ -1369,15 +1369,15 @@ also the one behaviour of the pricing surface that is **not implemented in this 
 
 Two subtleties:
 
-- **The async profile does not change pricing.** Every other write-capable module gains
-  `use: rabbitmq` routes in `ntrada-async.yml`; pricing stays `downstream` because it is a read with a
-  synchronous answer ([[dual-mode-edge-write]] does not apply). It is a useful negative example of
-  where that pattern stops.
-- **Precedence of the two `customerId` values is `[ntrada]`-owned.** If a caller supplies
-  `?customerId=<someone-else>` and `passQueryString` merges it with the template's `@user_id`, which
-  wins is not determinable from this workspace — **`Unverifiable — Missing Source Evidence`**, recorded
-  as **Q-2**. It is the single most security-relevant unknown in this model, because the whole
-  isolation guarantee rests on it.
+1. **The async profile does not change pricing.** Every other write-capable module gains
+   `use: rabbitmq` routes in `ntrada-async.yml`; pricing stays `downstream` because it is a read with a
+   synchronous answer ([[dual-mode-edge-write]] does not apply). It is a useful negative example of
+   where that pattern stops.
+2. **Precedence of the two `customerId` values is `[ntrada]`-owned.** If a caller supplies
+   `?customerId=<someone-else>` and `passQueryString` merges it with the template's `@user_id`, which
+   wins is not determinable from this workspace — **`Unverifiable — Missing Source Evidence`**, recorded
+   as **Q-2**. It is the single most security-relevant unknown in this model, because the whole
+   isolation guarantee rests on it.
 
 **Extension procedure.** Adding a query parameter to `GET /pricing` requires editing the `downstream`
 template in **all four** `ntrada*.yml` files, or the parameter reaches the service only on some
@@ -1455,18 +1455,18 @@ significant digits, no binary rounding drift. That part is correct and consisten
 
 **Invariants & enforcement.**
 
-- **Results are not rounded.** With the fixed discount rates (`0.02`, `0.05`, `0.1`, `0.2`) and a
-  price with two decimal places, the product has at most four decimal places — e.g.
-  `99.99 × 0.95 = 94.9905`. The service returns `94.9905`, and **whoever displays or charges it owns
-  the rounding**. `orders-service` stores the returned value
-  (`hianshul100_Pacco.Services.Orders/…/Clients/PricingServiceClient.cs:20-21`) without rounding it.
-- **`CustomerDiscount` is a ratio in `[0, 0.2]`**, not a percentage and not an amount — yet the only
-  log line labels it `"$"` (`…Api/Queries/Handlers/GetOrderPricingHandler.cs:38`). A reader of Seq
-  will see `discount: 0.15 $` and reasonably conclude it is money. **The field name is right and the
-  log label is wrong**; the response contract carries no unit information either way.
-- **There is no currency.** The platform has no multi-currency concept anywhere, so this is
-  consistent — but it means adding one later touches this contract, `orders-service`'s copy of it, and
-  the discount arithmetic.
+1. **Results are not rounded.** With the fixed discount rates (`0.02`, `0.05`, `0.1`, `0.2`) and a
+   price with two decimal places, the product has at most four decimal places — e.g.
+   `99.99 × 0.95 = 94.9905`. The service returns `94.9905`, and **whoever displays or charges it owns
+   the rounding**. `orders-service` stores the returned value
+   (`hianshul100_Pacco.Services.Orders/…/Clients/PricingServiceClient.cs:20-21`) without rounding it.
+2. **`CustomerDiscount` is a ratio in `[0, 0.2]`**, not a percentage and not an amount — yet the only
+   log line labels it `"$"` (`…Api/Queries/Handlers/GetOrderPricingHandler.cs:38`). A reader of Seq
+   will see `discount: 0.15 $` and reasonably conclude it is money. **The field name is right and the
+   log label is wrong**; the response contract carries no unit information either way.
+3. **There is no currency.** The platform has no multi-currency concept anywhere, so this is
+   consistent — but it means adding one later touches this contract, `orders-service`'s copy of it, and
+   the discount arithmetic.
 
 **Extension procedure.** If rounding is ever needed, it belongs *after* the discount computation and
 *before* the DTO, as `Math.Round(orderDiscountPrice, 2, MidpointRounding.ToEven)`, and it must be

@@ -67,38 +67,38 @@ live defect or trap (§3.4, §3.13, §3.18, §3.45).
 
 ### 1.2 What this component explicitly is **not**
 
-- **Not an aggregate root with buffered domain events.** `Vehicle` has no `AggregateRoot` base, no
-  `Events` collection, no `Version` and no `ClearEvents` (`…Core/Entities/Vehicle.cs:6-16`). Compare
-  `customers-service`, where `AggregateRoot` supplies exactly that
-  (`component-internals/customers-service.md` §3.2). Here, **integration events are published by the
-  command handler**, not raised by the entity ([[aggregate-buffered-domain-events]] is *not*
-  instantiated — §3.14).
-- **Not the owner of vehicle availability or booking.** A vehicle's *bookability* lives in
-  `availability-service` as a `Resource`; this service only tells that service when a vehicle
-  disappears (§3.47). It holds no calendar, no reservation and no state machine.
-- **Not the owner of pricing.** `PricePerService` is a per-vehicle number stored here and read by
-  `orders-service` (`hianshul100_Pacco.Services.Orders/…/Clients/VehiclesServiceClient.cs:20-21`);
-  the discount ladder that turns an order price into a final price lives in `pricing-service`
-  (`component-internals/pricing-service.md` §3.6). The two never meet inside this repository.
-- **Not an authenticator or an authorizer.** There is **no `AddCertificateAuthentication()`**, no
-  `security` section in any profile, no `AddJwt`, and no `[Authorize]`. The `jwt` block
-  (`appsettings.json:77-85`) and the committed `certs/localhost.cer` are inert (§3.41). All five
-  vehicle routes are `auth: true` **at the gateway** (`ntrada.yml:418-451`) and unauthenticated at
-  the service. Anything that can reach port 5009 can delete any vehicle.
-- **Not identity-aware.** `IAppContext` and `IIdentityContext` are fully defined and fully wired
-  (§3.38) and **injected by nothing** (§3.40). `IsAdmin` is computed and never read.
-- **Not a caller of any other service.** `httpClient.services` is an **empty object** in all three
-  populated profiles (`appsettings.json:26`, `appsettings.local.json:12`,
-  `appsettings.docker.json:25`), and no client class exists. `AddHttpClient()`
-  (`…Infrastructure/Extensions.cs:60`) is registered for nothing.
-- **Not a subscriber to any external event.** There is no `Events/External` folder and no
-  `SubscribeEvent<T>()` call. It subscribes only to its **own three commands** (§3.32). Traffic flows
-  out of this service, never in — except as commands.
-- **Not transactional across the write and the publish.** `outbox.disableTransactions: true`
-  (`appsettings.json:107`) — set by the `HEAD` commit itself (`af43bcf`, "Updated outbox - disable
-  local TX") — removes the Mongo transaction that would otherwise make the state change and the
-  outbox insert atomic (§3.30).
-- **Not tested.** No test project (§3.46).
+1. **Not an aggregate root with buffered domain events.** `Vehicle` has no `AggregateRoot` base, no
+   `Events` collection, no `Version` and no `ClearEvents` (`…Core/Entities/Vehicle.cs:6-16`). Compare
+   `customers-service`, where `AggregateRoot` supplies exactly that
+   (`component-internals/customers-service.md` §3.2). Here, **integration events are published by the
+   command handler**, not raised by the entity ([[aggregate-buffered-domain-events]] is *not*
+   instantiated — §3.14).
+2. **Not the owner of vehicle availability or booking.** A vehicle's *bookability* lives in
+   `availability-service` as a `Resource`; this service only tells that service when a vehicle
+   disappears (§3.47). It holds no calendar, no reservation and no state machine.
+3. **Not the owner of pricing.** `PricePerService` is a per-vehicle number stored here and read by
+   `orders-service` (`hianshul100_Pacco.Services.Orders/…/Clients/VehiclesServiceClient.cs:20-21`);
+   the discount ladder that turns an order price into a final price lives in `pricing-service`
+   (`component-internals/pricing-service.md` §3.6). The two never meet inside this repository.
+4. **Not an authenticator or an authorizer.** There is **no `AddCertificateAuthentication()`**, no
+   `security` section in any profile, no `AddJwt`, and no `[Authorize]`. The `jwt` block
+   (`appsettings.json:77-85`) and the committed `certs/localhost.cer` are inert (§3.41). All five
+   vehicle routes are `auth: true` **at the gateway** (`ntrada.yml:418-451`) and unauthenticated at
+   the service. Anything that can reach port 5009 can delete any vehicle.
+5. **Not identity-aware.** `IAppContext` and `IIdentityContext` are fully defined and fully wired
+   (§3.38) and **injected by nothing** (§3.40). `IsAdmin` is computed and never read.
+6. **Not a caller of any other service.** `httpClient.services` is an **empty object** in all three
+   populated profiles (`appsettings.json:26`, `appsettings.local.json:12`,
+   `appsettings.docker.json:25`), and no client class exists. `AddHttpClient()`
+   (`…Infrastructure/Extensions.cs:60`) is registered for nothing.
+7. **Not a subscriber to any external event.** There is no `Events/External` folder and no
+   `SubscribeEvent<T>()` call. It subscribes only to its **own three commands** (§3.32). Traffic flows
+   out of this service, never in — except as commands.
+8. **Not transactional across the write and the publish.** `outbox.disableTransactions: true`
+   (`appsettings.json:107`) — set by the `HEAD` commit itself (`af43bcf`, "Updated outbox - disable
+   local TX") — removes the Mongo transaction that would otherwise make the state change and the
+   outbox insert atomic (§3.30).
+9. **Not tested.** No test project (§3.46).
 
 ### 1.3 The dual-transport command surface
 
@@ -1265,14 +1265,14 @@ rejection reaches the caller.
 
 The reachable silent drops are not hypothetical:
 
-- **`DeleteVehicle` + any `DomainException`.** `DeleteVehicleHandler` reads the vehicle first
-  (`DeleteVehicleHandler.cs:23`), which rehydrates through the constructor and can throw
-  `InvalidVehicleCapacity` (§3.8). The first three rows have no `DeleteVehicle` arm → `null` → the
-  async caller waits forever for an outcome that never comes.
-- **`AddVehicle` + `VehicleNotFoundException`.** Not reachable today, but the arm is `null`.
-- **Any infrastructure exception** — a Mongo timeout, a serialisation failure, a
-  `NullReferenceException` — hits `:39` and is dropped for **all three commands**. Over HTTP the same
-  exception at least produces a 400 (§3.26). Over AMQP it produces nothing at all.
+1. **`DeleteVehicle` + any `DomainException`.** `DeleteVehicleHandler` reads the vehicle first
+   (`DeleteVehicleHandler.cs:23`), which rehydrates through the constructor and can throw
+   `InvalidVehicleCapacity` (§3.8). The first three rows have no `DeleteVehicle` arm → `null` → the
+   async caller waits forever for an outcome that never comes.
+2. **`AddVehicle` + `VehicleNotFoundException`.** Not reachable today, but the arm is `null`.
+3. **Any infrastructure exception** — a Mongo timeout, a serialisation failure, a
+   `NullReferenceException` — hits `:39` and is dropped for **all three commands**. Over HTTP the same
+   exception at least produces a 400 (§3.26). Over AMQP it produces nothing at all.
 
 So the async surface reports **domain validation failures on two of three commands** and is silent
 about everything else. That is the failure contract, and it is much narrower than it looks.
@@ -1317,14 +1317,14 @@ but it means removing the config key changes nothing, which is worth knowing.
 
 **Invariants & enforcement.** Three things are enforced here and each has a consequence.
 
-- **Message ids are always fresh.** `:74` generates a new `Guid` per event with no deterministic
-  input. So **an event's id is not derivable from the command that caused it**, and re-publishing the
-  same logical event after a retry produces a different id. Any consumer-side deduplication keyed on
-  message id therefore cannot deduplicate this service's events across retries. `originatedMessageId`
-  (`:55`) is the only causal link, and it is null whenever the trigger arrived over HTTP.
-- **Null events are skipped, not rejected.** `:69-72`. A handler that publishes `null` succeeds.
-- **The outbox is chosen at publish time, per event.** `:76` reads `_outbox.Enabled` on every call, so
-  toggling `outbox.enabled` in configuration changes behaviour without code change (§3.30).
+1. **Message ids are always fresh.** `:74` generates a new `Guid` per event with no deterministic
+   input. So **an event's id is not derivable from the command that caused it**, and re-publishing the
+   same logical event after a retry produces a different id. Any consumer-side deduplication keyed on
+   message id therefore cannot deduplicate this service's events across retries. `originatedMessageId`
+   (`:55`) is the only causal link, and it is null whenever the trigger arrived over HTTP.
+2. **Null events are skipped, not rejected.** `:69-72`. A handler that publishes `null` succeeds.
+3. **The outbox is chosen at publish time, per event.** `:76` reads `_outbox.Enabled` on every call, so
+   toggling `outbox.enabled` in configuration changes behaviour without code change (§3.30).
 
 The `LogTrace` at `:75` is effectively invisible: `logger.level` is `information`
 (`Api/appsettings.json:33`), so **the one log line that records a publish never fires in any
@@ -1443,19 +1443,19 @@ context on every publish and consume `[convey]`.
 
 **Invariants & enforcement.** Three consequences worth holding.
 
-- **The naming convention is the contract.** `conventionsCasing: snakeCase` is what makes the
-  gateway's async routing keys (`add_vehicle`, `update_vehicle`, `delete_vehicle` —
-  `ntrada-async.yml:500-529`) line up with the C# class names. **Renaming a command class silently
-  changes its routing key**, and the gateway's YAML does not move with it. There is no shared
-  constant and no test; the coupling is a string-transformation convention agreed in two repositories.
-  This is [[service-owned-topic-exchange-messaging]] plus
-  [[framework-supplied-platform-conventions]], and it is the platform's most fragile seam.
-- **One queue per message type** (`{{exchange}}.{{message}}`) means each of the three commands has its
-  own queue, so a poison message on `delete_vehicle` cannot block `add_vehicle`. Good isolation,
-  obtained for free from the template.
-- **The Docker profile overrides only `hostnames`**, inheriting exchange, queue template, conventions
-  and headers from the base file. So the topology is genuinely identical across environments — the
-  one thing in this service's configuration that is (§3.44).
+1. **The naming convention is the contract.** `conventionsCasing: snakeCase` is what makes the
+   gateway's async routing keys (`add_vehicle`, `update_vehicle`, `delete_vehicle` —
+   `ntrada-async.yml:500-529`) line up with the C# class names. **Renaming a command class silently
+   changes its routing key**, and the gateway's YAML does not move with it. There is no shared
+   constant and no test; the coupling is a string-transformation convention agreed in two repositories.
+   This is [[service-owned-topic-exchange-messaging]] plus
+   [[framework-supplied-platform-conventions]], and it is the platform's most fragile seam.
+2. **One queue per message type** (`{{exchange}}.{{message}}`) means each of the three commands has its
+   own queue, so a poison message on `delete_vehicle` cannot block `add_vehicle`. Good isolation,
+   obtained for free from the template.
+3. **The Docker profile overrides only `hostnames`**, inheriting exchange, queue template, conventions
+   and headers from the base file. So the topology is genuinely identical across environments — the
+   one thing in this service's configuration that is (§3.44).
 
 **Extension procedure.** A new message type gets its queue automatically from the template. To
 subscribe to another service's exchange, declare the external event class with
@@ -1535,21 +1535,21 @@ dispatcher → serialise the result (queries) or run `afterDispatch` (the POST).
 
 **Invariants & enforcement.** Four things follow, and each matters.
 
-- **The route table is the API contract and it lives in `Program.cs`.** There is no controller to
-  search for, no attribute routing, and no OpenAPI-from-code. Anyone looking for "where is
-  `DELETE /vehicles` handled" must know to read `Program.cs` — the handler is found by *type*, not by
-  name.
-- **`afterDispatch` runs after the command is dispatched, and it is the only route that customises the
-  response.** The other two writes return whatever Convey's default is `[convey]` — almost certainly
-  `200`/`202`, **`Unverifiable — Missing Source Evidence`**. So POST returns `201 Created` with a
-  `Location` of `vehicles/{id}` and PUT/DELETE do not signal anything beyond success.
-- **`afterDispatch` reads `cmd.VehicleId` after dispatch**, which is why `AddVehicle`'s constructor
-  mints the id (§3.11) rather than the handler doing it: the response needs the id, and the command is
-  the only object both the dispatcher and the callback can see.
-- **Binding is by type, not by name.** `Get<GetVehicle, VehicleDto>` requires exactly one
-  `IQueryHandler<GetVehicle, VehicleDto>` in the container. A missing handler is a **DI resolution
-  failure at request time**, not at startup — the service boots healthy and 500s (well, 400s — §3.26)
-  on first use.
+1. **The route table is the API contract and it lives in `Program.cs`.** There is no controller to
+   search for, no attribute routing, and no OpenAPI-from-code. Anyone looking for "where is
+   `DELETE /vehicles` handled" must know to read `Program.cs` — the handler is found by *type*, not by
+   name.
+2. **`afterDispatch` runs after the command is dispatched, and it is the only route that customises the
+   response.** The other two writes return whatever Convey's default is `[convey]` — almost certainly
+   `200`/`202`, **`Unverifiable — Missing Source Evidence`**. So POST returns `201 Created` with a
+   `Location` of `vehicles/{id}` and PUT/DELETE do not signal anything beyond success.
+3. **`afterDispatch` reads `cmd.VehicleId` after dispatch**, which is why `AddVehicle`'s constructor
+   mints the id (§3.11) rather than the handler doing it: the response needs the id, and the command is
+   the only object both the dispatcher and the callback can see.
+4. **Binding is by type, not by name.** `Get<GetVehicle, VehicleDto>` requires exactly one
+   `IQueryHandler<GetVehicle, VehicleDto>` in the container. A missing handler is a **DI resolution
+   failure at request time**, not at startup — the service boots healthy and 500s (well, 400s — §3.26)
+   on first use.
 
 **Extension procedure.** A new route is one line here plus a command/query type plus a handler. If it
 is a write that should also be reachable asynchronously, add the `SubscribeCommand<T>()` line (§3.32).
@@ -1580,13 +1580,13 @@ exposes the marked types' JSON schemas on a well-known endpoint.
 consumer can discover the shape of `VehicleAdded` without reading this repository. The intent is
 undermined by two things.
 
-- **Nothing verifies that `[Contract]` is applied to everything published.** A new event without the
-  attribute is simply absent from the manifest, silently. Conversely, `[Contract]` on a type that is
-  never published advertises a contract that does not exist.
-- **No consumer in this workspace reads the manifest.** Every consuming service hand-writes its own
-  matching class (§3.27). The manifest is published and unused — the same shape of finding as
-  `VehicleAdded` having no subscriber (§3.27), and the reason `pricing-service.md` §3.28 notes the
-  absence of this call as a non-loss.
+1. **Nothing verifies that `[Contract]` is applied to everything published.** A new event without the
+   attribute is simply absent from the manifest, silently. Conversely, `[Contract]` on a type that is
+   never published advertises a contract that does not exist.
+2. **No consumer in this workspace reads the manifest.** Every consuming service hand-writes its own
+   matching class (§3.27). The manifest is published and unused — the same shape of finding as
+   `VehicleAdded` having no subscriber (§3.27), and the reason `pricing-service.md` §3.28 notes the
+   absence of this call as a non-loss.
 
 Note also that the manifest is **unauthenticated**, like everything else on this service (§3.41). It
 discloses the service's full message vocabulary to anything that can reach port 5009. That is a low
@@ -1746,22 +1746,22 @@ falls back to the HTTP header (`:30`); if neither yields anything it returns `Ap
 
 **Invariants & enforcement.** Three details are load-bearing.
 
-- **`IsAdmin` is derived, not transmitted.** `IdentityContext.cs:29` computes
-  `Role.Equals("admin", StringComparison.InvariantCultureIgnoreCase)`. The role string arrives from
-  the gateway inside the header; the boolean is this service's interpretation of it. **The string
-  `"admin"` is the authorization vocabulary and it is a literal in one file**, matched
-  case-insensitively.
-- **A malformed id degrades silently.** `Id = Guid.TryParse(id, out var userId) ? userId : Guid.Empty`
-  (`:26`). An unparseable user id becomes the empty `Guid` rather than an error, so a caller with a
-  corrupt identity looks like an anonymous caller with a valid-looking id.
-- **The header is attacker-controlled.** `GetCorrelationContext` deserialises whatever JSON is in the
-  `Correlation-Context` header with no signature, no validation and no authentication
-  (`…Infrastructure/Extensions.cs:94-95`). Anything that can reach port 5009 can assert
-  `{"user": {"role": "admin", "isAuthenticated": true}}` and this service will construct an
-  `IdentityContext` with `IsAdmin == true`. That is safe **today only because nothing reads it**
-  (§3.40) — it is a trust boundary that exists in code, is not enforced, and would become a
-  privilege-escalation path the moment the first authorization check is written against
-  `IAppContext`. Recorded as **B-1**; see §7.5 for the prerequisite to doing that safely.
+1. **`IsAdmin` is derived, not transmitted.** `IdentityContext.cs:29` computes
+   `Role.Equals("admin", StringComparison.InvariantCultureIgnoreCase)`. The role string arrives from
+   the gateway inside the header; the boolean is this service's interpretation of it. **The string
+   `"admin"` is the authorization vocabulary and it is a literal in one file**, matched
+   case-insensitively.
+2. **A malformed id degrades silently.** `Id = Guid.TryParse(id, out var userId) ? userId : Guid.Empty`
+   (`:26`). An unparseable user id becomes the empty `Guid` rather than an error, so a caller with a
+   corrupt identity looks like an anonymous caller with a valid-looking id.
+3. **The header is attacker-controlled.** `GetCorrelationContext` deserialises whatever JSON is in the
+   `Correlation-Context` header with no signature, no validation and no authentication
+   (`…Infrastructure/Extensions.cs:94-95`). Anything that can reach port 5009 can assert
+   `{"user": {"role": "admin", "isAuthenticated": true}}` and this service will construct an
+   `IdentityContext` with `IsAdmin == true`. That is safe **today only because nothing reads it**
+   (§3.40) — it is a trust boundary that exists in code, is not enforced, and would become a
+   privilege-escalation path the moment the first authorization check is written against
+   `IAppContext`. Recorded as **B-1**; see §7.5 for the prerequisite to doing that safely.
 
 Note also that `JsonConvert.DeserializeObject` on a malformed header throws
 (`…Infrastructure/Extensions.cs:95`), and since the factory is invoked per resolution, that would
@@ -1783,12 +1783,12 @@ is unreachable except through the gateway.
 
 **Definition.** Two `internal static` helpers in `…Infrastructure/Extensions.cs`:
 
-- `GetHeadersToForward(this IMessageProperties)` (`:98-112`) — looks for **one** header, the literal
-  `"Saga"` (`:100`), and returns a one-entry dictionary containing it, or `null` if it is absent or
-  its value is null (`:101-111`).
-- `GetSpanContext(this IMessageProperties, string header)` (`:114-127`) — reads the named header,
-  requires the value to be `byte[]` (`:121`), decodes it as UTF-8 (`:123`), and returns
-  `string.Empty` otherwise (`:118,126`).
+1. `GetHeadersToForward(this IMessageProperties)` (`:98-112`) — looks for **one** header, the literal
+   `"Saga"` (`:100`), and returns a one-entry dictionary containing it, or `null` if it is absent or
+   its value is null (`:101-111`).
+2. `GetSpanContext(this IMessageProperties, string header)` (`:114-127`) — reads the named header,
+   requires the value to be `byte[]` (`:121`), decodes it as UTF-8 (`:123`), and returns
+   `string.Empty` otherwise (`:118,126`).
 
 **Representation & storage.** Both operate on AMQP message headers. Their results feed
 `MessageBroker.PublishAsync` (`…Infrastructure/Services/MessageBroker.cs:57,63`).
@@ -1976,21 +1976,21 @@ life of the process.
 
 **Invariants & enforcement.** Three consequences.
 
-- **The Mongo credentials in `appsettings.json` are placeholders**, not real credentials — the
-  template at `:189` is `mongodb://{{username}}:{{password}}@localhost:27017`, and the real values
-  never touch the repository. This is the correct pattern and it is the reason no database credential
-  is committed anywhere in this repository. `vault.token: "secret"` (`:168`) is the one credential-ish
-  literal, and it is the unmodified development default rather than a real token — quoted here for
-  exactly that reason (§3.37).
-- **`autoRenewal: true` makes Vault a hard runtime dependency, not just a startup one.** If Vault
-  becomes unreachable mid-life and the lease expires, Mongo starts rejecting the service's
-  connections. The failure appears as database errors, not as a Vault error — a long way from the
-  cause.
-- **The template hard-codes `localhost:27017`** (`:189`). Combined with `vault.enabled: false` in the
-  Docker profile (`appsettings.docker.json:87-101`), the lease path is exercised only in the base
-  profile — which is production (§3.44) — where `localhost` is presumably correct only if Mongo runs
-  on the same host. Nothing in this workspace confirms that topology; **`Unverifiable — Missing Source
-  Evidence`**, recorded as **Q-4**.
+1. **The Mongo credentials in `appsettings.json` are placeholders**, not real credentials — the
+   template at `:189` is `mongodb://{{username}}:{{password}}@localhost:27017`, and the real values
+   never touch the repository. This is the correct pattern and it is the reason no database credential
+   is committed anywhere in this repository. `vault.token: "secret"` (`:168`) is the one credential-ish
+   literal, and it is the unmodified development default rather than a real token — quoted here for
+   exactly that reason (§3.37).
+2. **`autoRenewal: true` makes Vault a hard runtime dependency, not just a startup one.** If Vault
+   becomes unreachable mid-life and the lease expires, Mongo starts rejecting the service's
+   connections. The failure appears as database errors, not as a Vault error — a long way from the
+   cause.
+3. **The template hard-codes `localhost:27017`** (`:189`). Combined with `vault.enabled: false` in the
+   Docker profile (`appsettings.docker.json:87-101`), the lease path is exercised only in the base
+   profile — which is production (§3.44) — where `localhost` is presumably correct only if Mongo runs
+   on the same host. Nothing in this workspace confirms that topology; **`Unverifiable — Missing Source
+   Evidence`**, recorded as **Q-4**.
 
 **Extension procedure.** New secrets go in the KV path `vehicles-service/settings` and are read as
 ordinary configuration keys — no code change. To add a second dynamic credential (e.g. RabbitMQ), add
@@ -2026,19 +2026,19 @@ bind port `5009` (`:6,20`).
 
 **Invariants & enforcement.** The layering itself is sound. Three specific consequences are not.
 
-- **The base profile is the production profile.** `hianshul100_Pacco/prod-services.yml:56-58` runs
-  `vehicles` with `ASPNETCORE_URLS` set and **no `ASPNETCORE_ENVIRONMENT`**, so no overlay applies and
-  the service runs `appsettings.json` verbatim — including `consul.address: docker.for.win.localhost`
-  (B-3, §3.42) and `vault.token: "secret"` (B-2, §3.43). The development PM2 manifest
-  (`hianshul100_Pacco/services.yml:38-41`) sets neither variable, so it *also* runs the base profile,
-  on `dotnet run`.
-- **`appsettings.development.json` is empty**, so `ASPNETCORE_ENVIRONMENT=Development` — the .NET
-  default when nothing is set in many hosting setups — resolves to the base profile too. Three
-  distinct ways to end up on the production configuration by accident.
-- **Overlays are partial and the gaps matter.** `appsettings.docker.json` has **no `outbox` section**,
-  so it inherits `disableTransactions: true` (§3.30); it overrides **only** `rabbitMq.hostnames`
-  (`:69-73`), so exchange, queue template and conventions are shared with the base file (§3.31) —
-  which is good; and it disables Vault, so the dynamic Mongo lease never runs in containers (§3.43).
+1. **The base profile is the production profile.** `hianshul100_Pacco/prod-services.yml:56-58` runs
+   `vehicles` with `ASPNETCORE_URLS` set and **no `ASPNETCORE_ENVIRONMENT`**, so no overlay applies and
+   the service runs `appsettings.json` verbatim — including `consul.address: docker.for.win.localhost`
+   (B-3, §3.42) and `vault.token: "secret"` (B-2, §3.43). The development PM2 manifest
+   (`hianshul100_Pacco/services.yml:38-41`) sets neither variable, so it *also* runs the base profile,
+   on `dotnet run`.
+2. **`appsettings.development.json` is empty**, so `ASPNETCORE_ENVIRONMENT=Development` — the .NET
+   default when nothing is set in many hosting setups — resolves to the base profile too. Three
+   distinct ways to end up on the production configuration by accident.
+3. **Overlays are partial and the gaps matter.** `appsettings.docker.json` has **no `outbox` section**,
+   so it inherits `disableTransactions: true` (§3.30); it overrides **only** `rabbitMq.hostnames`
+   (`:69-73`), so exchange, queue template and conventions are shared with the base file (§3.31) —
+   which is good; and it disables Vault, so the dynamic Mongo lease never runs in containers (§3.43).
 
 **Extension procedure.** A new configuration key must be added to `appsettings.json` **and** to every
 overlay that would otherwise inherit an unusable value — in practice `local` (for anything requiring
@@ -2164,18 +2164,18 @@ the `.sln`, and `scripts/test.sh` starts doing something.
 
 **Invariants & enforcement.** Three points a maintainer needs.
 
-- **`orders-service` consumes 2 of the 8 fields.** Its local `VehicleDto` has only `Id` and
-  `PricePerService`, so **the `Variants` string-array quirk (§3.19) does not affect it** and the
-  read contract can be changed for the other six fields without breaking it. The two fields it does
-  read are effectively frozen: renaming `PricePerService` breaks order pricing silently, because JSON
-  deserialisation of a missing property yields `0` rather than an error — and a price of `0` flows
-  into `pricing-service`'s discount calculation
-  (`component-internals/pricing-service.md` §3.6) without any validation.
-- **The sync and async gateway modes expose different write semantics** for the same three routes
-  (§1.3), and both must be updated together when a route changes.
-- **The image, the compose service, the PM2 process and the Consul registration use three different
-  names** (`pacco.services.vehicles`, `vehicles-service`, `vehicles`). Add `jaeger.serviceName`
-  (§3.45) and the count is unchanged but the mapping is one more thing to know.
+1. **`orders-service` consumes 2 of the 8 fields.** Its local `VehicleDto` has only `Id` and
+   `PricePerService`, so **the `Variants` string-array quirk (§3.19) does not affect it** and the
+   read contract can be changed for the other six fields without breaking it. The two fields it does
+   read are effectively frozen: renaming `PricePerService` breaks order pricing silently, because JSON
+   deserialisation of a missing property yields `0` rather than an error — and a price of `0` flows
+   into `pricing-service`'s discount calculation
+   (`component-internals/pricing-service.md` §3.6) without any validation.
+2. **The sync and async gateway modes expose different write semantics** for the same three routes
+   (§1.3), and both must be updated together when a route changes.
+3. **The image, the compose service, the PM2 process and the Consul registration use three different
+   names** (`pacco.services.vehicles`, `vehicles-service`, `vehicles`). Add `jaeger.serviceName`
+   (§3.45) and the count is unchanged but the mapping is one more thing to know.
 
 **Extension procedure.** Adding a field to `VehicleDto` is backward-compatible for `orders-service`
 (it ignores unknown properties). **Removing or renaming `Id` or `PricePerService` is not**, and the
@@ -2361,17 +2361,17 @@ Several configuration keys are load-bearing enough that changing them is a schem
 There is **no migration mechanism** — no versioned documents, no `seed`, no startup migration hook, no
 migration project. Any schema change is a manual, out-of-band operation against Mongo. Concretely:
 
-- **Adding a nullable field:** free. Old documents read as `default`; update all three mappings
-  (§3.21).
-- **Adding a required field:** requires a backfill script, because the entity's constructor guards run
-  on **rehydration** (§3.8) — a document missing a guarded field makes that vehicle permanently
-  unreadable.
-- **Renaming a field:** a full-collection `$rename`, run while the service is stopped (there is no
-  dual-read support).
-- **Changing `Variants` to string representation:** backfill every document **and** rewrite the search
-  predicate (§3.22, §3.18). The two must ship together.
-- **Fixing the variant floor by data (§3.4 option b):** a backfill that is **self-undoing** — rehydration
-  re-ORs the bit (§3.5) — so the code change must land first.
+1. **Adding a nullable field:** free. Old documents read as `default`; update all three mappings
+   (§3.21).
+2. **Adding a required field:** requires a backfill script, because the entity's constructor guards run
+   on **rehydration** (§3.8) — a document missing a guarded field makes that vehicle permanently
+   unreadable.
+3. **Renaming a field:** a full-collection `$rename`, run while the service is stopped (there is no
+   dual-read support).
+4. **Changing `Variants` to string representation:** backfill every document **and** rewrite the search
+   predicate (§3.22, §3.18). The two must ship together.
+5. **Fixing the variant floor by data (§3.4 option b):** a backfill that is **self-undoing** — rehydration
+   re-ORs the bit (§3.5) — so the code change must land first.
 
 The practical rule: **code changes that alter how a document is read are riskier here than changes
 that alter how it is written**, because the read path runs the domain constructor on data that was
