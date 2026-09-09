@@ -9,7 +9,12 @@
 
 ## Scope and adoption of existing artifacts
 
-No Architecture Decision Record exists anywhere in scope, so **every candidate below is a new
+> This section describes the position when this backlog was written, before any ADR was generated.
+> As of 2026-09-09 the ten records listed under **Generated** below exist under `docs/adr/` in this
+> repository. Nothing outside it has changed: the thirteen service clones still hold no ADR, decision
+> record or RFC, and the governance catalog still holds no decision node for this platform.
+
+No Architecture Decision Record existed anywhere in scope, so **every candidate below is a new
 decision record, not a re-proposal of a settled one**. Two independent checks establish this:
 
 1. **File system.** There is no `docs/adr/`, `adr/`, or `decisions/` directory, and no file matching
@@ -71,30 +76,53 @@ names are descriptive kebab-case stems with no numeric prefix.
 | 4 | ADR-CANDIDATE-004 — A declarative configuration-driven gateway as the single north-south edge | `ADR-004` | `declarative-configuration-driven-api-gateway.md` |
 | 5 | ADR-CANDIDATE-006 — Authentication enforced at the edge, with fail-open in-service authorization | `ADR-006` | `edge-enforced-authentication-with-fail-open-authorization.md` |
 
-All five are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
+Batch 2 was written on 2026-09-09 against the same branch. It implemented the five candidates listed as
+**Next batch (batch 2)** in the previous revision of this file, in the order given there.
+
+| # | Candidate | ADR id | File under `docs/adr/` |
+|---|-----------|--------|------------------------|
+| 6 | ADR-CANDIDATE-003 — Message contracts by naming convention, with duplicated consumer DTOs | `ADR-003` | `message-contracts-by-naming-convention.md` |
+| 7 | ADR-CANDIDATE-005 — Dual-mode edge writes selected by configuration rather than by code | `ADR-005` | `dual-mode-edge-writes-by-configuration.md` |
+| 8 | ADR-CANDIDATE-007 — Split JWT trust root between the gateway and the domain services | `ADR-007` | `split-jwt-trust-root-gateway-and-services.md` |
+| 9 | ADR-CANDIDATE-015 — Registry-mediated service discovery and name-based routing | `ADR-015` | `registry-mediated-discovery-and-name-based-routing.md` |
+| 10 | ADR-CANDIDATE-012 — Transactional outbox and inbox applied by handler decorator | `ADR-012` | `transactional-outbox-inbox-by-handler-decorator.md` |
+
+All ten are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
 because no repository has an owner who could approve one.
+
+Two things batch 2 settled, both by following the code rather than this backlog:
+
+1. **Q1 is answered in practice.** `ADR-007` is the first record of a current state nobody should be
+   happy with, and it is written the way Q1 proposes — it describes the split trust root as it exists,
+   states in its Decision section that it ratifies nothing, and names the convergence each rule
+   requires. Later batches writing candidates 009, 011 and 013 should follow the same shape.
+2. **Candidate 007's evidence was wider than this backlog recorded.** See the correction to blocker B1
+   below.
 
 ## Remaining backlog
 
-Fifteen candidates remain, in the order the next batches should take them. Each is written after
-everything it depends on, and every dependency listed here is either already generated above or earlier
-in this list.
+Ten candidates remain, in the order the next batches should take them. Each is written after everything
+it depends on, and every dependency listed here is either already generated above or earlier in this
+list.
 
-**Next batch (batch 2) — the five whose dependencies are all satisfied by batch 1:**
+**Next batch (batch 3) — the five whose dependencies are all satisfied by batches 1 and 2:**
 
-1. ADR-CANDIDATE-003 — Message contracts by naming convention, with duplicated consumer DTOs (needs 001, 002 — both generated)
-2. ADR-CANDIDATE-005 — Dual-mode edge writes selected by configuration rather than by code (needs 001, 004 — both generated)
-3. ADR-CANDIDATE-007 — Split JWT trust root between the gateway and the domain services (needs 006 — generated)
-4. ADR-CANDIDATE-015 — Registry-mediated service discovery and name-based routing (needs 001, 002 — both generated)
-5. ADR-CANDIDATE-012 — Transactional outbox and inbox applied by handler decorator (needs 001, 008 — both generated)
+1. ADR-CANDIDATE-011 — An orchestrated saga for order creation, and its state durability (needs 001, 003 — both generated)
+2. ADR-CANDIDATE-013 — Contract-blind universal subscription by runtime type emission (needs 003 — generated)
+3. ADR-CANDIDATE-014 — Ephemeral operation status and the real-time client notification channels (needs 005 — generated; 013 — earlier in this batch)
+4. ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI (needs 015 — generated)
+5. ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration (needs 001, 015 — both generated)
 
-**Batch 3 — unblocked once batch 2 lands:**
+Four batch-2 records leave named work for batch 3, and it should be picked up rather than rediscovered:
 
-1. ADR-CANDIDATE-011 — An orchestrated saga for order creation, and its state durability (needs 003)
-2. ADR-CANDIDATE-013 — Contract-blind universal subscription by runtime type emission (needs 003)
-3. ADR-CANDIDATE-014 — Ephemeral operation status and the real-time client notification channels (needs 005, 013)
-4. ADR-CANDIDATE-016 — A secret store for dynamic database credentials and per-service PKI (needs 015)
-5. ADR-CANDIDATE-017 — Container-compose and process-manager deployment, with no production orchestration (needs 015)
+1. `ADR-003` Q3 asks whether `messages.json` should be generated rather than hand-maintained, and hands
+   the decision to ADR-CANDIDATE-013, which owns the manifest's consumer.
+2. `ADR-005` Q3 asks whether the edge write mode should be per route rather than per gateway, and hands
+   it to ADR-CANDIDATE-014, which owns the outcome-notification channel the asynchronous mode needs.
+3. `ADR-007` Q4 asks that the token signing root and the per-service identity certificates be kept as
+   two distinct decisions, and hands the second to ADR-CANDIDATE-016.
+4. `ADR-012` Q4 asks that the saga's state durability be kept separate from the outbox, and hands it to
+   ADR-CANDIDATE-011.
 
 **Batch 4 — the remainder:**
 
@@ -708,9 +736,9 @@ configuration values, and naming conventions are not decisions.
 
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** Nobody has confirmed whether the credential material committed in the repositories is real or throwaway — the gateway's shared token-signing key, which appears in five files, and the secret-store bootstrap material in the platform repository. Anyone holding that signing key can mint a token the gateway accepts, including an administrator one | ADR-CANDIDATE-007 and ADR-CANDIDATE-016 cannot be written as decisions until this is answered — if the material is live these are incident records, not architecture records | Platform security owner | Check whether the committed values match anything in a running environment; if they do, rotate first and write the ADRs against the rotated design | TBD |
+| B1 | **[ACTION NOW]** Nobody has confirmed whether the credential material committed in the repositories is real or throwaway — the gateway's shared token-signing key, which appears in **nine** files across three repositories (four gateway configurations, three `identity-service` settings files, two `operations-service` settings files; corrected from "five" on 2026-09-09 against the source, per `ADR-007` §6.1), the private-key certificate committed to `identity-service` with a development password, and the secret-store bootstrap material in the platform repository. Anyone holding that signing key can mint a token the gateway accepts, including an administrator one | `ADR-007` was written on 2026-09-09 as a record of the current state and carries this blocker forward as its own B2; it cannot leave `Proposed` until this is answered. ADR-CANDIDATE-016 still cannot be written as a decision. If the material is live, both are incident records rather than architecture records | Platform security owner | Check whether the committed values match anything in a running environment; if they do, rotate first and write the ADRs against the rotated design | TBD |
 | B2 | **[ACTION NOW]** The order-creation saga's state is held by whatever the saga library defaults to, because no persistence is configured and no persistence package is referenced. The default is in-memory, which loses in-flight orders on restart, but nobody has confirmed the running behaviour | ADR-CANDIDATE-011 cannot state the current durability position, so its consequences section would be speculative | Owner of `Pacco.Services.OrderMaker` (unassigned — see B4) | Start the service, begin a saga, restart the process, and observe whether the saga resumes. Record the result in the ADR as the current state | TBD |
-| B3 | **[ACTION NOW]** No one has said which gateway configuration production uses. The synchronous and asynchronous pairs give the same twenty write URLs different contracts — one returns a result, the other returns an acknowledgement and defers the outcome to a separate channel | ADR-CANDIDATE-005 and ADR-CANDIDATE-014 both depend on this. Until it is answered neither can record what callers of the platform's write API should expect | Platform owner | Confirm which configuration is loaded in each environment, then record the intended mode in the ADR and delete or clearly mark the configurations that are not used | TBD |
+| B3 | **[ACTION NOW]** No one has said which gateway configuration production uses. The synchronous and asynchronous pairs give the same twenty write URLs different contracts — one returns a result, the other returns an acknowledgement and defers the outcome to a separate channel | `ADR-005` was written on 2026-09-09 and carries this blocker forward as its own B2; its consequences cannot be stated as facts about the running platform until this is answered. ADR-CANDIDATE-014 still depends on it to know whether the outcome-notification channel is on the critical path. Batch 2 also found the workspace disagrees with itself: the gateway image defaults to the synchronous configuration while the platform's main Compose stack overrides it to the asynchronous one | Platform owner | Confirm which configuration is loaded in each environment, then record the intended mode in the ADR and delete or clearly mark the configurations that are not used | TBD |
 | B4 | **[ACTION NOW]** No repository has an owner. There is no `CODEOWNERS`, no contributing guide and no team metadata in any of the fourteen clones, so no candidate in this backlog can be assigned a decision owner or a reviewer | Every candidate's approval path. An ADR nobody owns cannot move past draft, so the whole backlog stalls at generation | Platform owner | Name an owner per subsystem using the six groupings in `repo-inventory.md` §4, and record them in the artifact repository before `adr_generation` runs | TBD |
 
 ### Open Questions
