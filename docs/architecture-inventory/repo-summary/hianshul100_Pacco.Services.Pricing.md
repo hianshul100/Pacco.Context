@@ -38,13 +38,14 @@ Types registered in `src/Pacco.Services.Pricing.Api/Infrastructure/Extensions.cs
 
 `AddInfrastructure()` chains only `.AddErrorHandler<ExceptionToResponseMapper>().AddQueryHandlers().AddInMemoryQueryDispatcher().AddHttpClient().AddConsul().AddFabio().AddMetrics().AddJaeger().AddWebApiSwaggerDocs().AddSecurity()`. `UseInfrastructure()` chains only `.UseErrorHandler().UseSwaggerDocs().UseJaeger().UseConvey().UseMetrics()`.
 
-**A JetBrains Rider settings folder is committed** at `src/Pacco.Services.Pricing.Api/.idea/` — an editor artefact that should not be in source control.
+**A JetBrains Rider settings folder is committed** at `src/Pacco.Services.Pricing.Api/.idea/`. It is the only editor-configuration directory checked in anywhere in the workspace.
 
 ## 5. External integrations
 
 - **`customers-service`** over HTTP through Fabio. `httpClient.services` in `src/Pacco.Services.Pricing.Api/appsettings.json` maps `customers` → `customers-service`. This is the service's only dependency.
 - **Consul**, **Fabio**, **Jaeger**, **Prometheus**, **Seq** — through Convey extensions.
-- **No RabbitMQ, no MongoDB, no Redis, no Vault.**
+- **Vault** — key-value and PKI engines, configured and used. See dimension 10.
+- **No RabbitMQ, no MongoDB, no Redis.** (Verification method: no `rabbitMq`, `mongo` or `redis` key in `src/Pacco.Services.Pricing.Api/appsettings.json`; no `AddRabbitMq`, `AddMongo` or `AddRedis` match under `src/`.)
 
 ## 6. Data stores & state
 
@@ -96,11 +97,12 @@ Swagger UI at `docs`. Consul health endpoint `ping`.
 ## 10. Security & auth clues
 
 - `.AddSecurity()` is called, but there is no `security` access-control list and no certificate authentication.
-- **No Vault.** There is no `vault` block in `appsettings.json` and no `.UseVault()` call — consistent with having no database credentials to manage.
+- **Vault is configured and used.** `src/Pacco.Services.Pricing.Api/appsettings.json` carries a `vault` block with `enabled: true`, `url: http://localhost:8200`, `authType: token`, `token: "secret"`, `kv.path: pricing-service/settings` (engine version 2, mount point `kv`) and `pki.roleName: pricing-service`, `pki.commonName: pricing-service.pacco.io`. `src/Pacco.Services.Pricing.Api/Program.cs:33` calls `.UseVault()`, with `using Convey.Secrets.Vault;` in the file header.
+- **It is the only Vault user on the platform with no `lease` block.** The eight other Vault-enabled services declare `lease.mongo` for dynamic MongoDB credentials; this service has no database, so it leases nothing and uses Vault for key-value settings and PKI only. That is the one Vault difference here — not an absence.
 - JWT validated against `certs/localhost.cer`, `validIssuer: pacco`, `validateAudience: false`, `validateIssuer: true`, `validateLifetime: true`.
 - Customer scoping is applied by `api-gateway` through the `customerId:@user_id` binding, not by this service.
 - **A gap worth flagging:** this service calls `customers-service` over HTTP, but `customers-service` grants `customers:read` only to `availability-service` in its access-control list. `pricing-service` is not on that list, and unlike `availability-service` it does not call `.AddCertificateAuthentication()`, so it presents no client certificate. See open questions.
-- **Checked-in credentials:** Seq `apiKey: secret` in `src/Pacco.Services.Pricing.Api/appsettings.json`. Because there is no broker and no Vault, this repository carries fewer embedded credentials than any other.
+- **Checked-in credentials:** in `src/Pacco.Services.Pricing.Api/appsettings.json` — `vault.token: "secret"`, `vault.username: user`, `vault.password: secret`, and Seq `apiKey: secret`. A public certificate, `src/Pacco.Services.Pricing.Api/certs/localhost.cer`, is committed for JWT validation; unlike `identity-service` this repository holds no private key material, and unlike `identity-service` and `operations-service` it does not carry the shared `jwt.issuerSigningKey` literal. It carries no RabbitMQ `guest`/`guest` pair, because it has no broker.
 
 ## 11. Observability / logging / tracing
 
@@ -141,7 +143,8 @@ No frontend assets detected — checked: `/` (repository root), `src/`, `src/Pac
 | "By default, the service will be available under `http://localhost:5008`." | `appsettings.json` sets the Consul port to `5008`. | **Confirmed.** |
 | `./scripts/start.sh`, `docker build`, `docker pull devmentors/pacco.services.pricing`. | `scripts/start.sh` and `Dockerfile` exist; the image name matches `compose/services.yml` in `hianshul100_Pacco`. | **Confirmed.** |
 | HTTP requests listed in `Pacco.Services.Pricing.rest`. | The file exists at the repository root. | **Confirmed.** |
-| The README is the shared platform template: "Pacco.Services.Pricing is the microservice being part of Pacco solution", with the same wording as the nine other services. | This service shares almost none of the platform's architecture. It has no database, no broker, no Vault, no layering, and one route. | **Docs conflict.** The template implies uniformity that does not exist here. |
+| The README is the shared platform template: "Pacco.Services.Pricing is the microservice being part of Pacco solution", with the same wording as the nine other services. | This service shares only part of the platform's architecture. It has no database, no broker and no layering, and exposes one route — though it does register with Consul, Fabio, Jaeger, Prometheus and Seq and does use Vault, like the rest. | **Docs conflict.** The template implies a uniformity that holds for the cross-cutting stack but not for the domain architecture. |
+| `hianshul100_Pacco/assets/pacco_overview.png` draws **Pricing Service with both a red "Command" and a green "Integration Event" dashed connector to RabbitMQ**, identically to the six other domain services. | This service has no `rabbitMq` block, no `.AddRabbitMq()` call, no exchange, no subscriptions and no outbox, and is the only service absent from `messages.json`. | **Docs conflict — the diagram overstates the code.** The platform's only architecture diagram shows a messaging integration this service does not have. |
 
 **On disk but not mentioned in `README.md`:** the dependency on `customers-service`, the absence of persistence and messaging, the nested `Core/` folder, and the committed `.idea/` directory.
 

@@ -124,7 +124,7 @@ Swagger UI at `docs`. Consul health endpoint `ping`.
 
 ## 10. Security & auth clues
 
-- **No Vault.** `AddInfrastructure()` never calls `.UseVault()` and `appsettings.json` has no `vault` block — the only messaging service without one.
+- **No Vault.** (Verification method: no `vault` key in `src/Pacco.Services.OrderMaker/appsettings.json`; no `UseVault` match under `src/`.) It is the only messaging service without one, and one of only two deployables platform-wide that lack Vault — the other being `api-gateway`.
 - `.AddSecurity()` is called, but there is no `security` access-control list, no certificate authentication, and no `jwt` validation configured for inbound requests.
 - The service is not exposed through `api-gateway`, so no JWT ever reaches it from a public caller. It publishes commands on other services' exchanges without presenting any credential; the broker's `guest`/`guest` login is the only control.
 - **Checked-in credentials:** RabbitMQ `guest`/`guest` and Seq `apiKey: secret` in `src/Pacco.Services.OrderMaker/appsettings.json`.
@@ -173,6 +173,8 @@ No frontend assets detected — checked: `/` (repository root), `src/`, `src/Pac
 
 **On disk but not documented anywhere:** the Chronicle saga, the `Saga` header protocol, the compensation behaviour, the HTTP dependencies on `vehicles-service` and `availability-service`, and the absence of Vault, Jaeger, Mongo and the outbox.
 
+**Absent from the platform's only diagram.** `hianshul100_Pacco/assets/pacco_overview.png` draws API Gateway, Identity Service, Operations Service and seven domain services; `ordermaker-service` appears nowhere on it, and no arrow represents the commands it publishes into five other services' exchanges. **Verdict: Stale doc.** This service is the platform's saga orchestrator and is invisible in both the diagram and — per dimension 11 — the tracing system.
+
 **No `CONTRIBUTING.md`, no `CHANGELOG.md`, no `docs/` directory** exist in this repository. The documentation pass covered `README.md` only.
 
 ## Assumptions, Blockers & Open Questions
@@ -201,4 +203,4 @@ No frontend assets detected — checked: `/` (repository root), `src/`, `src/Pac
 | Q1 | **[ACTION NOW]** Should the saga compensate for failures after the vehicle-assignment step? | Today only `ParcelAddedToOrder` compensates. A later failure can leave a vehicle assigned and a resource reserved with nothing to undo them. | Add compensating actions for `VehicleAssignedToOrder` and `OrderApproved`. | Service owner |
 | Q2 | **[ACTION NOW]** Should `ordermaker-service` be brought under Jaeger tracing? | It is the only service that spans five others, and it is the only one invisible to the tracing system. Every end-to-end trace breaks at this hop. | Yes — add `.AddJaeger()` and the RabbitMQ Jaeger plugin to match the other services. | Platform architect |
 | Q3 | **[handled later by the platform inventory review]** Should this service adopt the outbox pattern used by every other messaging service? | Without it, a crash between a saga state change and a command publish loses the command, stalling the order with no error. | Yes, for consistency with the rest of the platform. | Service owner |
-| Q4 | **[handled later by the platform inventory review]** Why does this service run without Vault when the other eight domain services use it? | It is the only messaging service with no dynamic credential management. | It has no database, so there are no dynamic database credentials to issue — but it still has broker credentials. | Security owner |
+| Q4 | **[handled later by the platform inventory review]** Why does this service run without Vault when the other nine services all use it? | It is the only messaging service with no dynamic credential management. | It has no database, so there are no dynamic database credentials to issue — but it still has broker credentials, and `pricing-service` shows that a database-less service can still use Vault for key-value settings and PKI. | Security owner |

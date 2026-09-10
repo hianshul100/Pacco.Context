@@ -59,7 +59,7 @@ Notable NuGet references beyond the standard Convey stack (`Pacco.Services.Opera
 - **RabbitMQ** — subscribes to all eight service exchanges.
 - **Redis** — both as the operation store and as the SignalR backplane.
 - **MongoDB**, **Consul**, **Fabio**, **Jaeger**, **Prometheus**, **Seq** — through Convey extensions.
-- **No Vault.** Unlike the eight other domain services, `operations-service` has no `vault` block. It does not need dynamic database credentials, because it does not persist to MongoDB (see below).
+- **Vault** — configured and used, on the same template as the other eight Vault-enabled services, including a `lease.mongo` dynamic-credential entry for a database this service never writes to. See dimension 10.
 - No outbound HTTP calls to peer services: `httpClient.services` is empty.
 
 ## 6. Data stores & state
@@ -139,8 +139,10 @@ service GrpcOperationsService {
 - `certs/localhost.cer` is committed.
 - The SignalR hub authenticates by having the client pass a JWT as an argument to `initializeAsync`, not through the standard `Authorization` header or SignalR's built-in `[Authorize]` attribute. The token is typed into a text box on the test page.
 - **`GET operations/{operationId}` is exposed with `auth: false` at the gateway.** Operation identifiers are the only protection. See open questions.
-- No `security` access-control list, no certificate authentication, **no Vault**.
-- **Checked-in credentials:** the JWT signing key and RabbitMQ `guest`/`guest` in `src/Pacco.Services.Operations.Api/appsettings.json`.
+- No `security` access-control list and no certificate authentication. (Verification method: no `security` key in `appsettings.json`; no `AddCertificateAuthentication` match under `src/`.)
+- **Vault is configured and used.** `src/Pacco.Services.Operations.Api/appsettings.json` carries a `vault` block with `enabled: true`, `url: http://localhost:8200`, `authType: token`, `token: "secret"`, `kv.path: operations-service/settings` (engine version 2, mount point `kv`), `pki.roleName: operations-service`, `pki.commonName: operations-service.pacco.io`, and a `lease.mongo` entry (`type: database`, `roleName: operations-service`, `enabled: true`, `autoRenewal: true`, connection-string template `mongodb://{{username}}:{{password}}@localhost:27017`). `src/Pacco.Services.Operations.Api/Program.cs:50` calls `.UseVault()`.
+- **The `lease.mongo` entry sharpens the discrepancy recorded in dimension 6.** This service leases dynamic MongoDB credentials, with automatic renewal, for a database it never writes to — no `AddMongoRepository<>` call exists anywhere in the repository. The configuration does not merely declare an unused dependency; it arranges to keep credentials for it alive.
+- **Checked-in credentials:** the shared JWT signing key, RabbitMQ `guest`/`guest`, `vault.token: "secret"` (with `vault.username: user` / `vault.password: secret`) and the Seq `apiKey` in `src/Pacco.Services.Operations.Api/appsettings.json`.
 
 ## 11. Observability / logging / tracing
 

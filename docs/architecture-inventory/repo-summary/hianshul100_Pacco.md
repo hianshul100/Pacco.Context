@@ -91,7 +91,11 @@ Declared, not implemented, here:
 - `README.md` — states the platform is microservices, event-driven, .NET Core 3.1, "cloud agnostic", and built on the Convey framework.
 - `compose/infrastructure.yml` — the authoritative statement of which backing services the platform assumes.
 - `Pacco.sln` — the authoritative statement of which projects were meant to make up the solution.
-- `assets/clean_architecture.png`, `assets/pacco_overview.png`, `assets/infrastructure.png` — diagrams. Images only; no text was extracted from them for this inventory.
+- `assets/pacco_overview.png` — the platform's only system diagram, and the only place the RabbitMQ exchange/queue/routing-key naming convention and Vault's role are written down anywhere in the workspace.
+- `assets/clean_architecture.png` — the concentric Core / Application / Infrastructure ring template that the eight layered services follow.
+- `assets/infrastructure.png` — a logo wall of the assumed technology stack.
+
+All three were opened and reconciled against the code; the results are in "README vs repository" below and in [section 5.12 of the consolidated inventory](../repo-inventory.md#512-the-png-diagrams--the-platforms-only-visual-documentation).
 
 **Feature-flag system:** none. A search across `*.cs`, `*.json`, `*.csproj` and `*.yml` in the whole workspace for `launchdarkly`, `unleash`, `flagsmith`, `split.io`, `featureflag`, `feature_flag`, `featuremanagement` and `IFeatureManager` returned zero matches. There are no flag keys to list.
 
@@ -99,7 +103,7 @@ Declared, not implemented, here:
 
 - `Pacco.sln` references `..\Pacco.APIGateway.Ocelot\src\Pacco.APIGateway.Ocelot\Pacco.APIGateway.Ocelot.csproj`. That repository is not in this workspace and is not in the `README.md` clone list. Whether it was deleted, renamed, or is simply not cloned here is **Unknown**.
 - `docker-images.txt` documents relational databases and an ELK stack that no service uses. Whether these are leftovers, aspirations, or used by something outside this workspace is **Unknown**.
-- The `assets/*.png` diagrams may contain architectural claims not reflected in the code. They were not read. **Needs validation.**
+- The `assets/*.png` diagrams were read and carry three claims the code contradicts: `ordermaker-service` is absent from `pacco_overview.png`, `pricing-service` is drawn with RabbitMQ connectors it does not have, and `infrastructure.png` advertises Kubernetes, Istio and Rancher that appear nowhere in the workspace. Whether the diagrams predate `ordermaker-service` or describe an intended deployment topology is **Unknown**. **Needs validation.**
 
 ## 14. Frontend stack
 
@@ -116,6 +120,11 @@ Source code and configuration on disk are authoritative; the README is treated a
 | `docker-compose -f infrastructure.yml up -d` and `docker-compose -f services-local.yml up`. | Both files exist, at `compose/infrastructure.yml` and `compose/services-local.yml`. The README's paths omit the `compose/` prefix, so the commands must be run from inside `compose/`. | **Needs validation** — minor path ambiguity, not a contradiction. |
 | Points to `Pacco-sample-scenario.rest` in the API gateway repository. | `hianshul100_Pacco.APIGateway/Pacco-sample-scenario.rest` exists. | **Confirmed.** |
 | The README describes a `docs/` folder for the project. | No `docs/` directory exists in this repository. | **Docs-only claim.** |
+| `assets/pacco_overview.png` draws ten components: API Gateway, Identity, Operations and seven domain services. | `ordermaker-service` is a running deployable with its own exchange and the platform's only saga, and it is not on the diagram. | **Stale doc.** The orchestrator of the platform's only cross-service flow is missing from the platform's only system diagram. |
+| `assets/pacco_overview.png` draws Pricing Service with red Command and green Integration Event connectors to RabbitMQ. | `pricing-service` has no `rabbitMq` block, no `.AddRabbitMq()` call and no exchange, and is the only service absent from `messages.json`. | **Conflict.** The diagram overstates the code. |
+| `assets/infrastructure.png` shows eighteen technologies including Kubernetes, Istio and Rancher. | Fifteen are present. Searching all fourteen repositories for Kubernetes manifests, Helm charts, Istio configuration and Rancher configuration returns zero matches; Docker Compose is the only committed deployment mechanism. | **Docs-only claim.** Label Kubernetes, Istio and Rancher **Future/Intended State (Not Implemented)**. |
+| `assets/pacco_overview.png` states Vault "stores microservice's secrets … and allows to inject them on application startup", and documents the exchange, queue and routing-key naming convention. | Nine of eleven deployables configure Vault and call `.UseVault()`; the naming convention matches the `rabbitMq` settings in every service. | **Confirmed.** Both facts are documented nowhere else. |
+| `assets/clean_architecture.png` shows a Core / Application / Infrastructure ring inside an Internal API boundary. | Matches the four-project layout of eight services; does not match `pricing-service`, `operations-service` or `ordermaker-service`. | **Confirmed for eight of eleven**; silent about the three exceptions. |
 
 **On disk but not mentioned in `README.md`:** `docker-images.txt`, `services.yml`, `prod-services.yml`, the six split compose files under `compose/`, and the `scripts/git-*` helpers.
 
@@ -131,7 +140,7 @@ Source code and configuration on disk are authoritative; the README is treated a
 | # | Assumption | Rationale | Impact if Wrong | Validation Path |
 |---|------------|-----------|-----------------|-----------------|
 | A1 | The example Vault unseal keys and root tokens in `docker-images.txt` are sample strings copied from HashiCorp documentation, not live secrets. | They match the well-known example values printed in Vault's own tutorial output, and the compose file uses a separate dev token `secret`. | If they are real, credentials for a live Vault are in source control. | Ask the repository owner; check whether any Vault instance accepts them. |
-| A2 | The PNG diagrams in `assets/` do not contradict the code. | They were not read; only the file names were observed. | An architectural claim in a diagram could be missed or misrepresented. | Open the four images and compare against `compose/infrastructure.yml` and the service repositories. |
+| A2 | The three architecture diagrams in `assets/` predate `ordermaker-service` and describe an intended rather than a built deployment topology. | They omit `ordermaker-service`, draw `pricing-service` on RabbitMQ, and advertise Kubernetes, Istio and Rancher, none of which exist in the workspace — while every other claim they make is confirmed by the code. | If instead they are current and authoritative, then `ordermaker-service` is undocumented by design, `pricing-service` is missing an intended broker integration, and three deployment technologies are missing from source control. | Ask the diagram authors (named on `pacco_overview.png`) or check the diagrams' commit date against `ordermaker-service`'s first commit. |
 
 ### Open Questions
 
