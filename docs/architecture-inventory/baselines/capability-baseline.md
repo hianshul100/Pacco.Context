@@ -405,7 +405,10 @@ infrastructure. Framework plumbing that carries none of those properties is excl
 - **Evidence:** `docs/adr/standalone-browser-surface-in-pacco-web.md` (`ADR-021` — the deployable
   and its release identity); `docs/adr/client-owned-browser-session-custody.md` (`ADR-022` — the
   client-held session, the guard and the logout); `docs/adr/named-browser-origins-at-the-declarative-edge.md`
-  (`ADR-023` — the edge origin that makes it reachable); `intents/13155.md` (DO1, DO2, DO3).
+  (`ADR-023` — the edge origin that makes it reachable);
+  `docs/adr/toolchain-currency-for-non-dotnet-deployables.md` (`ADR-024` — the toolchain-currency
+  rule the deployable is governed by, since `ADR-020` does not reach it); `intents/13155.md`
+  (DO1, DO2, DO3).
   Supporting current-state evidence for the absence it fills:
   `docs/architecture-inventory/baselines/ui-inventory.md` §1.4, §11.2;
   `docs/architecture-inventory/baselines/architecture-baseline.md` §7.1.

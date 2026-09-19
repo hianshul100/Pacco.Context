@@ -397,7 +397,7 @@ long Expires)` (`…/component-internals/identity-service.md` §3.11). `ADR-023`
 
 **Why `backends` is drawn with a dotted, negative edge.** It is the single most load-bearing
 property of this context and it is easier to misread from an omission than from a marked edge. The
-client-side route guard in `ADR-022` rule 7 reads the `role` claim from the token it already holds
+client-side route guard in `ADR-022` rule 5 reads the `role` claim from the token it already holds
 and makes **no** backend call — no `GET /identity/me`, no ownership probe, nothing. The dotted edge
 records that deliberate absence so a later reader does not "restore" a call that was excluded on
 purpose. It is also why no cross-origin `GET` appears anywhere in this view, which is what makes the
@@ -988,7 +988,7 @@ be an easy and wrong thing for a later stage to add back.
    requirement in `ADR-022` rule 4 exists because of it.
 3. **No `GET /identity/me` on guard evaluation.** The route exists and is authenticated
    (`…/component-internals/api-gateway.md` §6.1), and it is exactly what a server-checked guard
-   would call. `ADR-022` rule 7 excludes it, which is what keeps this whole flow free of cross-origin
+   would call. `ADR-022` rule 5 excludes it, which is what keeps this whole flow free of cross-origin
    `GET` and therefore unaffected by `get` being absent from `allowedMethods`.
 4. **No SignalR connection.** The existing browser asset opens a hub connection to a hard-coded
    `http://localhost:5005/pacco` and passes the token as a hub-method argument *after* the socket is
@@ -1202,7 +1202,7 @@ graph TD
     gw -->|"must name the origin in allowedOrigins [decided]"| origin
     gw -->|"HTTP downstream or RabbitMQ publish depending on manifest [confirmed]"| svcs
     travis -->|"builds the 11 .NET deployables [confirmed]"| svcs
-    repo -.->|"not a Travis csharp pipeline - toolchain ungoverned [decided]"| travis
+    repo -.->|"not a Travis csharp pipeline - toolchain governed by ADR-024 [decided]"| travis
 ```
 
 **The twelfth deployable, and how it differs from the eleven.** `ADR-021` makes `Pacco.Web` an
@@ -1211,8 +1211,12 @@ independently built, versioned and released artifact. It is the only one of the 
 produces static assets. The per-repository, independently-versioned release shape of the other
 eleven is preserved exactly: no shared pipeline template, no cross-repository release coordination.
 The dotted edge to `travis` records that it does **not** inherit the pinned toolchain the other
-eleven share, and that nothing replaces it — which is the whole of `ADR-021` obligation 3 and the
-reason the toolchain gap is carried rather than closed.
+eleven share. What replaces it is a different record rather than a different version: `ADR-024`
+governs toolchain currency for every deployable `ADR-020` does not reach, requiring one declaration
+per repository, a committed lockfile the pipeline installs from, a version in vendor support on the
+day it is committed, and a review scheduled before that support ends. `ADR-021` obligation 3 makes
+the toolchain visible; `ADR-024` makes it governed. Which toolchain and which version are still
+`[unknown]` here, because `ADR-024` names neither.
 
 **Why `yml` is drawn as its own node.** The `ntrada*.yml` manifests are configuration files read at
 process start, and `ADR-023` changes exactly one value in them — `allowedOrigins` — across all four.

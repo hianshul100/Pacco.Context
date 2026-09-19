@@ -19,6 +19,14 @@ service / bounded-context baseline. **No ADRs, no recommendations, no KG JSON, n
 - `.attachments/01_product_backlog_20260903_170135_37cf143b.xlsx` — backlog issue **12998**
   "Pacco - Discovery - Attempt-2", which fixes the thirteen-repository scope.
 
+> **Annotated 2026-09-19 by work item 13155 — two findings only.** This remains a
+> `2026-09-04` discovery baseline and its body is unchanged: every statement below is still what the
+> code showed on that date, and this document still records no ADRs and no recommendations. Two
+> findings about `Pacco.Web` have since been answered by a decision rather than by new evidence —
+> gap **G1** and blocker **B2** — and each is annotated in place so a reader does not act on a
+> question that is closed. Nothing else in this document has been revisited, and no finding about
+> the other twelve repositories is affected.
+
 ## Table of contents
 
 1. [Executive summary](#1-executive-summary)
@@ -517,7 +525,7 @@ not settle a question. Each is mirrored into the consolidated section at the end
 
 | # | Repo / area | Gap | Why it is unknown |
 |---|---|---|---|
-| G1 | `Pacco.Web` | No service or component can be inferred. **Unverifiable — Missing Source Evidence** | The clone holds one file, `README.md`, with the text `# Pacco.Web`, on a single commit. Nothing in the workspace references the repository |
+| G1 | `Pacco.Web` | No service or component can be inferred. **Unverifiable — Missing Source Evidence.** **Answered 2026-09-19 by decision, not by evidence** — see the note below the table | The clone holds one file, `README.md`, with the text `# Pacco.Web`, on a single commit. Nothing in the workspace references the repository |
 | G2 | `ordermaker-service` | How callers reach it. It is deployed by both Compose stacks (port `5015`) and scraped by Prometheus, but is in **neither** PM2 manifest and in **none** of the four `ntrada*.yml` gateway configurations, so `POST /orders` has no edge route | No caller path exists anywhere in the workspace; whoever invokes it does so in-network by a route not present in these repositories |
 | G3 | `ordermaker-service` | Saga state persistence backend | `Extensions.cs:43` calls `AddChronicle()` with no persistence configuration and no `Chronicle.Persistence.*` package. Chronicle's default is in-memory, which would lose in-flight sagas on restart, but nothing states this. **Needs runtime validation** |
 | G4 | `operations-service` | Which store holds operation state | `appsettings.json` configures `mongo.database: operations-service`, yet no `AddMongoRepository` call exists anywhere in the repository, while `AddRedis()` is called (`Infrastructure/Extensions.cs:72,75`) and `requests.expirySeconds` is `300`. Static reading cannot settle it |
@@ -531,6 +539,22 @@ not settle a question. Each is mirrored into the consolidated section at the end
 | G12 | `orders-service`, `parcels-service` | How the Pact contract file crosses the repository boundary | Both `PACT/` directories exist and both projects reference `Pactify` 1.1.0, but no Pact Broker is configured in either repository or in either `.travis.yml` |
 | G13 | `Pacco`, `Pacco.APIGateway`, `Pacco.Services.Operations` | Whether the committed secrets are live | `Pacco/docker-images.txt` contains five Vault unseal keys and a root token; the same symmetric JWT `issuerSigningKey` is committed in all four `ntrada*.yml` files and in `Operations/appsettings.json`; Seq `apiKey: secret` and RabbitMQ `guest/guest` are committed platform-wide. Whether these are demo values cannot be determined from the repositories |
 | G14 | `Pacco.Services.Operations.GrpcClient` | Whether it is a demo or an operational tool | It is a console project with no container, no compose entry and no PM2 entry, and no file in the workspace states its purpose. **Not observed** |
+
+> **G1 — answered on 2026-09-19 by work item 13155.** `Pacco.Web` is no longer a repository with
+> nothing in it and no stated purpose. `ADR-021`
+> (`docs/adr/standalone-browser-surface-in-pacco-web.md`) makes it the home of a standalone,
+> independently built, versioned and released browser surface — the platform's first — reaching
+> backends only through `api-gateway`. `docs/architecture-inventory/baselines/capability-baseline.md`
+> registers that surface as `CAP-17`.
+>
+> **Read this as a decision, not as evidence.** The clone still holds one `README.md` and one
+> commit, so the finding in the table is still a true statement about the source, and the code-versus-
+> documentation conflict D2 in §5 is unchanged — the backlog listed a repository that
+> `Pacco/README.md` does not. What has changed is that the question "is this an abandoned
+> placeholder" now has an answer: no, it is the recorded home of a deployable that has not been
+> written yet. `ADR-021` B2 records that the pipeline does not exist, and `ADR-024` governs the
+> toolchain that pipeline will declare. A later discovery run over this clone will still find it
+> empty until that work lands.
 
 ---
 
@@ -622,7 +646,7 @@ exclusion table above with a reason. There are no unaccounted entries.**
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
 | B1 | **[ACTION NOW]** `Pacco/docker-images.txt` contains five Vault unseal keys and a Vault root token in plaintext, and the same symmetric JWT signing key is committed in all four `ntrada*.yml` gateway configs and in `Operations/appsettings.json`. Nobody on this side can tell whether these are throwaway demo values or credentials that currently protect something real | Any decision to treat these repositories as safe to publish, fork or share, and any security work in later stages | Platform owner / whoever administers the Pacco Vault instance | A person with access to the running Vault must check whether these keys still unseal it. If they do, rotate them and purge the values from git history before anything else proceeds | TBD |
-| B2 | **[ACTION NOW]** `Pacco.Web` is an empty repository but is on the discovery scope list. We cannot tell whether a Pacco web client exists somewhere we were not given, or whether the repository is an abandoned placeholder | Completing the service catalogue — if a real web client exists, this document is missing a component, and the gateway's CORS (`allowedOrigins: ['*']` with `allowCredentials: true`) and auth surface has an unexamined consumer | Platform owner | Someone must state whether a Pacco web client exists. If it does, provide the repository and re-run discovery for it; if it does not, drop `Pacco.Web` from the scope list | TBD |
+| B2 | ~~**[ACTION NOW]**~~ **Answered 2026-09-19 — no longer blocking.** `Pacco.Web` is an empty repository but is on the discovery scope list. We could not tell whether a Pacco web client exists somewhere we were not given, or whether the repository is an abandoned placeholder. **Work item 13155 states the answer: neither.** `ADR-021` makes `Pacco.Web` the home of a browser surface that does not exist yet and is to be built there, so the repository stays on the scope list and this document is not missing a component — it is describing a deployable ahead of its code (`CAP-17` in `capability-baseline.md`). `ADR-021` A3 keeps the residue honest: it is *assumed*, not proven, that no Pacco frontend exists in a repository outside the fourteen | Completing the service catalogue. The second half of this blocker is now a named defect rather than an unexamined one: the gateway's CORS combination — `allowedOrigins: ['*']` with `allowCredentials: true`, which the CORS specification forbids — is recorded in `…/component-internals/api-gateway.md` §3.18 and in `…/component-internals/operations-service.md` §3.3, and `ADR-023` replaces the wildcard with named per-environment origins across all four `ntrada*.yml` manifests. It is a *decided* change, not an applied one — `GAP-13155-02` records that no browser has ever exercised this edge's preflight | Platform owner | ~~Someone must state whether a Pacco web client exists~~ — stated. What remains is `GAP-13155-03` (choose the concrete origin hostname per environment) and `GAP-13155-02` (prove the preflight works), both carried in `risk-constraint-gap-register.md` | Answered 2026-09-19 |
 | B3 | **[ACTION NOW]** `ordermaker-service` is started by both Compose stacks and scraped by Prometheus, but sits behind no gateway route and appears in neither PM2 process manifest. How anything reaches its `POST /orders` is not answerable from the code | Deciding whether the order-creation saga described in §2.5 is a live path or dead code — this changes how order creation should be described and whether it needs governing at all | Platform owner / operations | Someone must state how `POST /orders` on `ordermaker-service` is invoked given there is no gateway route, and whether its omission from `services.yml` and `prod-services.yml` is deliberate | TBD |
 
 ### Open Questions

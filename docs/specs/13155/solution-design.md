@@ -4,7 +4,7 @@
 |-------|-------|
 | Work item | 13155 |
 | Delivery outcomes | `DO1` Pacco Common Login & Role-Aware Welcome Landing · `DO2` Pacco Session Continuity, Landing-Page Guard & Logout · `DO3` Pacco Browser Origin Enablement at the Ntrada Edge |
-| Records authored | `ADR-021`, `ADR-022`, `ADR-023` |
+| Records authored | `ADR-021`, `ADR-022`, `ADR-023`, `ADR-024` |
 | Records relied on | `ADR-004`, `ADR-006`, `ADR-007`, `ADR-018`, `ADR-020` |
 | Capability registered | `CAP-17 — Browser Presentation & Authenticated Entry` |
 | Date | 2026-09-19 |
@@ -51,17 +51,21 @@ cross-origin preflight at all. Section 6 lists those and the rest by name.
 | `ADR-021` — A standalone browser surface in `Pacco.Web` | **new this run** | Establishes where the surface lives, that it is independently built and released, and that it reaches backends only through the edge |
 | `ADR-022` — Client-owned browser session custody | **new this run** | Establishes that the session lives entirely in the client: one tab-scoped store, a client-side guard, a client-side logout, no refresh |
 | `ADR-023` — Named browser origins at the declarative edge | **new this run** | Replaces the CORS wildcard with named per-environment origins so a credentialed browser call is possible at all |
+| `ADR-024` — Toolchain currency for non-.NET deployables | **new this run** | Supplies the toolchain-currency rule that `ADR-020` does not reach, so the surface is governed by a record rather than by nothing. It names no toolchain and no version |
 | `ADR-006` — Edge-enforced authentication with fail-open authorization | governing | Fixes the authentication boundary at the gateway, which is why the client-side guard is an affordance and not a control |
 | `ADR-007` — Split JWT trust root, gateway and services | governing | Records that a revoked token is still accepted by the gateway and all eight services, which is why logout is a client-side discard and says so |
 | `ADR-004` — Declarative configuration-driven API gateway | governing | Its Q3 asks whether the edge stays purely declarative if a browser client is built and directs that a separate backend-for-frontend be added only if aggregation is needed — this design needs none |
 | `ADR-018` — Build and release automation | governing | Records that the eleven pipelines build and push images and that nothing deploys them, which the twelfth release path inherits |
-| `ADR-020` — .NET Core 3.1 as platform runtime baseline | governing, with a recorded exception | Pins one runtime for every .NET deployable. A browser bundle has no .NET runtime, so `ADR-021` records an `ARCHITECTURE_ALIGNMENT_EXCEPTION` rather than claiming conformance |
+| `ADR-020` — .NET Core 3.1 as platform runtime baseline | governing, with a recorded exception | Pins one runtime for every .NET deployable. A browser bundle has no .NET runtime, so `ADR-021` records an `ARCHITECTURE_ALIGNMENT_EXCEPTION` rather than claiming conformance. `ADR-024` states the scope split that exception implies, and `ADR-020` itself is unchanged |
 
-Three records were authored rather than one. Each establishes a distinct inheritable constraint with
+Four records were authored rather than one. Three establish a distinct inheritable constraint with
 a distinct owner: where a browser deployable lives and how it ships (`ADR-021`, platform owner), how
 a browser holds a credential (`ADR-022`, platform security owner), and what the edge admits
-(`ADR-023`, `api-gateway`). They map one-to-one onto `DO1`, `DO2` and `DO3`. No record was created
-merely because more than one option existed.
+(`ADR-023`, `api-gateway`). Those three map one-to-one onto `DO1`, `DO2` and `DO3`. The fourth,
+`ADR-024`, maps onto none of them: it exists because `ADR-021`'s alignment exception left the new
+deployable outside every toolchain rule the platform has, which risk `R9` scores at RPN 280 with an
+`adr` mitigation owned by this stage. No record was created merely because more than one option
+existed.
 
 ---
 
@@ -166,9 +170,9 @@ Four absences are deliberate and each is the kind of thing a later stage could r
 
 | # | Obligation | Why it lands here |
 |---|-----------|-------------------|
-| L1 | Choose the framework, bundler and component library, and commit the dependency manifest, build and lint baseline | `ADR-021` obligation 3 and `NFR-23`. Whatever is chosen becomes a precedent — see `GAP-13155-09` |
+| L1 | Choose the framework, bundler and component library, and commit the dependency manifest, build and lint baseline | `ADR-021` obligation 3 and `NFR-23`. `ADR-024` constrains the choice without making it: one declaration per repository, a committed lockfile, and a version still in vendor support on the day it is committed. Whatever is chosen becomes a precedent — see `GAP-13155-09` |
 | L2 | Fix the client-side request timeout value, sized above the gateway's retry behaviour | `ADR-022` rule 7 requires an explicit bound. `GAP-13155-13` records that the figure to size against is unmeasured, so state the assumption used |
-| L3 | Implement the role comparison as exactly one case-insensitive check against `admin`, resolving every other value and an absent claim to the plain welcome | `NFR-5`, `ASM-2`, `ADR-022` rule 5. One comparison, one place |
+| L3 | Implement the role comparison as exactly one case-insensitive check against `admin`, resolving every other value and an absent claim to the plain welcome | `NFR-5`, `ASM-2`, `ADR-022` rule 3. One comparison, one place |
 | L4 | Ensure the token is written to `sessionStorage` and the `Authorization` header and nowhere else — not a URL, a log line, an analytics event or an error report | `NFR-10`, `ASM-10`, `ADR-022` rule 2 |
 | L5 | Implement WCAG 2.1 AA on both screens: labelled inputs, programmatically associated error text, keyboard operability, visible focus | `ADR-021` obligation 6, `NFR-14`, `ASM-11` |
 | L6 | Block duplicate submissions for the whole time a sign-in request is in flight | `NFR-11` |
@@ -204,9 +208,13 @@ Four absences are deliberate and each is the kind of thing a later stage could r
 Each row names a verb, a named owner or role, and what is blocked. None can be settled by a later
 stage of this work item, because each depends on a system, a team or a capability outside it.
 
+> **One action left this list on 2026-09-19.** "Decide what governs the browser toolchain and its
+> version" was item 9 and is answered by `ADR-024`; `GAP-13155-07` in the register carries the
+> resolution. The items after it are renumbered.
+
 | # | Action | Owner | What is blocked |
 |---|--------|-------|-----------------|
-| 1 | **Name an owner** for each of the fourteen repositories | Whoever commissions work on this platform | Ratification of `ADR-021`, `ADR-022` and `ADR-023`, and every follow-up action in all three. Eleven register entries currently name owners who do not exist. `GAP-13155-14` |
+| 1 | **Name an owner** for each of the fourteen repositories | Whoever commissions work on this platform | Ratification of `ADR-021`, `ADR-022`, `ADR-023` and `ADR-024`, and every follow-up action in all four. Ten register entries currently name owners who do not exist. `GAP-13155-14` |
 | 2 | **Run** a credentialed cross-origin `POST` from a named origin against a running gateway and record what the preflight returns | Platform owner | `DO1` and `DO3` both. The feature's first call. `GAP-13155-02`, risk `R1` |
 | 3 | **Choose** the concrete browser origin hostname for each environment | Product and Architecture jointly | `DO3` entirely — the decision is complete and has no value to apply — and therefore `DO1`'s demonstration. `GAP-13155-03` |
 | 4 | **Decide** how the built artifact reaches a served origin, given that nothing on this platform deploys anything | Platform owner | Item 3, which cannot be answered without it, and any claim that the surface reaches an environment. `GAP-13155-15` |
@@ -214,13 +222,12 @@ stage of this work item, because each depends on a system, a team or a capabilit
 | 6 | **Acknowledge** that logout terminates nothing platform-side, or fund the fix at the boundary that enforces authentication | Platform security owner | Nothing in this work item — `ADR-022` already responds by making the copy honest. It is listed because accepting it is a decision someone must actually take. `GAP-13155-12`, risk `R4` |
 | 7 | **Close** the public sign-up route's acceptance of `"role": "admin"` from the request body | Platform security owner | Nothing in this work item technically. The surface will faithfully show the admin area to a self-escalated account, and no client-side change can prevent that. `GAP-13155-16`, risk `R13` |
 | 8 | **Reconcile** the three role-comparison behaviours — gateway exact-string, `IdentityContext` case-insensitive, browser guard case-insensitive | Platform security owner | Any future surface that puts real functionality behind the guard. `GAP-13155-05`, risk `R5` |
-| 9 | **Decide** what governs the browser toolchain and its version, since `ADR-020` does not reach it | Platform owner | `NFR-23`'s baseline being more than a snapshot. `GAP-13155-07`, risk `R9` |
-| 10 | **Author or commission** a standards catalogue — eleven rule families have no covering content anywhere | Architecture owner | Nothing immediately. Three targets in this run had to be set by decision because no standard supplied them, and each is now a precedent from a single feature. `GAP-13155-08` |
-| 11 | **Configure** a total request timeout at the edge, or state that there will not be one | Platform owner | `L2` above — the client-side timeout is otherwise sized against an unmeasured figure. `GAP-13155-13`, risk `R11` |
-| 12 | **Confirm** which of the four gateway manifests is live in each environment | Platform owner | `D1` above. Editing only the manifest assumed live produces an environment-specific failure. `GAP-13155-18`, risk `R2` |
-| 13 | **Answer** what a user whose token carries no `role` claim at all sees, as distinct from an unrecognised value | Product owner | Spec sign-off. Nothing breaks at runtime — the safe behaviour is already specified. `GAP-13155-10` |
-| 14 | **Set** the expected automated coverage for this feature, since the platform's test gate checks nothing | QA owner | Spec sign-off, and `D4` above. `GAP-13155-11` |
-| 15 | **Confirm** that requiring a second sign-in in a second browser tab is acceptable | Product owner | Acceptance. It is a direct consequence of the agreed storage choice. `ADR-022` Q4 |
+| 9 | **Author or commission** a standards catalogue — eleven rule families have no covering content anywhere | Architecture owner | Nothing immediately. Three targets in this run had to be set by decision because no standard supplied them, and each is now a precedent from a single feature. `GAP-13155-08` |
+| 10 | **Configure** a total request timeout at the edge, or state that there will not be one | Platform owner | `L2` above — the client-side timeout is otherwise sized against an unmeasured figure. `GAP-13155-13`, risk `R11` |
+| 11 | **Confirm** which of the four gateway manifests is live in each environment | Platform owner | `D1` above. Editing only the manifest assumed live produces an environment-specific failure. `GAP-13155-18`, risk `R2` |
+| 12 | **Answer** what a user whose token carries no `role` claim at all sees, as distinct from an unrecognised value | Product owner | Spec sign-off. Nothing breaks at runtime — the safe behaviour is already specified. `GAP-13155-10` |
+| 13 | **Set** the expected automated coverage for this feature, since the platform's test gate checks nothing | QA owner | Spec sign-off, and `D4` above. `GAP-13155-11` |
+| 14 | **Confirm** that requiring a second sign-in in a second browser tab is acceptable | Product owner | Acceptance. It is a direct consequence of the agreed storage choice. `ADR-022` Q4 |
 
 ### 6.2 Delegated downstream — no action now
 
@@ -229,23 +236,23 @@ reviewer can see they were considered and assigned, not forgotten.
 
 | # | Item | Named stage | Tag |
 |---|------|-------------|-----|
-| 16 | The mechanism by which a static artifact receives per-environment configuration | `hls` | **[handled later by the `hls` stage]** |
-| 17 | Whether anything sets the `Request-ID` response header | `hls` | **[handled later by the `hls` stage]** |
-| 18 | Whether expiry is read from the token claim or the response `Expires` value | `hls` | **[handled later by the `hls` stage]** |
-| 19 | The concrete client-side timeout value | `lld` | **[handled later by the `lld` stage]** |
-| 20 | Framework, bundler and component library selection | `lld` | **[handled later by the `lld` stage]** |
-| 21 | Whether `get` is added alone or the method list is reviewed as a whole, when the first cross-origin `GET` appears | `lld` | **[handled later by the `lld` stage]** |
-| 22 | Whether a platform frontend standard is authored, at the second browser surface's intake | `architecture` | **[handled later by the `architecture` stage]** |
-| 23 | Whether the static bundle joins `compose/services.yml` and the PM2 manifests or is a third artifact kind | `devops` | **[handled later by the `devops` stage]** |
+| 15 | The mechanism by which a static artifact receives per-environment configuration | `hls` | **[handled later by the `hls` stage]** |
+| 16 | Whether anything sets the `Request-ID` response header | `hls` | **[handled later by the `hls` stage]** |
+| 17 | Whether expiry is read from the token claim or the response `Expires` value | `hls` | **[handled later by the `hls` stage]** |
+| 18 | The concrete client-side timeout value | `lld` | **[handled later by the `lld` stage]** |
+| 19 | Framework, bundler and component library selection | `lld` | **[handled later by the `lld` stage]** |
+| 20 | Whether `get` is added alone or the method list is reviewed as a whole, when the first cross-origin `GET` appears | `lld` | **[handled later by the `lld` stage]** |
+| 21 | Whether a platform frontend standard is authored, at the second browser surface's intake | `architecture` | **[handled later by the `architecture` stage]** |
+| 22 | Whether the static bundle joins `compose/services.yml` and the PM2 manifests or is a third artifact kind | `devops` | **[handled later by the `devops` stage]** |
 
 ### 6.3 Escalation summary
 
-Fifteen items need action before this design is executable, and three of them concern this feature —
-items 3, 13 and 15. The remaining twelve are long-standing platform conditions: no repository
+Fourteen items need action before this design is executable, and three of them concern this feature —
+items 3, 12 and 14. The remaining eleven are long-standing platform conditions: no repository
 owners, no deployment of anything, no standards catalogue, a test gate that checks nothing, a
 revocation model that does not revoke, and a public route that issues administrator accounts.
 
-None of the twelve was introduced here, and none can be closed here. They appear because a browser
+None of the eleven was introduced here, and none can be closed here. They appear because a browser
 client is the first caller that cannot route around any of them: it cannot deploy itself, it cannot
 be reached without a named origin, it cannot revoke a token, and it cannot decline to display a role
 the platform issued. The full detail, with failure-mode scoring, is in

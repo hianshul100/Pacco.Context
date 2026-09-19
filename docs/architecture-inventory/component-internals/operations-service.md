@@ -313,6 +313,23 @@ property and is echoed to the client as the `Request-ID` response header
 `Unverifiable — Missing Source Evidence` from this workspace; what *is* verifiable here is that the
 service reads `IMessageProperties.CorrelationId` and nothing else.
 
+> **The CORS block that exposes `Request-ID` is itself spec-forbidden.** The same
+> `extensions.cors` section cited above declares `allowCredentials: true` together with
+> `allowedOrigins: ['*']` (`ntrada-async.yml:26-30`, and identically in the other three
+> `ntrada*.yml` manifests). The CORS specification forbids that pair: a user agent must reject a
+> credentialed response whose `Access-Control-Allow-Origin` is `*`. No caller on this platform has
+> hit it, because every caller today is a machine client that sends no `Origin` and runs no
+> preflight — which is exactly why it has survived. The consequence for this service is narrow but
+> real: any browser that polls `GET /operations/{id}` with credentials will be refused by the
+> browser before the exposed-header list matters at all, so `Request-ID` is unreadable from a
+> browser regardless of `exposedHeaders`. The full reading is in
+> [`api-gateway.md`](api-gateway.md) §3.18; the fix is `ADR-023`, which replaces the wildcard with
+> named per-environment origins across all four manifests and changes nothing else in the block.
+> Whether this edge answers a preflight at all is unproven and carried as `GAP-13155-02` in
+> `../risk-constraint-gap-register.md`. Nothing in `operations-service` changes either way — this
+> is recorded here so the CORS citation above is not read as an endorsement of the block it points
+> into.
+
 **Lifecycle.** Comes into existence when the first message bearing that correlation id is consumed;
 ceases to exist 300 seconds after the last one (§3.5).
 

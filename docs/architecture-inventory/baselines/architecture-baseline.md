@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 3** — 2026-09-19, work item 13155. §2.2 and §7 record the browser surface established by `ADR-021`, `ADR-022` and `ADR-023`; §7's opening input-gap note is corrected (`ui-inventory.md` exists); §9.5 records the twelfth release path; §11.1 records that an ADR corpus now exists in this repository; §11.5 is new and lists the decisions this work item adds; §13 is new and holds the quality-attribute assessment. §1 … §6, §8, §10 and §12 are unchanged. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 3** — 2026-09-19, work item 13155. §2.2 and §7 record the browser surface established by `ADR-021`, `ADR-022`, `ADR-023` and `ADR-024`; §7's opening input-gap note is corrected (`ui-inventory.md` exists); §9.5 records the twelfth release path; §11.1 records that an ADR corpus now exists in this repository; §11.5 is new and lists the decisions this work item adds; §13 is new and holds the quality-attribute assessment. Architecture-generation review corrections applied on the same date: three `ADR-022` rule citations in §13 corrected (NFR-5 to rule 3; NFR-8 and NFR-18 to rule 5), and §11.5, §11.2's C9 note and §13's NFR-23 row updated for `ADR-024`, which closes `R9`. §1 … §6, §8, §10 and §12 are unchanged. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -1194,11 +1194,14 @@ build, its own versioned artifact and its own pipeline, which adds a twelfth rel
 eleven above. It is the only one of the twelve that is not `language: csharp` and not a
 `dotnet: 3.1.100` build, and it produces static assets rather than a `devmentors/pacco.*` image. The
 per-repository, independently-versioned shape of the other eleven is preserved: there is still no
-shared pipeline template and no cross-repository release coordination. Two things about that path
-are unresolved and are carried in `risk-constraint-gap-register.md` rather than settled here —
-nothing in the platform governs which browser toolchain or toolchain version it uses, and the CD gap
-above applies to it identically, so how its assets reach a served origin is `[unknown]` for the same
-reason it is `[unknown]` for every image.
+shared pipeline template and no cross-repository release coordination. Which toolchain version that
+path is built on is governed by `ADR-024`: the version is declared once in the repository with a
+committed lockfile, the pipeline installs from that lockfile rather than restating a version of its
+own, and the version must be in vendor support on the day it is committed. `ADR-024` names no
+version, so which toolchain is chosen remains a detailed-design decision. The CD gap above applies
+to this path identically and is not settled here — how its assets reach a served origin is
+`[unknown]` for the same reason it is `[unknown]` for every image, and is carried in
+`risk-constraint-gap-register.md`.
 
 > **Conflict with an existing artifact.** `architecture-views.md` §4.5 states that "No CI or CD
 > pipeline definition exists in the orchestration repository… Individual service repositories were
@@ -1378,7 +1381,7 @@ from the available sources.
 
 ### 11.5 Decisions recorded by work item 13155
 
-Three records were authored against this baseline. Unlike §11.2, these are recorded decisions rather
+Four records were authored against this baseline. Unlike §11.2, these are recorded decisions rather
 than observed constraints: no source implements them, and each binds work that has not been written.
 They are listed here so a reader of §11 sees the full constraint surface in one place.
 
@@ -1387,21 +1390,27 @@ They are listed here so a reader of §11 sees the full constraint surface in one
 | `ADR-021` | The browser surface lives in the existing `Pacco.Web` repository and is independently built, versioned and released, with its own artifact and pipeline; it reaches backends only through `api-gateway` | §2.2 deployable inventory, §7.4, §9.5 | Human decision gate `AD-1`, option A |
 | `ADR-022` | Session custody is entirely client-side: `sessionStorage` as the single store, the token carried only in the `Authorization` header, logout as a client-side discard, and a client-side route guard that reads the `role` claim from the held token and issues no backend call | §7.4, §8.1, §8.3 | Recorded human answers on storage, logout and guard placement |
 | `ADR-023` | `allowedOrigins: ['*']` in the four `ntrada*.yml` manifests is replaced by named per-environment browser origins; no gateway route is added and the rest of the CORS block is unchanged | §4, §7.4, §8.2 | The CORS specification's prohibition on wildcard-plus-credentials, and `ADR-004` Q3 |
+| `ADR-024` | Every deployable is governed by exactly one toolchain-currency record: `ADR-020` keeps the deployables that have a .NET runtime, and this record takes every deployable that has none — one declaration per repository, a committed lockfile the pipeline installs from, a version in vendor support on the day it is committed, and a review scheduled before that support ends. No version number is named | §9.5, §11.2 C9, §13 NFR-23 | `R9` in `risk-constraint-gap-register.md`, and the `ARCHITECTURE_ALIGNMENT_EXCEPTION` `ADR-021` §7 declares against `ADR-020` |
 
 Four properties of this set are worth stating plainly, because each is a first for the platform.
 `ADR-021` introduces the first deployable that is not a .NET host and the first `independently
 deployable: yes` UI. `ADR-022` introduces the first client-side persistence of a credential. `ADR-023`
 is the first decision that changes an existing configuration file rather than describing one.
-And none of the three establishes a platform-wide frontend standard — that was deferred by
-auto-default rather than by a human gate, which is why `ADR-021` carries it as an assumption and
-`risk-constraint-gap-register.md` carries it as a gap.
+`ADR-024` is the first record that governs a rule rather than a technology: it closes the gap
+`ADR-021` §7 opened by leaving the surface outside `ADR-020`'s reach, and it does so without naming
+a toolchain or a version. What still does not exist is a platform-wide frontend *standard* — a
+scaffold, a contributing guide, a lint or formatting baseline. That was deferred by auto-default
+rather than by a human gate, which is why `ADR-021` still carries it as an assumption and
+`risk-constraint-gap-register.md` still carries it as a gap.
 
 Two constraints in §11.2 interact with this set and neither is displaced. C3 (services must be
 independently deployable) is extended, not contradicted: the browser surface takes the same
 per-repository release shape. C7 (authentication is enforced at the edge) is relied upon: the
 client-side guard in `ADR-022` is an affordance over C7's enforcement, not a replacement for it, and
 `ADR-022` records that it must not be read as one. C9 (only .NET Core 3.1 is buildable) does not
-reach the browser surface, and nothing replaces it there — see §9.5.
+reach the browser surface — see §9.5 — and `ADR-024` is what now stands in its place there: not the
+same pin, but the same obligation to declare a version, hold it in support and review it before it
+ends.
 
 ---
 
@@ -1606,10 +1615,10 @@ design to realise — they impose no boundary, no deployable and no contract.
 | NFR-2 | security — no hard-coded credentials in the bundle | `no_change` `[LLD]` | `ADR-021` obligation 2 makes the gateway base URL the only backend value supplied to the surface, and supplies it as per-environment configuration rather than build-time content |
 | NFR-3 | security — no raw exceptions rendered | `no_change` `[LLD]` | `api-gateway.md` §3 records the edge's error shaping; the surface renders its own copy and does not pass backend payloads through |
 | NFR-4 | security — indistinguishable sign-in failure messaging | `no_change` | `CAP-01` returns the same failure for an unknown email and a wrong password, so the single generic message is what the platform already produces. `ADR-022` §4 rule 4 keeps the surface from narrowing it |
-| NFR-5 | security — admin binds solely to the `role` claim | `no_change` | The closed vocabulary `{user, admin}` is defined by `identity-service` (`…/component-internals/identity-service.md` §3.4). `ADR-022` rule 5 fixes a single comparison against that claim and resolves every other value, including an absent claim, to the normal-user experience |
+| NFR-5 | security — admin binds solely to the `role` claim | `no_change` | The closed vocabulary `{user, admin}` is defined by `identity-service` (`…/component-internals/identity-service.md` §3.4). `ADR-022` rule 3 fixes a single comparison against that claim and resolves every other value, including an absent claim, to the normal-user experience |
 | NFR-6 | security — session ends at the token's absolute lifetime | `no_change` | `jwt.expiryMinutes: 60` (§8.1). `ADR-022` rule 6 takes no refresh and routes no refresh endpoint through the edge, so the 60 minutes is the whole session |
 | NFR-7 | security — logout must not claim server-side termination | `at_risk` | `ADR-007` §2 rule 4: a revoked token is still accepted by the gateway and by all eight domain services, because only the issuing service consults the revocation store. `ADR-022` §6.2 records the consequence; the surface can only be honest about it, not fix it |
-| NFR-8 | security — the route guard is an affordance, not access control | `no_change` | `ADR-006` places enforcement at the edge; `ADR-022` rule 7 and §4 state the guard gates nothing beyond what the held token already carries |
+| NFR-8 | security — the route guard is an affordance, not access control | `no_change` | `ADR-006` places enforcement at the edge; `ADR-022` rule 5 and §4 state the guard gates nothing beyond what the held token already carries |
 | NFR-9 | security — the UI origin named explicitly at the edge | `needs_change` | `ADR-023`. `allowedOrigins: ['*']` with `allowCredentials: true` is the combination the CORS specification forbids (`…/component-internals/api-gateway.md` §3.18). The four `ntrada*.yml` manifests take named per-environment origins |
 | NFR-10 | privacy — the token never in a URL, log, analytics event or error report | `no_change` `[LLD]` | `ADR-022` rule 2 confines the token to one store and the `Authorization` header, which is the architectural form of this constraint. No analytics or error-reporting component exists in any repository to carry it elsewhere |
 | NFR-11 | concurrency — at most one in-flight sign-in | `no_change` `[LLD]` | A single-surface concern with no cross-component contract |
@@ -1619,17 +1628,18 @@ design to realise — they impose no boundary, no deployable and no contract.
 | NFR-15 | observability — correlation identifier on failed sign-in | `at_risk` | `…/component-internals/api-gateway.md` §3.18 declares `Request-ID` as a CORS-exposed header, and a recorded gap notes no code in the workspace sets it. `ADR-023` §6.2.5 records that the surface captures it opportunistically and must not depend on it |
 | NFR-16 | portability — every call traverses the edge allow-list | `no_change` | `ADR-021` obligation 4 restricts the surface to `api-gateway` and opens no direct service address. The existing browser asset's direct `http://localhost:5005/pacco` hub address (§7.2) is explicitly not repeated |
 | NFR-17 | portability — environment-configurable gateway base URL | `needs_change` | `ADR-021` obligation 2. This is the direct correction of the hard-coded absolute URL recorded in §7.2 |
-| NFR-18 | portability — CORS method allow-list covers the UI's verbs | `needs_change` | `ADR-023` rule 3. `allowedMethods` declares only `post`, `put` and `delete`; `get` is absent. This scope issues no cross-origin `GET`, because `ADR-022` rule 7's guard makes no backend call, so the gap is latent here and is recorded for the next browser feature rather than closed |
+| NFR-18 | portability — CORS method allow-list covers the UI's verbs | `needs_change` | `ADR-023` rule 3. `allowedMethods` declares only `post`, `put` and `delete`; `get` is absent. This scope issues no cross-origin `GET`, because `ADR-022` rule 5's guard makes no backend call, so the gap is latent here and is recorded for the next browser feature rather than closed |
 | NFR-19 | operational readiness — the origin change requires a gateway restart | `no_change` | Ntrada configuration is not hot-reloaded and no code path modifies routes (§4.3). `ADR-023` §4 schedules the change as a restart rather than a live edit |
 | NFR-20 | operational readiness — an independently deployable UI boundary | `needs_adr` | `ADR-021` obligation 1. `…/baselines/ui-inventory.md` §11.2 records the existing asset as not independently deployable, with no separate build, artifact, image, pipeline stage or version; this record inverts that for the new surface. See §2.2 and §9.5 |
 | NFR-21 | performance — the sign-in call bounded client-side | `at_risk` | No total request timeout is configured anywhere at the edge, and the gateway retry policy can add several seconds on top of the downstream's own timeouts. `ADR-022` rule 7 sets an explicit client-side bound, which is the only bound this work item can impose; the absent edge timeout is not within its ownership |
 | NFR-22 | security — exactly one client-side token store, tab-scoped | `needs_adr` | `ADR-022`. `…/baselines/ui-inventory.md` §9 records that nothing is stored anywhere today, so this is the platform's first client-side persistence and required a record rather than an inherited rule |
-| NFR-23 | maintainability — a documented frontend toolchain baseline | `needs_adr` | `ADR-021` obligation 3 and §7. No contributing guide, scaffold, template or architecture test exists in any of the fourteen clones to inherit, and nothing governs which toolchain version is used — the latter is carried as a gap, not settled here |
+| NFR-23 | maintainability — a documented frontend toolchain baseline | `needs_adr` | `ADR-021` obligation 3 and §7 require the toolchain to be declared in the repository. `ADR-024` supplies the governing rule that `ADR-020` does not reach: one currency record per deployable, a committed lockfile, a version in vendor support when committed, and a scheduled review. No contributing guide, scaffold, template or architecture test exists in any of the fourteen clones to inherit, so the *standard* remains a gap; the *currency rule* no longer is |
 
 **What this table shows in aggregate.** Seven attributes required an architectural record or an
 artifact change, and they cluster in exactly two places: the deployment and toolchain identity of a
-new surface (NFR-14, NFR-17, NFR-20, NFR-23 → `ADR-021`), and the two seams where a browser meets an
-edge built for machine callers (NFR-9, NFR-18 → `ADR-023`; NFR-22 → `ADR-022`). Three attributes —
+new surface (NFR-14, NFR-17, NFR-20, NFR-23 → `ADR-021`, with NFR-23's currency half carried by
+`ADR-024`), and the two seams where a browser meets an edge built for machine callers (NFR-9,
+NFR-18 → `ADR-023`; NFR-22 → `ADR-022`). Three attributes —
 NFR-7, NFR-15 and NFR-21 — cannot be satisfied by anything this work item owns, because each depends
 on behaviour belonging to `identity-service`, to whatever should set `Request-ID`, or to the edge's
 absent timeout configuration. Those three are the reason `risk-constraint-gap-register.md` exists as

@@ -15,7 +15,7 @@
 |-------|-------|
 | Owner | This register has no single owner, which is itself an open entry — see `GAP-13155-14` |
 | First opened | 2026-09-19, work item 13155 |
-| Sources | `docs/adr/` records `ADR-001` … `ADR-023`; `docs/architecture-inventory/` baselines, component internals and views; `intents/13155.md` |
+| Sources | `docs/adr/` records `ADR-001` … `ADR-024`; `docs/architecture-inventory/` baselines, component internals and views; `intents/13155.md` |
 | Scoring | Failure-mode scoring in §5 uses S, O and D on 1–10 with `RPN = S × O × D` |
 
 ---
@@ -71,7 +71,7 @@ is a preference, and it does not belong here.
 | `GAP-13155-04` | A script-readable token store with no compensating controls | security | `open` | **[ACTION NOW]** | Platform security owner (unassigned — `GAP-13155-14`) |
 | `GAP-13155-05` | Three implementations compare the same `role` claim differently | security | `open` | **[ACTION NOW]** | Platform security owner (unassigned — `GAP-13155-14`) |
 | `GAP-13155-06` | `Request-ID` is declared CORS-exposed and set by nothing | observability | `open` | **[handled later by the `hls` stage]** | `hls` stage |
-| `GAP-13155-07` | Nothing governs the browser toolchain or its version | maintainability | `open` | **[ACTION NOW]** | Platform owner (unassigned — `GAP-13155-14`) |
+| `GAP-13155-07` | Nothing governs the browser toolchain or its version | maintainability | `resolved` | — | Settled by `ADR-024` |
 | `GAP-13155-08` | No `docs/standards/` exists, so eleven rule families are uncovered | governance | `open` | **[ACTION NOW]** | Architecture owner (unassigned — `GAP-13155-14`) |
 | `GAP-13155-09` | A platform frontend standard was deferred by auto-default | governance | `open` | **[handled later by the second browser surface's intake]** | Architecture owner |
 | `GAP-13155-10` | What a token with no `role` claim at all shows the user | product | `open` | **[ACTION NOW]** | Product owner |
@@ -179,13 +179,15 @@ what a reviewer has to act on.
 
 | | |
 |-|-|
-| **State** | `open` · **[ACTION NOW]** |
+| **State** | `resolved` — by `ADR-024`, 2026-09-19 |
 | **Opened by** | `ADR-021` §7 `ARCHITECTURE_ALIGNMENT_EXCEPTION`, F4 |
-| **What it is** | `ADR-020` requires every Pacco deployable to target one runtime version and forbids a service from selecting its own. The rule is written for .NET deployables and a browser bundle has no .NET runtime to pin, so the surface falls outside it — and nothing replaces it. No framework, bundler, package manager or version policy governs the twelfth deployable |
-| **Who must act** | The platform owner, once named (`GAP-13155-14`) |
-| **What breaks if ignored** | The one governance rule that has kept eleven deployables on a single pinned toolchain stops applying at exactly the point a second toolchain enters the platform. The failure is slow: divergence accumulates without a signal, in the same way `C9` pinned the platform to a runtime that is now years out of support |
-| **Needed** | Before the surface's dependency manifest is committed |
-| **Alignment** | Recorded as an exception to `ADR-020` rather than as conformance, because conforming would mean claiming a rule applies where it does not |
+| **What it is** | `ADR-020` requires every Pacco deployable to target one runtime version and forbids a service from selecting its own. The rule is written for .NET deployables and a browser bundle has no .NET runtime to pin, so the surface fell outside it — and nothing replaced it. No framework, bundler, package manager or version policy governed the twelfth deployable |
+| **What resolved it** | `ADR-024` (`docs/adr/toolchain-currency-for-non-dotnet-deployables.md`). Every deployable is now covered by exactly one toolchain-currency record: `ADR-020` keeps those with a .NET runtime, unchanged, and `ADR-024` takes those without. Its rules are one declaration per repository, a committed lockfile the pipeline installs from, a version in vendor support on the day it is committed, and a review scheduled before that support ends |
+| **What is still not settled** | Which toolchain and which version. `ADR-024` deliberately names none — that is `lld`'s choice, tracked as `ADR-021` Q3. `ADR-024` is `Proposed` and cannot be ratified until an owner exists (`GAP-13155-14`), and its B2 records that the eleven existing deployables would fail its support-window rule today |
+| **Who must act** | No further architecture action. Ratification waits on `GAP-13155-14`; compliance is checked when the first manifest is committed |
+| **What breaks if ignored** | *(as recorded when open)* The one governance rule that has kept eleven deployables on a single pinned toolchain stops applying at exactly the point a second toolchain enters the platform. The failure is slow: divergence accumulates without a signal, in the same way `C9` pinned the platform to a runtime that is now years out of support |
+| **Needed** | Before the surface's dependency manifest is committed — met |
+| **Alignment** | The `ARCHITECTURE_ALIGNMENT_EXCEPTION` in `ADR-021` §7 stands as written: `ADR-020` still does not reach the browser surface. What has changed is that the surface is no longer ungoverned — it is governed by a different record. `ADR-024` §4 states the split so that "outside `ADR-020`" can no longer be read as "outside any rule" |
 
 ---
 
@@ -275,11 +277,11 @@ what a reviewer has to act on.
 | | |
 |-|-|
 | **State** | `open` · **[ACTION NOW]** |
-| **Opened by** | `ADR-021` B1, `ADR-022` B1, `ADR-023` B1 — all three independently |
-| **What it is** | None of the fourteen repositories has a recorded owner, so no follow-up action in any of the three new records has an accountable person, and none of the three can leave `Proposed` |
+| **Opened by** | `ADR-021` B1, `ADR-022` B1, `ADR-023` B1, `ADR-024` B1 — all four independently |
+| **What it is** | None of the fourteen repositories has a recorded owner, so no follow-up action in any of the four new records has an accountable person, and none of the four can leave `Proposed` |
 | **Who must act** | Whoever commissions work on this platform. This is the one entry that cannot be delegated to any stage, because delegation is precisely what it lacks |
-| **What breaks if ignored** | Eleven of the eighteen entries in this register name an owner that does not exist. The register becomes a list of things nobody is accountable for, which is indistinguishable from not having written it |
-| **Needed** | Before any of `ADR-021`, `ADR-022` or `ADR-023` is ratified |
+| **What breaks if ignored** | Ten of the eighteen entries in this register name an owner that does not exist — `GAP-13155-07` left that set when `ADR-024` resolved it. The register becomes a list of things nobody is accountable for, which is indistinguishable from not having written it |
+| **Needed** | Before any of `ADR-021`, `ADR-022`, `ADR-023` or `ADR-024` is ratified |
 
 ---
 
@@ -418,8 +420,8 @@ cross-origin call. That call is `must_verify` before `DO1` is declared working.
 
 ## 5. Architecture risk assessment
 
-A failure-mode analysis of the design authored by this stage — `ADR-021`, `ADR-022` and `ADR-023`
-and the baseline edits that accompany them. It assesses the **design**, not a running system, so
+A failure-mode analysis of the design authored by this stage — `ADR-021`, `ADR-022`, `ADR-023` and
+`ADR-024`, and the baseline edits that accompany them. It assesses the **design**, not a running system, so
 every occurrence figure is a judgement about how the design will behave rather than an observation
 of how it has behaved.
 
@@ -437,7 +439,7 @@ loud failure that stops the feature is easier to manage than a quiet one that do
 | `R4` | A logged-out token stays valid | security | 7 | 10 | 9 | **630** | `accept` | architecture | high | no |
 | `R2` | The origin is named in fewer than four manifests | operations | 7 | 6 | 8 | **336** | `process` | devops | medium | yes |
 | `R3` | The stored token is exfiltrated from the browser | security | 9 | 4 | 9 | **324** | `architecture_change` | lld | high | no |
-| `R9` | The browser toolchain drifts with no governing rule | maintainability | 5 | 7 | 8 | **280** | `adr` | architecture | medium | no |
+| `R9` | The browser toolchain drifts with no governing rule | maintainability | 5 | 7 | 8 | **280** | `adr` | architecture | low (`ADR-024`) | no |
 | `R10` | Failed sign-ins carry no correlation identifier | observability | 4 | 9 | 7 | **252** | `infra` | hls | medium | yes |
 | `R13` | An anonymous caller creates an admin account | security | 9 | 3 | 8 | **216** | `architecture_change` | architecture | high | no |
 | `R15` | Three feature records become a de-facto platform standard | governance | 4 | 6 | 9 | **216** | `adr` | architecture | medium | no |
@@ -455,6 +457,14 @@ platform is. `R4`, `R13` and `R14` are pre-existing conditions that a browser su
 none is caused by a decision in this run, and none can be fixed by one. The highest-ranked risk the
 design itself creates is `R3`, and it ranks where it does because of `D = 9`: a token read out of
 `sessionStorage` leaves no trace anywhere on this platform.
+
+**On `R9`.** `R9` is the one entry in this table whose `mitigation_type` of `adr` was left
+unfulfilled when the table was first written, on the reasoning that the governing rule belonged to
+a platform owner who does not yet exist. That reasoning does not survive the threshold: an `adr`
+mitigation owned by `architecture` at RPN 280 has to be answered by a record, not deferred to one.
+`ADR-024` is that record. Its residual is `low` rather than nil because the record is `Proposed` and
+binds a repository that holds no manifest yet — see §5.2. The S, O and D figures are left at their
+original values throughout this table: they score the failure mode, not the state of its mitigation.
 
 ### 5.2 Detail
 
@@ -537,14 +547,23 @@ design itself creates is `R3`, and it ranks where it does because of `D = 9`: a 
 - **Detection is 8** because drift has no event — the platform already demonstrates this, having run
   on a runtime that reached end of support in December 2022 (`architecture-baseline.md` §11.2 C9).
 - **Mitigation:** `ADR-021` obligation 3 requires a committed dependency manifest, build and lint
-  baseline, which makes the toolchain visible. Making it governed is `ADR-021` F4.
+  baseline, which makes the toolchain visible. `ADR-024` makes it governed: every deployable is
+  covered by exactly one toolchain-currency record, `ADR-020` keeps the .NET ones and `ADR-024`
+  takes the rest, with one declaration per repository, a committed lockfile the pipeline installs
+  from, a version in vendor support on the day it is committed, and a review scheduled before that
+  support ends. `ADR-024` names no version, so the choice of toolchain stays with `lld`.
 - **`mitigation_type`:** `adr`.
-- **`adr_recommendation`:** extend `ADR-020` to cover non-.NET deployables, or author a companion
-  record. Deliberately left to the platform owner rather than decided here, because it changes a
-  rule this work item does not own.
+- **`adr_recommendation`:** **Answered.** The recommendation offered two courses — extend `ADR-020`,
+  or author a companion record. The second was taken: `ADR-024` leaves `ADR-020`'s scope untouched
+  (it is a current-state record written to be superseded when the runtime moves) and supplies the
+  rule for deployables it does not reach. What is *not* decided here is which toolchain or which
+  version, because that is not a rule this stage owns.
 - **`owner_stage`:** `architecture`.
-- **Residual risk:** medium.
-- **Affected:** `ADR-021`, `ADR-020`, `NFR-23`, `GAP-13155-07`.
+- **Residual risk:** low. The rule now exists and the drift has a scheduled event. Two things keep it
+  from being nil: `ADR-024` is `Proposed` and cannot be ratified until an owner is named
+  (`GAP-13155-14`), and it binds a repository that holds no manifest yet, so nothing enforces it
+  until the first one is committed.
+- **Affected:** `ADR-021`, `ADR-020`, `ADR-024`, `NFR-23`, `GAP-13155-07`.
 
 ---
 
@@ -677,7 +696,7 @@ design itself creates is `R3`, and it ranks where it does because of `D = 9`: a 
   (`GAP-13155-05`).
 - **Occurrence is 3** because the issuing service lower-cases the value, so a mixed-case claim
   requires a token minted outside the normal path.
-- **Mitigation:** `ADR-022` rule 5 fixes a single comparison and resolves every non-matching value,
+- **Mitigation:** `ADR-022` rule 3 fixes a single comparison and resolves every non-matching value,
   including an absent claim, to the normal-user experience — the safe direction.
 - **`mitigation_type`:** `architecture_change` for the reconciliation, which `ADR-022` F4 owns.
 - **`adr_recommendation`:** none new — a reconciliation, not a decision.
@@ -773,9 +792,14 @@ can genuinely settle it from within its own scope. "Downstream" is not a name an
 
 ### 6.1 Reviewer action required now
 
+> **One item left this list on 2026-09-19.** "Nothing says which tools or versions the browser build
+> may use" was item 9 and is now settled by `ADR-024`; the entry itself is not deleted — it is
+> `GAP-13155-07` in §2.2, marked `resolved` with the record that closed it. The items after it are
+> renumbered, so a citation of "item 13" written before that date means item 12 here.
+
 | # | What it is | Who must act | What breaks if ignored | Tag |
 |---|-----------|--------------|------------------------|-----|
-| 1 | Nobody owns any of the fourteen repositories, so no follow-up in the three new records has an accountable person | Whoever commissions work on this platform | Eleven entries in this register name owners who do not exist, and none of `ADR-021`, `ADR-022` or `ADR-023` can be ratified | **[ACTION NOW]** |
+| 1 | Nobody owns any of the fourteen repositories, so no follow-up in the four new records has an accountable person | Whoever commissions work on this platform | Ten entries in this register name owners who do not exist, and none of `ADR-021`, `ADR-022`, `ADR-023` or `ADR-024` can be ratified | **[ACTION NOW]** |
 | 2 | No browser has ever made a cross-origin call to this gateway, and the code that would answer the preflight is not in the workspace | Platform owner, by running a credentialed cross-origin `POST` from a named origin | The feature fails at its very first call, and every other decision in this run assumes it does not | **[ACTION NOW]** |
 | 3 | The actual web address the login screen will be served from has not been chosen, for any environment | Product and Architecture together | The gateway configuration change has no value to apply, so `DO3` cannot be executed and `DO1` cannot be demonstrated | **[ACTION NOW]** |
 | 4 | Nothing on this platform deploys anything, so there is no arrangement to serve the login screen from | Platform owner | The artifact is built, versioned and unreachable — and the address in item 3 cannot be chosen because there is nowhere to host it | **[ACTION NOW]** |
@@ -783,31 +807,30 @@ can genuinely settle it from within its own scope. "Downstream" is not a name an
 | 6 | Logging out does not end the session anywhere on this platform — the token keeps working until it expires | Platform security owner | A user logging out on a shared machine leaves a usable credential behind. The screen can only be honest about it | **[ACTION NOW]** |
 | 7 | Anyone can create an administrator account by asking for one on the public sign-up route | Platform security owner | The login screen will faithfully show the admin area to an account that gave itself the role | **[ACTION NOW]** |
 | 8 | Three different parts of the platform compare the same role value by two different rules | Platform security owner | A user can see the admin screen and be refused on every admin action, which reads as a UI bug and is not one | **[ACTION NOW]** |
-| 9 | Nothing says which tools or versions the browser build may use — the rule that governs the other eleven deployables does not reach it | Platform owner | The one rule that kept eleven deployables on a single toolchain stops applying exactly when a second toolchain arrives, and drift accumulates with no signal | **[ACTION NOW]** |
-| 10 | There is no standards directory at all, so eleven categories of rule that a design would normally cite do not exist | Architecture owner | Every choice either cites nothing or quietly imports an outside convention. Three targets in this run had to be set by decision because no standard supplied them | **[ACTION NOW]** |
-| 11 | The gateway has no overall request timeout, so there is no measured figure to size the screen's own timeout against | Platform owner | The timeout is guessed — too short and it cancels calls that would have worked, too long and the user waits | **[ACTION NOW]** |
-| 12 | Nobody knows which of the four gateway configuration files is actually used in each environment | Platform owner | The origin change must be made in all four. Editing only the one assumed live produces a failure that appears in one environment and not another | **[ACTION NOW]** |
-| 13 | It has not been decided what a user whose token carries no role at all should see, as distinct from an unrecognised role | Product owner | Nothing breaks at runtime — the safe behaviour is already specified — but acceptance has an unanswered question in it | **[ACTION NOW]** |
-| 14 | There is no testing expectation to inherit: a failing test suite does not break the build and the suite is not run automatically | QA owner | The new pipeline copies a gate that checks nothing, on the platform's first user-facing surface | **[ACTION NOW]** |
-| 15 | It has not been confirmed that requiring a second sign-in in a second browser tab is acceptable | Product owner | A direct consequence of the agreed storage choice gets reported as a defect because nobody agreed to it | **[ACTION NOW]** |
+| 9 | There is no standards directory at all, so eleven categories of rule that a design would normally cite do not exist | Architecture owner | Every choice either cites nothing or quietly imports an outside convention. Three targets in this run had to be set by decision because no standard supplied them | **[ACTION NOW]** |
+| 10 | The gateway has no overall request timeout, so there is no measured figure to size the screen's own timeout against | Platform owner | The timeout is guessed — too short and it cancels calls that would have worked, too long and the user waits | **[ACTION NOW]** |
+| 11 | Nobody knows which of the four gateway configuration files is actually used in each environment | Platform owner | The origin change must be made in all four. Editing only the one assumed live produces a failure that appears in one environment and not another | **[ACTION NOW]** |
+| 12 | It has not been decided what a user whose token carries no role at all should see, as distinct from an unrecognised role | Product owner | Nothing breaks at runtime — the safe behaviour is already specified — but acceptance has an unanswered question in it | **[ACTION NOW]** |
+| 13 | There is no testing expectation to inherit: a failing test suite does not break the build and the suite is not run automatically | QA owner | The new pipeline copies a gate that checks nothing, on the platform's first user-facing surface | **[ACTION NOW]** |
+| 14 | It has not been confirmed that requiring a second sign-in in a second browser tab is acceptable | Product owner | A direct consequence of the agreed storage choice gets reported as a defect because nobody agreed to it | **[ACTION NOW]** |
 
 ### 6.2 Delegated to a named later stage — no action now
 
 | # | What it is | Which stage settles it | What breaks if that stage skips it | Tag |
 |---|-----------|------------------------|-------------------------------------|-----|
-| 16 | How a set of static files receives a different backend address in each environment — every other deployable is a running process that can read configuration, and this one is not | `hls` | The address gets built into the files, which is the exact practice the requirement exists to prevent and the exact mistake the existing browser page already makes | **[handled later by the `hls` stage]** |
-| 17 | Whether anything on this platform actually sets the correlation identifier the screen is asked to capture | `hls` | Either capture logic is written for something that never arrives, or the traceability target is quietly unmet | **[handled later by the `hls` stage]** |
-| 18 | Whether session expiry is read from the token's own claim or from the value in the sign-in response | `hls` | Two places end up disagreeing about when the session ended | **[handled later by the `hls` stage]** |
-| 19 | What number the screen's own request timeout is set to | `lld` | The processing state has no defined bound in practice, which is what the requirement was written to prevent | **[handled later by the `lld` stage]** |
-| 20 | Which framework, bundler and component library the surface uses | `lld` | The toolchain baseline cannot be committed, and whatever is chosen becomes a precedent by default | **[handled later by the `lld` stage]** |
-| 21 | Whether a cross-origin `GET` is ever added, and whether the method list is reviewed as a whole when it is | `lld`, at the point the first one is introduced | The next surface meets a preflight rejection with no server-side log line explaining it | **[handled later by the `lld` stage]** |
-| 22 | Whether a platform-wide frontend standard is written, at the point a second browser surface is proposed | `architecture`, at the second surface's intake | Three records written for one feature become a platform standard nobody authored | **[handled later by the `architecture` stage]** |
-| 23 | Whether a static bundle belongs in the Compose service list and the process manifests, or is a third kind of artifact neither describes | `devops` | A third kind of deployable is added to two inventories that already disagree with each other | **[handled later by the `devops` stage]** |
+| 15 | How a set of static files receives a different backend address in each environment — every other deployable is a running process that can read configuration, and this one is not | `hls` | The address gets built into the files, which is the exact practice the requirement exists to prevent and the exact mistake the existing browser page already makes | **[handled later by the `hls` stage]** |
+| 16 | Whether anything on this platform actually sets the correlation identifier the screen is asked to capture | `hls` | Either capture logic is written for something that never arrives, or the traceability target is quietly unmet | **[handled later by the `hls` stage]** |
+| 17 | Whether session expiry is read from the token's own claim or from the value in the sign-in response | `hls` | Two places end up disagreeing about when the session ended | **[handled later by the `hls` stage]** |
+| 18 | What number the screen's own request timeout is set to | `lld` | The processing state has no defined bound in practice, which is what the requirement was written to prevent | **[handled later by the `lld` stage]** |
+| 19 | Which framework, bundler and component library the surface uses | `lld` | The toolchain baseline cannot be committed, and whatever is chosen becomes a precedent by default | **[handled later by the `lld` stage]** |
+| 20 | Whether a cross-origin `GET` is ever added, and whether the method list is reviewed as a whole when it is | `lld`, at the point the first one is introduced | The next surface meets a preflight rejection with no server-side log line explaining it | **[handled later by the `lld` stage]** |
+| 21 | Whether a platform-wide frontend standard is written, at the point a second browser surface is proposed | `architecture`, at the second surface's intake | Three records written for one feature become a platform standard nobody authored | **[handled later by the `architecture` stage]** |
+| 22 | Whether a static bundle belongs in the Compose service list and the process manifests, or is a third kind of artifact neither describes | `devops` | A third kind of deployable is added to two inventories that already disagree with each other | **[handled later by the `devops` stage]** |
 
 ### 6.3 What a reviewer should take from this
 
-Fifteen items need action before this design can be executed, and **only three of them are about
-this feature** — items 3, 13 and 15. The other twelve are platform conditions that a browser surface
+Fourteen items need action before this design can be executed, and **only three of them are about
+this feature** — items 3, 12 and 14. The other eleven are platform conditions that a browser surface
 is simply the first thing to run into: no owners, no deployment, no standards, no test gate, a
 revocation model that does not revoke, and a sign-up route that hands out administrator accounts.
 
