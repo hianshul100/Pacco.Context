@@ -10,7 +10,7 @@
 | **Supersedes / Superseded by** | — (nothing to supersede). 🎯 This record is written to be superseded: see §2 |
 | **Deciders** | Unassigned — no `CODEOWNERS`, contributing guide or team metadata exists in any of the fourteen clones (blocker B1) |
 | **Base ref of all cited source** | `feature/12998/aidlc` |
-| **Related** | `ADR-002` (the toolkit whose version line is coupled to this pin), `ADR-018` (why moving the pin is an eleven-repository change with no coordinated release), `ADR-017` (the images this runtime ships in), `ADR-024` (the companion record that governs toolchain currency for deployables this one does not reach; it leaves this record's scope unchanged) |
+| **Related** | `ADR-002` (the toolkit whose version line is coupled to this pin), `ADR-018` (why moving the pin is an eleven-repository change with no coordinated release), `ADR-017` (the images this runtime ships in) |
 
 ## Notation
 
@@ -70,12 +70,6 @@ Moving one implies moving the other.
 It does not cover the toolkit version itself, which is `ADR-002`, nor the release mechanism that makes a
 platform-wide change expensive, which is `ADR-018`. It does not choose the target runtime version —
 that is question Q1, and deliberately not decided here.
-
-It also does not reach a deployable that has no .NET runtime to pin. "Every Pacco deployable" in §2
-means every deployable that has one; a browser bundle has none, so §2 has nothing to bind in it.
-That is a scope limit, not a licence: `ADR-024` governs toolchain currency for exactly those
-deployables, so no deployable falls outside both records. Nothing in this record changes as a
-result, and `ADR-021` §7's `ARCHITECTURE_ALIGNMENT_EXCEPTION` against it stands as written.
 
 ## 2. Decision
 
