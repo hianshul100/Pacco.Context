@@ -6,6 +6,11 @@
 **Date of analysis:** 2026-09-04
 **Branch:** `arch-discovery-21758174-49b6-4af2-9774-025561defc90`
 **Workspace base ref for all analysed clones:** `feature/12998/aidlc`
+**Revision 2 — 2026-09-19, work item 13155.** CAP-17 registered. It is the first capability in this
+document whose existence rests on a recorded architecture decision rather than on observed source,
+and every statement about it is attributed to the record that establishes it. CAP-01 … CAP-16 are
+unchanged and remain source-derived. The standing rule that capability *maturity* is `[unknown]`
+platform-wide is unchanged and is not asserted for CAP-17 either.
 
 This document is the **single authoritative capability reference** for the Pacco platform. It
 replaces both a standalone capability list and a separate service-capability mapping: capability
@@ -64,8 +69,10 @@ independently:
 9. [Service Lookup Index](#service-lookup-index)
 10. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
 
-**Capability index.** Sixteen capabilities are evidenced: eleven business/domain capabilities
-(CAP-01 … CAP-11) and five platform/technical capabilities (CAP-12 … CAP-16).
+**Capability index.** Seventeen capabilities are recorded: eleven business/domain capabilities
+(CAP-01 … CAP-11) and six platform/technical capabilities (CAP-12 … CAP-17). Sixteen of the
+seventeen are evidenced in source. CAP-17 is established by decision rather than observed in code —
+see its entry in §1 and the revision note above.
 
 | ID | Capability | Primary owner |
 |---|---|---|
@@ -85,6 +92,7 @@ independently:
 | CAP-14 | Platform Observability | `Pacco` (definition) + every service (participation) |
 | CAP-15 | Secrets & Service-Identity Management | `Pacco` (definition) + `customers-service` (enforcement point) |
 | CAP-16 | Environment & Deployment Definition | `Pacco` |
+| CAP-17 | Browser Presentation & Authenticated Entry | `Pacco.Web` |
 
 ---
 
@@ -272,7 +280,7 @@ independently:
 
 ### Platform and technical capabilities
 
-These five are included because each is an **operational responsibility with an identifiable
+These six are included because each is an **operational responsibility with an identifiable
 owner, a configuration surface, and a platform-wide blast radius** — not because they are
 infrastructure. Framework plumbing that carries none of those properties is excluded.
 
@@ -374,6 +382,34 @@ infrastructure. Framework plumbing that carries none of those properties is excl
   `compose/rabbitmq/Dockerfile`; `Pacco/services.yml`, `Pacco/prod-services.yml`; `Pacco/Pacco.sln`;
   `Pacco/scripts/git-clone.sh`; each service repo's `Dockerfile`, `.travis.yml`, `scripts/*.sh`.
 
+**Capability: CAP-17 — Browser Presentation & Authenticated Entry**
+
+- **Description:** The platform's human entry point in a browser: one common login screen for every
+  user, authentication against CAP-01 reached only through CAP-02, a role-aware welcome landing
+  resolved solely from the token's `role` claim, a tab-scoped client-held session, a client-side
+  route guard, and a client-side logout. It is hosted in the `Pacco.Web` repository as a standalone
+  deployable with its own build, artifact, version and pipeline, and it reaches the platform only
+  through the gateway's declared routes. It owns no data, no database and no exchange; it publishes
+  nothing and nothing calls it.
+- **Purpose / business value:** Pacco has had no application frontend, so every capability on the
+  platform has been reachable only by a machine caller holding a token obtained out of band. This
+  capability is the first surface on which a person signs in.
+- **Confidence:** high for the decision, `[unknown]` for the implementation — no source in any
+  cloned repository evidences it. Unlike CAP-01 … CAP-16, this entry is **established by decision,
+  not observed in code**; the records below are its evidence, and they are load-bearing rather than
+  descriptive.
+- **Boundary note:** CAP-17 owns presentation only. Authentication remains CAP-01's and enforcement
+  remains CAP-02's; the client-side guard is a usability affordance and holds no authorization
+  decision. The static SignalR console inside `operations-service` is **not** part of CAP-17 — it
+  stays capability-scoped to CAP-11 and is unaffected.
+- **Evidence:** `docs/adr/standalone-browser-surface-in-pacco-web.md` (`ADR-021` — the deployable
+  and its release identity); `docs/adr/client-owned-browser-session-custody.md` (`ADR-022` — the
+  client-held session, the guard and the logout); `docs/adr/named-browser-origins-at-the-declarative-edge.md`
+  (`ADR-023` — the edge origin that makes it reachable); `intents/13155.md` (DO1, DO2, DO3).
+  Supporting current-state evidence for the absence it fills:
+  `docs/architecture-inventory/baselines/ui-inventory.md` §1.4, §11.2;
+  `docs/architecture-inventory/baselines/architecture-baseline.md` §7.1.
+
 **Capabilities considered and deliberately not recorded.** Contract testing between
 `orders-service` and `parcels-service` (Pactify 1.1.0, one consumer suite and one provider suite)
 is a **testing practice attached to CAP-06/CAP-07**, not a capability with its own runtime
@@ -409,6 +445,7 @@ any of the thirteen clones. Capability descriptions are not repeated here; see �
 | CAP-14 Platform Observability | `Pacco` (defines Jaeger, Seq, Prometheus, Grafana) | all ten services plus `api-gateway` emit signals; **`ordermaker-service` emits no traces** | high (estate) / medium (coverage) | `Pacco/compose/grafana-seq-jaeger-prometheus.yml`, `compose/prometheus/prometheus.yml`; `jaeger`/`logger`/`metrics` sections per service; no `jaeger` section or package in `Pacco.Services.OrderMaker` |
 | CAP-15 Secrets & Service-Identity Management | `Pacco` (defines Vault and documents its PKI setup) — enforcement point is `customers-service` | `availability-service` (the only certificate-presenting caller); nine of the ten services consume Vault secrets — `ordermaker-service` has no `vault` section and no `Convey.Secrets.Vault` reference | high (config) / medium (enforcement, Q7) | `Pacco/docker-images.txt`; `Pacco/compose/consul-fabio-vault.yml`; `Customers.Api/appsettings.json` (`security.certificate.acl`); `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` |
 | CAP-16 Environment & Deployment Definition | `Pacco` | each service repo owns its own `Dockerfile`, `.travis.yml` and `scripts/` | high | `Pacco/compose/*.yml`; `Pacco/services.yml`, `prod-services.yml`; `Pacco/Pacco.sln`; per-repo `Dockerfile` and `.travis.yml` |
+| CAP-17 Browser Presentation & Authenticated Entry | `Pacco.Web` | `api-gateway` (the only path the surface may reach, and the holder of the origin entry that admits it); `identity-service` (issues the token and the role claim the surface reads) | high (runtime ownership by decision) / `[unknown]` (implementation — no source exists) | `docs/adr/standalone-browser-surface-in-pacco-web.md`; `docs/adr/client-owned-browser-session-custody.md`; `docs/adr/named-browser-origins-at-the-declarative-edge.md`; `intents/13155.md` |
 
 **Notes on shared or ambiguous ownership**
 
@@ -1092,6 +1129,29 @@ is, not what should change.
 - **Observable quality signals.** Every service builds identically through the same four scripts.
   The compose stacks and the PM2 manifests disagree by one service, and no manifest is marked
   production.
+
+### CAP-17 — Browser Presentation & Authenticated Entry
+
+The entries above describe observed structure. This one describes the structure the establishing
+records fix, because no source evidences it; each property below is a constraint the records impose
+rather than a measurement.
+
+- **Coupling / isolation.** The least coupled capability on the platform. Exactly one outbound
+  dependency — the gateway's declared HTTP routes — and zero inbound: nothing calls it, subscribes
+  to it, or reads from it. It owns no database, no exchange and no queue, and it registers with no
+  discovery registry.
+- **Boundary clarity.** Sharp by construction and narrow by scope. It owns presentation only;
+  authentication stays with CAP-01 and enforcement with CAP-02. Its entire contract with the rest of
+  the platform is a bearer token, a role string and an expiry instant, all carried in one response
+  body the platform already returns.
+- **Dependency surface.** `api-gateway` over HTTP, and nothing else. Configuration surface: one
+  per-environment gateway base URL held by this capability, and one per-environment origin entry held
+  by CAP-02 in four gateway manifests.
+- **Observable quality signals.** It is the first deployable on the platform whose runtime is a
+  browser rather than a .NET host, so the single-runtime rule that governs every other deployable
+  does not reach it. It is also the platform's first client-side persistence — no `localStorage` or
+  `sessionStorage` use exists anywhere else in the workspace. Both properties are recorded as risks
+  rather than as achievements in `docs/architecture-inventory/risk-constraint-gap-register.md`.
 
 ---
 

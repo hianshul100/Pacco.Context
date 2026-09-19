@@ -20,6 +20,14 @@
 > **Scope:** observed current state on base ref `feature/12998/aidlc` across thirteen repositories.
 > No target state, no modernization proposal. Prose narrative is deliberately minimal — this file
 > owns the platform's diagrams, not its written baseline.
+>
+> **Revision 2 — 2026-09-19, work item 13155.** Three views are added: §1.7, §3.6 and §4.6. They
+> carry a fourth confidence marker, **`[decided]`**, which the legend above does not have and which
+> means something different from the other three. `[confirmed]`, `[inferred]` and `[unknown]` all
+> describe how well an element is evidenced *in source*. `[decided]` means the element has no source
+> at all and is drawn from a recorded architecture decision — `ADR-021`, `ADR-022` or `ADR-023`. A
+> reader must not treat a `[decided]` edge as observed behaviour. Every other diagram in this file is
+> unchanged, and no existing element was redrawn.
 
 **Platform shape in one paragraph, for orientation only:** eleven .NET Core 3.1 deployables — one
 Ntrada API gateway and ten Convey-based services — communicating north-south over HTTP through the
@@ -44,16 +52,18 @@ Compose plus PM2 process manifests. All of this is `[confirmed]` — `repo-inven
 
 ## 1. System Context Diagrams (C1)
 
-Six C1 diagrams are generated, one per bounded context that has sufficient evidence. The
-groupings follow the subsystems established in `repo-inventory.md` §4. Inside a grouped context
-every service is drawn as its **own node** with its **own edges** — no dependency is attributed to
-a context as a whole.
+Six C1 diagrams are generated from source evidence, one per bounded context that has sufficient
+evidence, and **a seventh, §1.7, is generated from decision evidence**. The groupings follow the
+subsystems established in `repo-inventory.md` §4. Inside a grouped context every service is drawn as
+its **own node** with its **own edges** — no dependency is attributed to a context as a whole.
 
-**Two repositories get no C1 diagram, deliberately:**
+**Two repositories get no source-derived C1 diagram, deliberately:**
 
 - `Pacco.Web` — the clone contains exactly one tracked file, `README.md`, on a single commit. There
   is no runtime, no manifest, no configuration, and no reference to it from any other repository.
-  **Unverifiable — Missing Source Evidence.** See §6 GAP-1.
+  **Unverifiable — Missing Source Evidence.** See §6 GAP-1. That finding is unchanged: nothing has
+  been built. §1.7 draws `Pacco.Web` from `ADR-021`, `ADR-022` and `ADR-023` and is marked
+  `[decided]` throughout for exactly that reason.
 - `Pacco` — it owns no deployable and no runtime, so it has no system context. Its content is
   deployment and process definition and is shown in §4 instead. Drawing it in a C1 would mix
   packaging with runtime. `[confirmed]` — `repo-summary/Pacco.md` §2.
@@ -352,6 +362,67 @@ dependency. See §6 GAP-14.
 have no fields, so only message **names** are bound (§6 GAP-15). Whether the SignalR hub or the
 gRPC stream scopes results per caller is `[unknown]` (§6 GAP-16) — `GetOperationResponse` carries a
 `userId` and `SubscribeOperations` takes no filter argument.
+
+### 1.7 Browser Presentation and Authenticated Entry — `Pacco.Web` — [Confidence: decided]
+
+```mermaid
+graph TD
+    person["Signed-in person<br/>using a browser"]
+    subgraph "Browser Presentation"
+        web["Pacco.Web browser surface<br/>static assets served from a named origin<br/>capability CAP-17"]
+        store["sessionStorage<br/>one tab-scoped token store"]
+    end
+    subgraph "Edge and Access"
+        gw["api-gateway<br/>Ntrada config driven<br/>named allowedOrigins"]
+        idsvc["identity-service<br/>issues the access token"]
+    end
+    backends["8 backend services<br/>not called by this surface"]
+
+    person -->|"loads the surface over HTTPS [decided]"| web
+    web -->|"POST identity sign-in cross-origin [decided]"| gw
+    gw -->|"HTTP downstream, existing route, unauthenticated [confirmed]"| idsvc
+    idsvc -->|"AuthDto accessToken refreshToken role expires [confirmed]"| gw
+    gw -->|"CORS response headers from Ntrada.Extensions.Cors [confirmed]"| web
+    web -->|"writes the access token only [decided]"| store
+    store -->|"read for the Authorization header and the role claim [decided]"| web
+    web -.->|"no call is made on guard evaluation [decided]"| backends
+```
+
+**What the diagram asserts and what it does not.** Every `[decided]` edge exists because a record
+says it must, not because code was read. The two `[confirmed]` edges are the ones that already
+exist: `POST /identity/sign-in` is a declared **public** route (`…/component-internals/api-gateway.md`
+§6.1, `ntrada.yml:263-269`), and `AuthDto` is `(string AccessToken, string RefreshToken, string Role,
+long Expires)` (`…/component-internals/identity-service.md` §3.11). `ADR-023` adds no route to any
+`ntrada*.yml` — the sign-in edge drawn here is the route that is already there.
+
+**Why `backends` is drawn with a dotted, negative edge.** It is the single most load-bearing
+property of this context and it is easier to misread from an omission than from a marked edge. The
+client-side route guard in `ADR-022` rule 7 reads the `role` claim from the token it already holds
+and makes **no** backend call — no `GET /identity/me`, no ownership probe, nothing. The dotted edge
+records that deliberate absence so a later reader does not "restore" a call that was excluded on
+purpose. It is also why no cross-origin `GET` appears anywhere in this view, which is what makes the
+missing `get` in the edge's `allowedMethods` latent rather than blocking (`ADR-023` rule 3).
+
+**Why `sessionStorage` is drawn as a node rather than as an attribute of the surface.** It is the
+platform's first client-side credential store. `…/baselines/ui-inventory.md` §9 records that the
+existing browser asset stores nothing — no `localStorage`, no `sessionStorage`, no
+`document.cookie`, no in-memory persistence beyond a live DOM input value. Drawing the store
+explicitly makes the new trust boundary visible: the token is at rest in a script-readable location
+for the life of the tab.
+
+**Comparison with §1.1.** §1.1 draws `user` as "External clients — browser or HTTP caller", a single
+undifferentiated actor. This view splits the browser half of that actor out, because a browser is
+the one caller class for which the edge's CORS configuration is load-bearing and for which the
+wildcard-plus-credentials combination in `…/component-internals/api-gateway.md` §3.18 is a hard
+failure rather than a latent defect. No edge in §1.1 changes as a result.
+
+**Gaps / unknowns.** The concrete origin value per environment is unnamed — the decision fixes the
+mechanism, not the values (`ADR-023`, and `…/component-internals/api-gateway.md` Q-8). The
+cross-origin preflight path has never been exercised against a running gateway, and Ntrada's source
+is not in the workspace, so how `allowedOrigins` materialises at runtime is `[unknown]`
+(`…/component-internals/api-gateway.md` B-1, Q-2). How the static assets reach a served origin is
+`[unknown]` for the same reason no image's deployment path is known — there is no CD stage anywhere.
+All three are carried in `risk-constraint-gap-register.md`.
 
 ---
 
@@ -867,6 +938,76 @@ drive it is `[unknown]` (§6 GAP-5). `delivery_failed` is published and consumed
 `[confirmed]` but the resulting order state transition is not evidenced and is not drawn.
 `order_delivering` reaches no domain consumer `[confirmed]`.
 
+### 3.6 Browser sign-in, route guard and logout — [Confidence: decided]
+
+This is the only flow in §3 whose steps are drawn from records rather than from source. Steps marked
+`[confirmed]` are existing platform behaviour the flow rides on; steps marked `[decided]` exist
+because `ADR-021`, `ADR-022` or `ADR-023` requires them. Nothing in the workspace implements any
+`[decided]` step.
+
+```mermaid
+sequenceDiagram
+    actor Person
+    participant WEB as "Pacco.Web browser surface"
+    participant SS as "sessionStorage tab scoped"
+    participant GW as "api-gateway"
+    participant ID as "identity-service"
+
+    Person->>WEB: open the login screen [decided]
+    WEB->>GW: OPTIONS preflight for the sign-in call [decided]
+    GW-->>WEB: CORS headers naming this origin, allowCredentials true [decided]
+    Note over WEB,GW: this exchange has never been run against a live gateway - see the gap register [decided]
+    Person->>WEB: submit email and password [decided]
+    WEB->>WEB: start a client-side request timeout and block a second submit [decided]
+    WEB->>GW: POST identity sign-in - existing public route, no new route added [confirmed]
+    GW->>ID: HTTP downstream in both sync and async modes [confirmed]
+    ID->>ID: verify with PasswordService then mint via JwtProvider [confirmed]
+    ID-->>GW: AuthDto accessToken refreshToken role expires [confirmed]
+    GW-->>WEB: AuthDto body plus exposed headers Request-ID Resource-ID Trace-ID Total-Count [confirmed]
+    WEB->>SS: write the access token only - refresh token is discarded [decided]
+    WEB->>WEB: read the role claim from the held token and choose the landing view [decided]
+    Note over WEB: the guard makes no backend call and gates no data the token does not already carry [decided]
+    Person->>WEB: choose log out [decided]
+    WEB->>SS: clear the store [decided]
+    WEB->>WEB: return to the login screen with copy that claims no server-side termination [decided]
+    Note over WEB,ID: the token stays valid at the gateway and at all eight services until it expires [confirmed]
+```
+
+**Four things this flow deliberately does not contain.** Each absence is a decision, and each would
+be an easy and wrong thing for a later stage to add back.
+
+1. **No refresh.** `ADR-022` rule 6 takes no refresh token path. The refresh token in the `AuthDto`
+   is discarded on receipt. This is consistent with what the edge already permits:
+   `POST refresh-tokens/use` and `POST refresh-tokens/revoke` have no gateway route in any of the
+   four configurations (§3.3 Unknowns), so a browser could not reach them even if it wanted to. The
+   consequence is a hard 60-minute session ceiling, `jwt.expiryMinutes: 60`.
+2. **No revocation call on logout.** `POST access-tokens/revoke` is likewise unroutable through the
+   edge, and even if it were routable it would not help: `ADR-007` §2 rule 4 records that a revoked
+   token is still accepted by the gateway and by all eight domain services, because only the issuing
+   service consults the revocation store. The closing `Note` states that plainly. The honest-copy
+   requirement in `ADR-022` rule 4 exists because of it.
+3. **No `GET /identity/me` on guard evaluation.** The route exists and is authenticated
+   (`…/component-internals/api-gateway.md` §6.1), and it is exactly what a server-checked guard
+   would call. `ADR-022` rule 7 excludes it, which is what keeps this whole flow free of cross-origin
+   `GET` and therefore unaffected by `get` being absent from `allowedMethods`.
+4. **No SignalR connection.** The existing browser asset opens a hub connection to a hard-coded
+   `http://localhost:5005/pacco` and passes the token as a hub-method argument *after* the socket is
+   established (§3.2 and the baseline's §7.2). That is a different surface with a different token
+   handling model, and `ADR-021` obligation 4 restricts this surface to calls through the edge.
+
+**Why the preflight step is drawn at all, and why it carries a note.** It is the one step in the
+flow that has never been executed. The edge's current `allowedOrigins: ['*']` with
+`allowCredentials: true` is the combination the CORS specification forbids, so the current
+configuration either admits any origin with credentials or fails credentialed calls silently — and
+which of the two Ntrada produces cannot be determined from this workspace, because Ntrada's source
+is not in it. Drawing the step makes it reviewable rather than assumed. It is `must_verify` in
+`risk-constraint-gap-register.md`.
+
+**The `Request-ID` header.** It is drawn on the response because `exposedHeaders` declares it
+(`…/component-internals/api-gateway.md` §3.18), not because anything sets it — a recorded gap notes
+no code in the workspace writes it. The surface captures it opportunistically and its failure
+diagnostics must work without it.
+
 ---
 
 ## 4. Deployment Topology
@@ -1023,6 +1164,75 @@ no secret material is reproduced here. Whether any of it is live is `[unknown]` 
 No CI or CD pipeline definition exists in the orchestration repository `[confirmed]`. Individual
 service repositories were not observed to carry a shared pipeline template either. Whether images
 are built by hand or by a pipeline outside the workspace is `[unknown]`.
+
+> **Correction carried from the baseline.** `architecture-baseline.md` §11.3 X1 records that the CI
+> half of the paragraph above is stale: eleven `.travis.yml` files exist and define a
+> build → test → dockerize pipeline on `master` and `develop`, and `repo-inventory.md` §2.3 records
+> them correctly. The CD half stands — no deployment automation was observed anywhere. This note is
+> added rather than a rewrite, because the baseline owns that reconciliation and this file owns the
+> diagrams.
+
+### 4.6 Browser surface deployable and its named origin — [Confidence: decided]
+
+This view adds one deployable to §4.1's topology. It does not redraw §4.1, and every node it shares
+with §4.1 keeps the same meaning there.
+
+```mermaid
+graph TD
+    subgraph "Browser"
+        person["Signed-in person"]
+    end
+    subgraph "Static hosting per environment"
+        origin["Named browser origin<br/>serves the Pacco.Web build artifact<br/>concrete value per environment is unnamed"]
+    end
+    subgraph "Existing Compose or PM2 topology"
+        gw["api-gateway container<br/>NTRADA_CONFIG selects one of four manifests"]
+        yml["ntrada.yml ntrada.docker.yml<br/>ntrada-async.yml ntrada-async.docker.yml<br/>extensions.cors allowedOrigins"]
+        svcs["10 domain service containers<br/>unchanged by this work item"]
+    end
+    subgraph "Build"
+        repo["Pacco.Web repository<br/>own build, own version, own pipeline"]
+        travis["11 Travis pipelines<br/>dotnet 3.1.100, dockerize.sh"]
+    end
+
+    repo -->|"produces a versioned static artifact [decided]"| origin
+    person -->|"loads assets over HTTPS [decided]"| origin
+    person -->|"XHR to the per-environment gateway base URL [decided]"| gw
+    yml -->|"read at process start, not hot reloaded [confirmed]"| gw
+    gw -->|"must name the origin in allowedOrigins [decided]"| origin
+    gw -->|"HTTP downstream or RabbitMQ publish depending on manifest [confirmed]"| svcs
+    travis -->|"builds the 11 .NET deployables [confirmed]"| svcs
+    repo -.->|"not a Travis csharp pipeline - toolchain ungoverned [decided]"| travis
+```
+
+**The twelfth deployable, and how it differs from the eleven.** `ADR-021` makes `Pacco.Web` an
+independently built, versioned and released artifact. It is the only one of the twelve that is not
+`language: csharp`, not a `dotnet: 3.1.100` build, and not a `devmentors/pacco.*` image — it
+produces static assets. The per-repository, independently-versioned release shape of the other
+eleven is preserved exactly: no shared pipeline template, no cross-repository release coordination.
+The dotted edge to `travis` records that it does **not** inherit the pinned toolchain the other
+eleven share, and that nothing replaces it — which is the whole of `ADR-021` obligation 3 and the
+reason the toolchain gap is carried rather than closed.
+
+**Why `yml` is drawn as its own node.** The `ntrada*.yml` manifests are configuration files read at
+process start, and `ADR-023` changes exactly one value in them — `allowedOrigins` — across all four.
+Nothing else in the CORS block changes and no route declaration changes. Drawing the manifests
+separately from the gateway container makes the operational consequence legible: because Ntrada
+configuration is not hot-reloaded and no code path modifies routes, naming an origin is a **gateway
+restart**, scheduled as such, not a live edit. That is the whole content of NFR-19.
+
+**What is drawn as a box with no mechanism inside it.** `Static hosting per environment` has no
+server, no CDN, no reverse-proxy rule and no image, because none is evidenced or decided. `ADR-021`
+fixes that the artifact is independently released; it does not fix what serves it. This is the same
+`[unknown]` that applies to every other deployable — §4.5 records that no CD stage exists anywhere
+and that how an image reaches a running environment is unknown. The browser artifact inherits that
+gap unchanged rather than creating a new one.
+
+**Gaps / unknowns.** The concrete origin value per environment is unnamed. How Ntrada materialises
+`allowedOrigins` at runtime is `[unknown]` because Ntrada's source is not in the workspace. Which of
+the four manifests is authoritative per environment is `[unknown]` and predates this work item
+(§6 GAP-3) — it matters more now, because `ADR-023` requires the change in all four and a reader
+must not assume only one is live. All are carried in `risk-constraint-gap-register.md`.
 
 ---
 

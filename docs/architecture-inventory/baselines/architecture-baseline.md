@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 3** — 2026-09-19, work item 13155. §2.2 and §7 record the browser surface established by `ADR-021`, `ADR-022` and `ADR-023`; §7's opening input-gap note is corrected (`ui-inventory.md` exists); §9.5 records the twelfth release path; §11.1 records that an ADR corpus now exists in this repository; §11.5 is new and lists the decisions this work item adds; §13 is new and holds the quality-attribute assessment. §1 … §6, §8, §10 and §12 are unchanged. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -63,7 +63,8 @@ Where a runtime relationship could not be proven, it is **omitted rather than gu
 10. [Cross-cutting operational concerns](#10-cross-cutting-operational-concerns)
 11. [Architectural constraints and recorded decisions](#11-architectural-constraints-and-recorded-decisions)
 12. [Architecture Views Summary](#12-architecture-views-summary)
-13. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
+13. [Quality-attribute assessment](#13-quality-attribute-assessment)
+14. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
 
 ---
 
@@ -196,7 +197,7 @@ Two further repositories are in the clone set but contribute no deployable:
 | Repository | Contents | Status |
 |------------|----------|--------|
 | `Pacco` | Orchestration only: `Pacco.sln`, `compose/`, `services.yml`, `prod-services.yml`, `scripts/`, `docker-images.txt`, `assets` | Not a deployable; it is the platform's assembly point |
-| `Pacco.Web` | **One tracked file**: `README.md` containing the single line `# Pacco.Web` (verified via `git ls-files`) | **Empty placeholder.** No source, no build, no package manifest. See §7 |
+| `Pacco.Web` | **One tracked file**: `README.md` containing the single line `# Pacco.Web` (verified via `git ls-files`) | **Empty placeholder.** No source, no build, no package manifest. `ADR-021` designates it the home of the platform's browser surface, which makes it the twelfth deployable and the only one whose runtime is not a .NET host. See §7.4 |
 
 ### 2.3 A deployable-set discrepancy that matters
 
@@ -780,11 +781,13 @@ simultaneously — three unrelated capabilities in two services, sharing one fai
 
 ## 7. Frontend and UI layer
 
-> **Input gap.** `docs/architecture-inventory/baselines/ui-inventory.md` **does not exist** in this
-> repository. No dedicated UI inventory was produced by any earlier stage, so this section is
-> derived directly from source code rather than summarised from an existing artifact. If a
-> `ui-inventory.md` is authored later, it supersedes the detail below and this section should
-> reference it instead.
+> **Corrected at Rev 3.** The note that previously stood here said `ui-inventory.md` does not exist.
+> That is no longer true: `docs/architecture-inventory/baselines/ui-inventory.md` is present in this
+> repository and is the authoritative UI inventory. It supersedes the detail in §7.1 to §7.3 wherever
+> the two differ, and it carries material this section does not — in particular its §9 on token
+> storage and session handling, its §11.1 on asset ownership, its §11.2 on the deployment boundary,
+> and its §11.5 on state management. §7.1 to §7.3 below are retained unchanged as the source-derived
+> reading they always were.
 
 ### 7.1 There is no application frontend
 
@@ -868,6 +871,61 @@ a JWT is obtained and refreshed on the client, how the async `202 Accepted` oper
 back to a user action in a real UI, and whether the SignalR or the gRPC path is the intended
 production consumer. These are `[unknown]`, and they are the reason several of the platform's
 edge-facing behaviours (§4.3, §4.4, §8) cannot be validated end to end from this workspace.
+
+### 7.4 The browser surface recorded by `ADR-021`, `ADR-022` and `ADR-023`
+
+§7.1 to §7.3 describe what the source contains. This subsection records what the decision corpus
+now binds, which is a different kind of statement: no source implements it, and the constraints
+below hold over whatever source is written. Where §7.1 says the platform has no web application and
+§7.3 says every frontend design question is unanswered, the three records named here answer a
+bounded subset of those questions and leave the rest explicitly open.
+
+**Where it lives and how it ships.** `ADR-021` places the browser surface in the existing
+`Pacco.Web` repository and requires it to be independently built, versioned and released, with its
+own artifact and its own pipeline. That makes `Pacco.Web` the twelfth deployable in §2.2 and the
+only one whose runtime is not a .NET host. It is the first entry in the platform for which the
+answer to "independently deployable" is yes and the answer to "server-rendered" is no — the inverse
+of the `operations-service` static page, which `ui-inventory.md` §11.2 records as embedded in a
+server-rendered host with no separate build, artifact, image, pipeline stage or version.
+
+**How it reaches the platform.** `ADR-021` restricts the surface to calls through `api-gateway`. It
+opens no direct service address and no second ingress, which keeps §4 and §8.2 intact: the edge
+remains the only authenticated entry, and the surface inherits `ADR-006`'s rule that the gateway
+validates the token and binds caller identity into the forwarded request. The hard-coded
+`http://localhost:5005/pacco` hub address in §7.2 is a property of the test page, not a pattern the
+surface repeats — `ADR-021` requires a per-environment gateway base URL supplied as configuration.
+
+**How the session is held.** `ADR-022` puts custody of the session entirely on the client:
+`sessionStorage` is the single store, the token travels only in the `Authorization` header, logout
+is a client-side discard, and the client-side route guard reads the `role` claim from the token it
+already holds and issues no backend call. This is the platform's first client-side persistence of a
+credential — `ui-inventory.md` §9 records that the existing page stores nothing anywhere, keeping
+the token only in a live DOM input value. Three consequences follow and are recorded rather than
+resolved: the token is script-readable, a client-side logout does not revoke anything at
+`identity-service`, and the 60-minute `expiryMinutes` in §8.1 becomes a hard session ceiling
+because `ADR-022` takes no refresh.
+
+**What the edge must change to admit it.** `ADR-023` replaces `allowedOrigins: ['*']` in the four
+`ntrada*.yml` manifests with named per-environment browser origins, leaving the rest of the CORS
+block and every route declaration untouched. It adds no gateway route. The wildcard combined with
+`allowCredentials: true` is the combination the CORS specification forbids, so naming origins is
+required for a credentialed browser caller to work at all, not merely preferred. `ADR-023` also
+records that `allowedMethods` lists only `post`, `put` and `delete`, and that this scope does not
+require `get` because the guard makes no backend call — a boundary condition the next browser
+feature will have to revisit.
+
+**Role handling.** The guard compares against the `role` claim, whose closed vocabulary
+`{user, admin}` is defined by `identity-service`. The same value is compared in three places — the
+gateway's five admin-gated routes, the service-side checks, and now the browser guard — and
+`ADR-022` records that nothing keeps the three in step. The guard is an affordance over the
+gateway's enforcement, not a substitute for it.
+
+**What these records do not settle.** No platform frontend standard is established; `ADR-021`
+carries that deferral as an assumption because it was reached by auto-default rather than by a human
+gate. Nothing governs the browser toolchain version, no content-security policy or dependency
+scanning is specified, the cross-origin preflight path has never been exercised against a running
+gateway, and the concrete origin values per environment are unnamed. Each is carried in
+`risk-constraint-gap-register.md`.
 
 ---
 
@@ -1131,6 +1189,17 @@ version and ship independently.
 There is **no CD stage anywhere**. `dockerize.sh` builds and pushes an image; nothing observed
 deploys it. How an image reaches a running environment is `[unknown]`.
 
+**A twelfth release path.** `ADR-021` requires the browser surface in `Pacco.Web` to carry its own
+build, its own versioned artifact and its own pipeline, which adds a twelfth release path to the
+eleven above. It is the only one of the twelve that is not `language: csharp` and not a
+`dotnet: 3.1.100` build, and it produces static assets rather than a `devmentors/pacco.*` image. The
+per-repository, independently-versioned shape of the other eleven is preserved: there is still no
+shared pipeline template and no cross-repository release coordination. Two things about that path
+are unresolved and are carried in `risk-constraint-gap-register.md` rather than settled here —
+nothing in the platform governs which browser toolchain or toolchain version it uses, and the CD gap
+above applies to it identically, so how its assets reach a served origin is `[unknown]` for the same
+reason it is `[unknown]` for every image.
+
 > **Conflict with an existing artifact.** `architecture-views.md` §4.5 states that "No CI or CD
 > pipeline definition exists in the orchestration repository… Individual service repositories were
 > not observed to carry a shared pipeline template either… Whether images are built by hand or by a
@@ -1221,7 +1290,19 @@ unreachable still answers `ping` and stays in the Consul registry.
 
 ## 11. Architectural constraints and recorded decisions
 
-### 11.1 There are no Architecture Decision Records
+### 11.1 Architecture Decision Records
+
+> **Corrected at Rev 3.** This subsection was titled "There are no Architecture Decision Records"
+> and its finding no longer holds. `docs/adr/` exists in this artifact repository and carries a
+> corpus of records, each mapping to an entry in `docs/architecture-inventory/adr-candidates.md`.
+> The four paragraphs below are retained verbatim as the reading that was true when they were
+> written, and because three other artifacts cite §11.1 for exactly that reading —
+> `adr-candidates.md`, `patterns/integration/service-owned-topic-exchange-messaging.md` and
+> `patterns/other/framework-supplied-platform-conventions.md`. Two qualifications now apply to
+> them. First, the file-system finding is superseded: ADR files exist here. Second, the finding
+> about the *thirteen cloned service repositories* still stands — none of them carries an ADR
+> directory, so no service repository documents its own decisions. The constraints in §11.2 remain
+> code-derived and are unaffected. §11.5 lists what this work item adds.
 
 **No ADR files exist.** A search across all thirteen cloned repositories and this artifact repository
 found no `docs/adr/` directory, no `adr/` directory, no `decisions/` directory, and no file matching
@@ -1294,6 +1375,33 @@ type is declared (`Commands/External/ApproveOrder.cs`) and never published (§5.
 observable publisher: `ordermaker-service` has no gateway route in any `ntrada*.yml`, and no other
 service in the thirteen repositories publishes `MakeOrder`. The saga's entry point cannot be traced
 from the available sources.
+
+### 11.5 Decisions recorded by work item 13155
+
+Three records were authored against this baseline. Unlike §11.2, these are recorded decisions rather
+than observed constraints: no source implements them, and each binds work that has not been written.
+They are listed here so a reader of §11 sees the full constraint surface in one place.
+
+| ADR | Constraint it imposes | Binds | Origin |
+|-----|----------------------|-------|--------|
+| `ADR-021` | The browser surface lives in the existing `Pacco.Web` repository and is independently built, versioned and released, with its own artifact and pipeline; it reaches backends only through `api-gateway` | §2.2 deployable inventory, §7.4, §9.5 | Human decision gate `AD-1`, option A |
+| `ADR-022` | Session custody is entirely client-side: `sessionStorage` as the single store, the token carried only in the `Authorization` header, logout as a client-side discard, and a client-side route guard that reads the `role` claim from the held token and issues no backend call | §7.4, §8.1, §8.3 | Recorded human answers on storage, logout and guard placement |
+| `ADR-023` | `allowedOrigins: ['*']` in the four `ntrada*.yml` manifests is replaced by named per-environment browser origins; no gateway route is added and the rest of the CORS block is unchanged | §4, §7.4, §8.2 | The CORS specification's prohibition on wildcard-plus-credentials, and `ADR-004` Q3 |
+
+Four properties of this set are worth stating plainly, because each is a first for the platform.
+`ADR-021` introduces the first deployable that is not a .NET host and the first `independently
+deployable: yes` UI. `ADR-022` introduces the first client-side persistence of a credential. `ADR-023`
+is the first decision that changes an existing configuration file rather than describing one.
+And none of the three establishes a platform-wide frontend standard — that was deferred by
+auto-default rather than by a human gate, which is why `ADR-021` carries it as an assumption and
+`risk-constraint-gap-register.md` carries it as a gap.
+
+Two constraints in §11.2 interact with this set and neither is displaced. C3 (services must be
+independently deployable) is extended, not contradicted: the browser surface takes the same
+per-repository release shape. C7 (authentication is enforced at the edge) is relied upon: the
+client-side guard in `ADR-022` is an affordance over C7's enforcement, not a replacement for it, and
+`ADR-022` records that it must not be read as one. C9 (only .NET Core 3.1 is buildable) does not
+reach the browser surface, and nothing replaces it there — see §9.5.
 
 ---
 
@@ -1474,6 +1582,58 @@ stage.
    draws only **3** of the 8 exchange → `ops` edges (`xom`, `xid`, `xor`). The claim itself is correct
    — `messages.json` binds all eight — but the graph does not draw it, and the label's placement
    implies the `ordermaker` exchange is the one carrying it.
+
+---
+
+## 13. Quality-attribute assessment
+
+This section records how each quality attribute raised by work item 13155 was disposed of. It is an
+assessment of the decisions in §11.5, not a measurement of a running system — nothing described here
+is deployed, so no row carries an observed number.
+
+**How to read the decision column.** `no_change` means existing governance or existing platform
+behaviour already satisfies the attribute and no architectural record was needed. `needs_change`
+means an existing artifact had to be altered. `needs_adr` means the attribute could not be met
+without a new inheritable constraint, so a record was authored. `at_risk` means the attribute cannot
+be met from within this work item's ownership, because something outside it must change first; every
+`at_risk` row also appears in `risk-constraint-gap-register.md`. Rows marked `no_change` with a
+`[LLD]` note are satisfied by construction at the architecture level and are left to the detailed
+design to realise — they impose no boundary, no deployable and no contract.
+
+| NFR | Attribute | Decision | Evidence or governing record |
+|-----|-----------|----------|------------------------------|
+| NFR-1 | security — passwords never logged, displayed or persisted | `no_change` `[LLD]` | No architectural element handles the password beyond the sign-in request body. `ADR-022` rule 2 confines client storage to the token alone, which excludes the password from the one store that exists |
+| NFR-2 | security — no hard-coded credentials in the bundle | `no_change` `[LLD]` | `ADR-021` obligation 2 makes the gateway base URL the only backend value supplied to the surface, and supplies it as per-environment configuration rather than build-time content |
+| NFR-3 | security — no raw exceptions rendered | `no_change` `[LLD]` | `api-gateway.md` §3 records the edge's error shaping; the surface renders its own copy and does not pass backend payloads through |
+| NFR-4 | security — indistinguishable sign-in failure messaging | `no_change` | `CAP-01` returns the same failure for an unknown email and a wrong password, so the single generic message is what the platform already produces. `ADR-022` §4 rule 4 keeps the surface from narrowing it |
+| NFR-5 | security — admin binds solely to the `role` claim | `no_change` | The closed vocabulary `{user, admin}` is defined by `identity-service` (`…/component-internals/identity-service.md` §3.4). `ADR-022` rule 5 fixes a single comparison against that claim and resolves every other value, including an absent claim, to the normal-user experience |
+| NFR-6 | security — session ends at the token's absolute lifetime | `no_change` | `jwt.expiryMinutes: 60` (§8.1). `ADR-022` rule 6 takes no refresh and routes no refresh endpoint through the edge, so the 60 minutes is the whole session |
+| NFR-7 | security — logout must not claim server-side termination | `at_risk` | `ADR-007` §2 rule 4: a revoked token is still accepted by the gateway and by all eight domain services, because only the issuing service consults the revocation store. `ADR-022` §6.2 records the consequence; the surface can only be honest about it, not fix it |
+| NFR-8 | security — the route guard is an affordance, not access control | `no_change` | `ADR-006` places enforcement at the edge; `ADR-022` rule 7 and §4 state the guard gates nothing beyond what the held token already carries |
+| NFR-9 | security — the UI origin named explicitly at the edge | `needs_change` | `ADR-023`. `allowedOrigins: ['*']` with `allowCredentials: true` is the combination the CORS specification forbids (`…/component-internals/api-gateway.md` §3.18). The four `ntrada*.yml` manifests take named per-environment origins |
+| NFR-10 | privacy — the token never in a URL, log, analytics event or error report | `no_change` `[LLD]` | `ADR-022` rule 2 confines the token to one store and the `Authorization` header, which is the architectural form of this constraint. No analytics or error-reporting component exists in any repository to carry it elsewhere |
+| NFR-11 | concurrency — at most one in-flight sign-in | `no_change` `[LLD]` | A single-surface concern with no cross-component contract |
+| NFR-12 | reliability — failure paths leave the form usable | `no_change` `[LLD]` | Bounded by `ADR-022` rule 7's explicit client-side timeout, which is what guarantees the processing state always clears |
+| NFR-13 | usability — validation, processing and failure states presented | `no_change` `[LLD]` | A single-surface concern |
+| NFR-14 | accessibility — WCAG 2.1 AA | `needs_adr` | `ADR-021` obligation 6 and §8. No accessibility standard is catalogued for the platform, so the target had to be established by record rather than inherited; `docs/standards/` does not exist, which is carried as a gap |
+| NFR-15 | observability — correlation identifier on failed sign-in | `at_risk` | `…/component-internals/api-gateway.md` §3.18 declares `Request-ID` as a CORS-exposed header, and a recorded gap notes no code in the workspace sets it. `ADR-023` §6.2.5 records that the surface captures it opportunistically and must not depend on it |
+| NFR-16 | portability — every call traverses the edge allow-list | `no_change` | `ADR-021` obligation 4 restricts the surface to `api-gateway` and opens no direct service address. The existing browser asset's direct `http://localhost:5005/pacco` hub address (§7.2) is explicitly not repeated |
+| NFR-17 | portability — environment-configurable gateway base URL | `needs_change` | `ADR-021` obligation 2. This is the direct correction of the hard-coded absolute URL recorded in §7.2 |
+| NFR-18 | portability — CORS method allow-list covers the UI's verbs | `needs_change` | `ADR-023` rule 3. `allowedMethods` declares only `post`, `put` and `delete`; `get` is absent. This scope issues no cross-origin `GET`, because `ADR-022` rule 7's guard makes no backend call, so the gap is latent here and is recorded for the next browser feature rather than closed |
+| NFR-19 | operational readiness — the origin change requires a gateway restart | `no_change` | Ntrada configuration is not hot-reloaded and no code path modifies routes (§4.3). `ADR-023` §4 schedules the change as a restart rather than a live edit |
+| NFR-20 | operational readiness — an independently deployable UI boundary | `needs_adr` | `ADR-021` obligation 1. `…/baselines/ui-inventory.md` §11.2 records the existing asset as not independently deployable, with no separate build, artifact, image, pipeline stage or version; this record inverts that for the new surface. See §2.2 and §9.5 |
+| NFR-21 | performance — the sign-in call bounded client-side | `at_risk` | No total request timeout is configured anywhere at the edge, and the gateway retry policy can add several seconds on top of the downstream's own timeouts. `ADR-022` rule 7 sets an explicit client-side bound, which is the only bound this work item can impose; the absent edge timeout is not within its ownership |
+| NFR-22 | security — exactly one client-side token store, tab-scoped | `needs_adr` | `ADR-022`. `…/baselines/ui-inventory.md` §9 records that nothing is stored anywhere today, so this is the platform's first client-side persistence and required a record rather than an inherited rule |
+| NFR-23 | maintainability — a documented frontend toolchain baseline | `needs_adr` | `ADR-021` obligation 3 and §7. No contributing guide, scaffold, template or architecture test exists in any of the fourteen clones to inherit, and nothing governs which toolchain version is used — the latter is carried as a gap, not settled here |
+
+**What this table shows in aggregate.** Seven attributes required an architectural record or an
+artifact change, and they cluster in exactly two places: the deployment and toolchain identity of a
+new surface (NFR-14, NFR-17, NFR-20, NFR-23 → `ADR-021`), and the two seams where a browser meets an
+edge built for machine callers (NFR-9, NFR-18 → `ADR-023`; NFR-22 → `ADR-022`). Three attributes —
+NFR-7, NFR-15 and NFR-21 — cannot be satisfied by anything this work item owns, because each depends
+on behaviour belonging to `identity-service`, to whatever should set `Request-ID`, or to the edge's
+absent timeout configuration. Those three are the reason `risk-constraint-gap-register.md` exists as
+a shared queue rather than as a per-work-item list: none of them closes here.
 
 ---
 
