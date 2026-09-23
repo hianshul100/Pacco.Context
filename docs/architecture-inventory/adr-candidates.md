@@ -112,8 +112,17 @@ the backlog.
 | 19 | ADR-CANDIDATE-019 — Two internal service structures — layered domain split and single project | `ADR-019` | `service-internal-structure-layered-or-single-project.md` |
 | 20 | ADR-CANDIDATE-020 — .NET Core 3.1 as the platform runtime baseline | `ADR-020` | `dotnet-core-31-as-platform-runtime-baseline.md` |
 
-All twenty are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is resolved,
-because no repository has an owner who could approve one.
+`ADR-021` was written on 2026-09-22 by the `architecture_evolution_generation` stage against branch
+`feature/13652/aidlc`, for work item 13652. It has **no candidate number**, because it is not a
+reconstruction of an existing decision — it is a new decision, made forward. It is the twenty-first
+record Q2 anticipated, and it continues the id scheme and naming convention Q5 fixed.
+
+| # | Candidate | ADR id | File under `docs/adr/` |
+|---|-----------|--------|------------------------|
+| 21 | *(no candidate — new decision, from work item 13652 `DO1`/`DO2`)* | `ADR-021` | `standalone-browser-client-and-browser-caller-edge-contract.md` |
+
+All twenty-one are `Status: Proposed`. None can move past `Proposed` until blocker B4 below is
+resolved, because no repository has an owner who could approve one.
 
 Two things batch 2 settled, both by following the code rather than this backlog:
 
@@ -201,10 +210,14 @@ source rather than trusting the summaries recorded here:
 candidate-to-ADR mapping. Two kinds of work remain, and neither is a candidate in this backlog:
 
 1. **Approval.** All twenty records are `Status: Proposed` and blocker B4 stops every one of them from
-   moving further. Naming repository owners is the single action that unblocks the whole set.
-2. **New candidates, if the platform changes.** Q2 below still stands: if a client application is
-   planned, it needs a twenty-first candidate, because the edge records (004, 005, 006, 014) all assume
-   a machine caller.
+   moving further. Naming repository owners is the single action that unblocks the whole set. `ADR-021`
+   joins them: it is `Proposed` and blocked by the same missing ownership.
+2. **New candidates, if the platform changes.** The twenty-first candidate Q2 anticipated has been
+   written directly as **`ADR-021` — Pacco.Web as the standalone browser client, and the browser-caller
+   contract at the edge** (2026-09-22, `architecture_evolution_generation`), because a client is now
+   planned and the decision had a live alternative set rather than an absence to record. It carries the
+   assumption change Q2 predicted: the edge records (004, 005, 006, 014) assumed a machine caller, and
+   `ADR-021` is where the browser caller's contract is stated. No further candidate is outstanding.
 
 ## Candidate Details
 
@@ -780,13 +793,15 @@ configuration values, and naming conventions are not decisions.
 7. **The shared cache partitioned by per-service key prefix.** Nine services register the cache and
    two have an observable use for it. There is no evidence a partitioning alternative was weighed,
    and the pattern file rates the evidence Weak for that reason. Revisit if a third consumer appears.
-8. **The platform's client or frontend strategy.** Assessed and excluded because **no decision was
-   made and none can be reconstructed**: `Pacco.Web` tracks a single one-line README on one commit,
-   no frontend asset exists anywhere in the workspace, and the only browser-facing surface is a
-   static developer test page inside one service. There is nothing here with alternatives, trade-offs
-   or lasting impact to record — only an absence. This is not an implementation detail and it should
-   become a candidate the moment a client is planned; it is carried as Q2 below rather than written
-   as an empty record.
+8. **The platform's client or frontend strategy.** ~~Assessed and excluded~~ — **no longer excluded.
+   Recorded as `ADR-021` on 2026-09-22.** The exclusion was correct when written: **no decision had
+   been made and none could be reconstructed**, because `Pacco.Web` tracked a single one-line README
+   on one commit, no frontend asset existed anywhere in the workspace, and the only browser-facing
+   surface was a static developer test page inside one service. There was nothing to record but an
+   absence. The condition this entry set — "it should become a candidate the moment a client is
+   planned" — was met by work item 13652, and the record was written forward as a decision rather
+   than reconstructed backward from code. The code reality is unchanged: `Pacco.Web` still tracks
+   one file.
 9. **The unresolved gaps that are questions rather than decisions** — the wire payloads received by
    the contract-blind subscriber, the trigger for the delivery lifecycle, and the ownership of every
    repository. These are gaps G5, G7 and G10 in `repo-inventory.md` §6. They need investigation, not
@@ -820,7 +835,7 @@ configuration values, and naming conventions are not decisions.
 | # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
 |---|----------|----------------|--------------------------|----------------|
 | Q1 | **[ACTION NOW]** Should a candidate that describes a current state nobody is happy with be written as an ADR recording that state, or as an ADR proposing the fix? | Several candidates describe something that works but has a known defect — the authorization guard that is skipped for unauthenticated callers (006), the split token trust root (007), replicas that are never reconciled (009). Recording them as-is blesses the defect; recording the fix means the ADR does not describe the running system | Record the current state and its consequences, and add an explicit "known defect / supersession expected" note naming what must change. That keeps the ADR true about today without endorsing it | Platform owner |
-| Q2 | **[ACTION NOW]** Is a client application planned for this platform? | `Pacco.Web` is an empty repository and no frontend exists anywhere, so no client decision was excluded as an implementation detail — there simply is none to record. If a client is planned, a twenty-first candidate is needed, and the edge decisions (004, 005, 006, 014) all currently assume a machine caller rather than a browser | If a client is planned, add the candidate before any client code is written, and derive its assumptions from ADR-CANDIDATE-005 and ADR-CANDIDATE-014, since both change what a caller has to handle | Platform owner |
+| Q2 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** Is a client application planned for this platform? | `Pacco.Web` was an empty repository and no frontend existed anywhere, so no client decision had been excluded as an implementation detail — there was none to record. The edge decisions (004, 005, 006, 014) all assumed a machine caller rather than a browser | **Yes.** Work item 13652 plans one, and the twenty-first record was written as `ADR-021` — `Pacco.Web` as the standalone browser client — **before any client code**, exactly as this row proposed. It names the browser access path, replaces the wildcard CORS origin with the exact client origin, and states the logout limitation that follows from `ADR-007`. Two of this row's named dependencies behave as predicted: `ADR-005`'s asynchronous write path and `ADR-014`'s operation-status contract both change what a browser caller must handle, and neither is exercised by `DO1` or `DO2`, whose only platform call is `POST /identity/sign-in`. The first browser surface that issues a write through the async path inherits them | Platform owner |
 | Q3 | **[ACTION NOW]** Is the certificate check on `customers-service` actually enforced at runtime? | `pricing-service` calls it over HTTP and is not on its access list. Either the call is failing and nobody has noticed, or the enforcement is not really active — and ADR-CANDIDATE-016 says something different in each case | Call `customers-service` from `pricing-service` in a running environment without a certificate and observe the response before writing the ADR | Platform security owner |
 | Q4 | **RESOLVED 2026-09-09 by `adr_generation` batch 4.** Should candidates 009 and 010 be written as two records or merged into one "cross-service data access" record? | They are two answers to the same question and the platform uses both for the same customer data. Two records risk contradicting each other; one record risks burying the trade-off that distinguishes them | Answered as proposed: kept separate as `ADR-009` and `ADR-010`, each stating in its Decision section when the other applies. The merge condition was not met — neither draft needed to restate the other. Batch 4 also found the trade-off is sharper than this row assumed, because the replicas hold only ids and no customer data at all | `adr_generation` stage |
 | Q5 | **RESOLVED 2026-09-09 by `adr_generation` batch 1.** What id scheme should the generated ADRs use, and how should this backlog's `ADR-CANDIDATE-NNN` ids map onto it? | No ADR ids exist anywhere in scope, so there is no prefix to preserve and no collision to avoid. Downstream artifacts and the pattern catalog's empty **Related ADRs** columns will cite whatever is chosen, so the mapping has to be recorded once rather than inferred per file | Answered as proposed: sequential `ADR-NNN` ids matching this backlog's candidate numbering, carried in each ADR's metadata table, with descriptive kebab-case file names and no numeric prefix. The mapping is recorded in **Generated** above and extends there as later batches land | `adr_generation` stage |

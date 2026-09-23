@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -780,15 +780,18 @@ simultaneously — three unrelated capabilities in two services, sharing one fai
 
 ## 7. Frontend and UI layer
 
-> **Input gap.** `docs/architecture-inventory/baselines/ui-inventory.md` **does not exist** in this
-> repository. No dedicated UI inventory was produced by any earlier stage, so this section is
-> derived directly from source code rather than summarised from an existing artifact. If a
-> `ui-inventory.md` is authored later, it supersedes the detail below and this section should
-> reference it instead.
+> **Companion artifact.** [`ui-inventory.md`](ui-inventory.md) now exists in this repository and is
+> the authoritative UI inventory — asset-by-asset evidence, the framework and dependency findings,
+> the design-system findings, and the capability-to-UI mapping. This section keeps the
+> architecture-level summary and defers all detail to it. (An earlier revision of this section
+> recorded that `ui-inventory.md` did not exist; that note was stale and is corrected here.)
 
-### 7.1 There is no application frontend
+### 7.1 No frontend code exists in the workspace
 
-The finding that matters most: **Pacco as cloned has no web application.**
+The finding that matters most: **Pacco as cloned has no web application.** The platform now has a
+*recorded owner* for one — `ADR-021` names `Pacco.Web` as the standalone browser client (§7.4) — but
+that record decides a boundary, and no frontend source exists behind it yet. Everything in §7.1–§7.3
+describes the code as it stands.
 
 `hianshul100_Pacco.Web` — the repository whose name implies the platform's web client — tracks
 **exactly one file**. `git -C hianshul100_Pacco.Web ls-files` returns `README.md`, and that file
@@ -868,6 +871,27 @@ a JWT is obtained and refreshed on the client, how the async `202 Accepted` oper
 back to a user action in a real UI, and whether the SignalR or the gRPC path is the intended
 production consumer. These are `[unknown]`, and they are the reason several of the platform's
 edge-facing behaviours (§4.3, §4.4, §8) cannot be validated end to end from this workspace.
+
+### 7.4 The recorded client boundary — `Pacco.Web`
+
+`ADR-021` ([`../../adr/standalone-browser-client-and-browser-caller-edge-contract.md`](../../adr/standalone-browser-client-and-browser-caller-edge-contract.md))
+records the platform's first client decision, closing the gap §7.3 describes. The parts that change
+this document's picture of the platform:
+
+| Aspect | What `ADR-021` records |
+|--------|------------------------|
+| Owner of presentation | `Pacco.Web` — the platform's single web presentation boundary, owning the Login page, the Welcome/Landing page, browser session handling, role-aware UI behaviour and every future Pacco browser surface. It owns no domain data and no business rule |
+| Where it runs | Its own local process beside the Docker Compose backend, on its own local origin. Not inside a backend service image, and not served by the gateway. It is absent from `compose/services.yml`, from the PM2 manifests and from the `5000`–`5009` port block by decision, not by oversight |
+| How it reaches the platform | Only through the local API Gateway at `http://localhost:5000`. It is configured with that one gateway URL and with no per-service URL, so it cannot repeat the §7.2 harness's direct-to-service addressing |
+| Edge change it requires | One configuration value: `extensions.cors.allowedOrigins` changes from `'*'` to the exact `Pacco.Web` local origin, with `allowCredentials: true` retained, in all four `ntrada*.yml` files. No new route, no new service, no gateway code |
+| Session and logout | Logout is a client-side session discard. No logout or revoke route is added at the edge and the gateway's JWT validation and revocation behaviour are unchanged, so **a discarded session's token stays acceptable to the gateway and to the domain services until it expires** — §8's split trust root, reached from the browser |
+| UI foundation | `STYLE_README.md` and `pacco-material-you.css` become the platform's first authored stylesheet, owned by `Pacco.Web`. They replace nothing, because §7.2's Bootstrap-from-CDN harness is the only prior styling. They are client-scoped assets, not a platform design system |
+
+Two things this does **not** change. `identity-service` and its `POST /identity/sign-in` route are
+untouched — that route is already an anonymous downstream proxy in all four gateway configurations
+(§4.3), and it is what the client calls. And the §7.2 SignalR harness stays exactly as it is: it
+remains a developer test tool inside `operations-service`, outside the client boundary, still
+addressing port `5005` directly.
 
 ---
 
@@ -1221,24 +1245,34 @@ unreachable still answers `ping` and stays in the Consul registry.
 
 ## 11. Architectural constraints and recorded decisions
 
-### 11.1 There are no Architecture Decision Records
+### 11.1 The Architecture Decision Record corpus
 
-**No ADR files exist.** A search across all thirteen cloned repositories and this artifact repository
-found no `docs/adr/` directory, no `adr/` directory, no `decisions/` directory, and no file matching
-`*adr*`, `*decision-record*`, or `*rfc*`. The complete Markdown documentation set in this artifact
-repository is `README.md` plus the four `docs/architecture-inventory/` artifacts and the thirteen
-`repo-summary/*.md` files; none of them is an ADR.
+> **Correction.** An earlier revision of this section stated that no ADR files exist anywhere. That
+> was true when this baseline was first authored and is now stale: `docs/adr/` in this repository
+> holds `ADR-001`…`ADR-021`. The statement is corrected here rather than left standing. No decision
+> in the corpus was invented or back-filled from code — `ADR-001`…`ADR-020` were reconstructed from
+> evidence by the `adr_generation` stage, and each carries its own evidence table.
 
-**The governance catalog was also checked, and it is empty.** This revision queried the CAKE knowledge
-graph for tenant `Q5SCXYFS` for any node of any type, and for any ADR, Decision, or Constraint
-governing Pacco's messaging, Redis caching, gateway routing, or deployment topology. The graph
-returned **zero rows** for an unscoped node count, and the corpus search returned **no chunks**. So the
-catalog holds no governing decision for this platform either — the absence recorded above is not an
-artifact of searching only the file system.
+The ADRs that constrain the platform's structure as described in this document:
 
-This section therefore records **no ADR-derived constraints**, because there are none to derive. No
-architecture decision has been invented, inferred, or back-filled from code to fill the gap. If ADRs
-exist outside this workspace and outside the catalog, they are `[unknown]`.
+| ADR | Records | Where it bites in this baseline |
+|-----|---------|--------------------------------|
+| `ADR-002` | Convey as the shared service toolkit | §3.1 the four-project layout, §3.4 the absence of a shared domain library |
+| `ADR-004` | The declarative, configuration-driven API gateway | §4.3 the route table, §4.4 the async write path, and the CORS/JWT/error extensions the edge applies once |
+| `ADR-006` | Authentication enforced at the edge, with fail-open in-service authorization | §8.3 and constraint C7 |
+| `ADR-007` | The split JWT trust root between gateway and services | §8.2, and the revocation gap §8 records |
+| `ADR-017` | Compose stacks and process manifests as the deployment path | §9 the whole deployment topology |
+| `ADR-018` | Repository per service, with independent per-repository release | §9.5 the eleven independent Travis pipelines, constraint C3 |
+| `ADR-020` | `.NET Core 3.1` as the platform runtime baseline | Constraint C9 |
+| `ADR-021` | `Pacco.Web` as the standalone browser client, and the browser-caller contract at the edge | §7.4, and the CORS posture §8 records |
+
+The remaining records — `ADR-001`, `ADR-003`, `ADR-005`, `ADR-008`…`ADR-016`, `ADR-019` — are
+catalogued in [`../adr-candidates.md`](../adr-candidates.md), which also carries the candidate-to-ADR
+mapping and the set of topics deliberately excluded from the corpus.
+
+**The governance catalog agrees.** The CAKE knowledge graph for tenant `6KV9DZ9V` returns the same
+corpus, with each ADR linked to the capability it governs. An earlier query against a different
+tenant code returned zero rows, which is what produced the stale statement corrected above.
 
 ### 11.2 Constraints enforced by the code
 
@@ -1273,7 +1307,7 @@ closing section rather than silently reconciled.
 | X1 | `architecture-views.md` §4.5: "No CI or CD pipeline definition exists… Individual service repositories were not observed to carry a shared pipeline template either" | Eleven `.travis.yml` files define `build.sh` → `test.sh` → `dockerize.sh` on `master`/`develop` (§9.5). `repo-inventory.md` §2.3 records them correctly | **Follow the code.** CI exists. The CD half of the claim stands — no deployment automation was observed |
 | X2 | `architecture-views.md` §6 GAP-9: `AddRedis()` is registered in "eight services" | `AddRedis()` is registered in **nine**: `availability-service`, `customers-service`, `deliveries-service`, `identity-service`, `operations-service`, `ordermaker-service`, `orders-service`, `parcels-service`, `vehicles-service`. Only `pricing-service` omits it | **Follow the code.** Nine. This is a **count** error only; GAP-9's identification of *which* registrations are exercised is correct and is recorded separately as X6 |
 | X3 | `docker-images.txt` lists SQL Server 2017, PostgreSQL, InfluxDB, Elasticsearch, Kibana, and Logstash as platform components | None is referenced by any service. `influxEnabled: false`, `elk.enabled: false` everywhere (§9.4) | **Follow the code.** Actual datastores are MongoDB and Redis; actual sinks are Prometheus and Seq. The file is a setup cookbook, not a manifest |
-| X4 | The repository name `Pacco.Web` implies a web client is part of the platform | The repository tracks one file, `README.md`, containing `# Pacco.Web`. No frontend exists anywhere in the workspace (§7.1) | **Follow the code.** There is no frontend. Whether one exists outside this scope is `[unknown]` |
+| X4 | The repository name `Pacco.Web` implies a web client is part of the platform | The repository tracks one file, `README.md`, containing `# Pacco.Web`. No frontend exists anywhere in the workspace (§7.1) | **Resolved.** `ADR-021` makes the implication explicit: `Pacco.Web` **is** the platform's client boundary (§7.4). The code reality is unchanged — the repository is still empty — so the conflict is now a decision awaiting implementation rather than an unexplained name |
 | X5 | `capability-baseline.md` CONFLICT-01: operation status durability | `operations-service` registers `AddMongo()` and configures a `mongo.database`, yet the only observed operation-state path is `IDistributedCache` (Redis) (§6.4) | **Follow the code.** Operation status is cached in Redis, not durably stored. Consistent with CONFLICT-01 |
 | X6 | An earlier revision of **this document** claimed the eight non-`operations-service` `AddRedis()` registrants had no active use, narrowing `architecture-views.md` GAP-9 (`architecture-views.md:1309`) from **two** evidenced Redis consumers to one | `Identity.Api/Program.cs:57-59` routes `POST access-tokens/revoke` to `IAccessTokenService.DeactivateAsync(cmd.AccessToken)`, with `.AddRedis()` and `.AddSecurity()` registered together at `Identity.Infrastructure/Extensions.cs:82,88`. GAP-9's two-consumer reading is the correct one | **Follow the code — and GAP-9.** §6.4 now records `identity-service` access-token deactivation as an evidenced consumer, separate from the seven with no observable use. This is a self-correction of this document, not a defect in `architecture-views.md`; recorded so a reader comparing revisions sees why the count changed. See §12.3 |
 
@@ -1294,6 +1328,27 @@ type is declared (`Commands/External/ApproveOrder.cs`) and never published (§5.
 observable publisher: `ordermaker-service` has no gateway route in any `ntrada*.yml`, and no other
 service in the thirteen repositories publishes `MakeOrder`. The saga's entry point cannot be traced
 from the available sources.
+
+### 11.4 Quality-attribute assessment
+
+One row per quality attribute the platform's recorded decisions actually take a position on. The
+"posture" column states what the platform does today — not what it should do. Where no position
+exists, the row says so rather than inventing one.
+
+| Quality attribute | Posture the platform holds today | Set or constrained by | Evidence |
+|-------------------|----------------------------------|----------------------|----------|
+| **Authentication** | Enforced once, at the edge. Services behind the edge trust the caller context they are given and re-check only resource ownership | `ADR-006`, `ADR-004` | §8.1–§8.3; `auth: true` per route in `ntrada*.yml` |
+| **Authorization** | Route-level claim gates at the edge; in-service ownership guards **fail open** when the caller context is absent | `ADR-006` | §8.3, constraint C7 |
+| **Token integrity and revocation** | The gateway and the services validate signatures against a split trust root, and **neither consults the revocation store** — only `identity-service` does, and its revocation routes are not exposed at the edge | `ADR-007`, `ADR-021` §6.2 | §8.2; the four `ntrada*.yml` identity modules, which declare only `/users/{userId}`, `/me`, `/sign-up` and `/sign-in` |
+| **Browser access control** | One exact allowed origin with credentials, replacing the wildcard. Applied as a declarative edge extension, so a change is a configuration change reviewed as a public-contract change | `ADR-021` §5 rule 4, `ADR-004` §2 obligations 1 and 3 | `extensions.cors` in all four `ntrada*.yml`; §7.4 |
+| **Error exposure to callers** | The edge returns downstream exception messages to the caller — `customErrors.includeExceptionMessage` is `true` in all four configurations. Any browser surface must therefore map responses to its own messages and never render a response body verbatim | Not decided by any ADR; an observed configuration value. Carried as a risk | `ntrada.yml:24-25` and the three sibling files; `risk-constraint-gap-register.md` `R-02` |
+| **Independent releasability** | Every deployable builds and releases from its own repository with no shared package and no coordinated release mechanism. `Pacco.Web` inherits the same model | `ADR-018`, `ADR-021` §5 rule 2 | §9.5, constraint C3 |
+| **Deployability** | Compose stacks and PM2 manifests only. No production orchestration, no deployment automation | `ADR-017` | §9.1–§9.4; X1 |
+| **Runtime uniformity** | Every .NET deployable is pinned to `.NET Core 3.1`, which is out of support. A browser client is not a .NET deployable and does not inherit this baseline | `ADR-020`, `ADR-021` §6.2 | Constraint C9; `dotnet: 3.1.100` in all eleven Travis files |
+| **Contract compatibility** | Maintained by naming convention alone. No shared message artifact and no build-time signal on a rename | Constraint C2 | §3.4, §4.2 |
+| **Observability** | Prometheus metrics, Seq logging and correlation-header propagation across services. Nothing covers a browser client, and the gateway's `exposedHeaders` are the only browser-reachable correlation surface | `patterns/observability/correlation-and-span-propagation.md` | §10; `extensions.cors.exposedHeaders` in all four `ntrada*.yml` |
+| **Availability and latency** | **No position exists.** No availability target, latency budget or error-rate objective is documented for any service, for the gateway, or for the platform anywhere in the fourteen clones | — | `risk-constraint-gap-register.md` `G-03`; `ADR-021` §8 `N8` |
+| **Frontend quality rules** (state ownership, accessibility, client logging and redaction, dependency policy) | **No position exists.** No frontend standard exists anywhere in the platform, so the first client will establish conventions by default unless they are written | — | `ui-inventory.md` §10; `ADR-021` §7.1 and `Q4` |
 
 ---
 
