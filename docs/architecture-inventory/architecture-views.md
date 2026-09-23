@@ -67,7 +67,8 @@ evidence of use — see §6 GAP-9.
 
 ```mermaid
 graph TD
-    user["External clients<br/>browser or HTTP caller"]
+    user["External clients<br/>HTTP caller"]
+    web["Pacco.Web<br/>standalone browser client<br/>own local origin<br/>recorded by ADR-021, no code yet"]
     subgraph "Edge and Access"
         gw["api-gateway<br/>repo Pacco.APIGateway<br/>Ntrada 0.4 config driven"]
         idsvc["identity-service<br/>repo Pacco.Services.Identity"]
@@ -78,6 +79,7 @@ graph TD
     idredis["Redis<br/>access token revocation list"]
 
     user -->|"HTTPS JSON [confirmed]"| gw
+    web -->|"credentialed JSON from one exact allowed origin [recorded by ADR-021]"| gw
     gw -->|"validates JWT validIssuer pacco [confirmed]"| gw
     gw -->|"HTTP downstream in both sync and async modes [confirmed]"| idsvc
     gw -->|"HTTP downstream in sync mode ntrada.yml [confirmed]"| backends
@@ -108,11 +110,20 @@ single registration-level proof, and the same two-proof rule this document appli
 other six services' Redis edges applies here — hence `[inferred]`. See §3.3 for the matching
 sequence-diagram note.
 
+**The `Pacco.Web` node is recorded by decision, not observed.** `ADR-021` names it the platform's
+standalone browser client and the edge's first browser consumer. No code exists behind it: the
+repository tracks one file. It is drawn because the edge's CORS posture, and the origin it allows,
+now have a named consumer — the `[recorded by ADR-021]` label marks that provenance and distinguishes
+it from the `[confirmed]` edges around it. The `External clients` node keeps the machine callers the
+rest of this document evidences.
+
 **Gaps / unknowns:** the `identity` exchange is **not** among the six the gateway publishes to, so
 no command reaches `identity-service` from the edge — yet `Program.cs` calls
 `SubscribeCommand<SignUp>()`. Nothing in the workspace publishes `sign_up` as a message. See §6
 GAP-4. Which of the four gateway configurations is authoritative per environment is `[unknown]`
-(§6 GAP-3). Whether the committed symmetric signing key is live is `[unknown]` (§6 GAP-10).
+(§6 GAP-3), and an exact CORS origin makes that ambiguity load-bearing where the wildcard hid it.
+Whether the committed symmetric signing key is live is `[unknown]` (§6 GAP-10). The exact local
+origin `Pacco.Web` will serve on is not yet fixed (`ADR-021` B1).
 
 ### 1.2 Order Fulfilment Core — `orders-service`, `parcels-service`, `deliveries-service`
 
@@ -546,7 +557,10 @@ ownership metadata exists anywhere, so no edge in this graph can be routed to a 
 
 ## 3. Runtime Interaction Flows
 
-Five flows are generated. Each preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
+Six flows are generated. Five (§3.1–§3.5) are drawn entirely from evidence. The sixth (§3.6, browser
+sign-in, session and logout) is the one exception in this document: its client half is recorded by
+`ADR-021` rather than observed, and every hop in it is labelled with its provenance so the two
+classes are never confused. Each flow preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
 and no step is added to make a flow look complete. Where an intermediate step or actor could not be
 evidenced it is marked in the diagram and named under **Unknowns** rather than invented.
 
@@ -867,6 +881,57 @@ drive it is `[unknown]` (§6 GAP-5). `delivery_failed` is published and consumed
 `[confirmed]` but the resulting order state transition is not evidenced and is not drawn.
 `order_delivering` reaches no domain consumer `[confirmed]`.
 
+### 3.6 Browser sign-in, session and logout — [Confidence: recorded by ADR-021]
+
+This is the only flow in this document whose client half is **recorded by decision rather than
+observed in code**. Every hop to the right of `Pacco.Web` is `[confirmed]` from the gateway and
+`identity-service` sources. Everything inside `Pacco.Web` is `ADR-021` §5, and no implementation
+exists yet.
+
+```mermaid
+sequenceDiagram
+    actor U as "End user"
+    participant W as "Pacco.Web"
+    participant GW as "api-gateway"
+    participant ID as "identity-service"
+    participant IDB as "MongoDB identity-service"
+
+    U->>W: open Login and submit email and password [ADR-021]
+    W->>W: block submit on empty fields, disable submit while in flight [ADR-021]
+    W->>GW: POST /identity/sign-in - anonymous route, no bearer token [confirmed]
+    GW->>ID: HTTP downstream - identical in sync and async modes [confirmed]
+    ID->>IDB: look up the user by email [confirmed]
+    ID->>ID: verify with PasswordService then mint via JwtProvider [confirmed]
+    ID-->>GW: AuthDto accessToken refreshToken role expires [confirmed]
+    GW-->>W: 200 with AuthDto [confirmed]
+    W->>W: hold the session in the browser and read role from the response [ADR-021]
+    W-->>U: Welcome to Admin Area for admin, Welcome for user [ADR-021]
+    U->>W: Logout [ADR-021]
+    W->>W: clear the locally held token and session state [ADR-021]
+    W-->>U: redirect to Login [ADR-021]
+    Note over W,GW: no logout or revoke call is made - the cleared token stays valid at the edge until expiry [ADR-021]
+```
+
+**Evidence for the confirmed hops:** `ntrada.yml:264-270` and `ntrada-async.docker.yml:308-314`
+(`upstream: /sign-in`, `method: POST`, `use: downstream`, `downstream: identity-service/sign-in`,
+`auth: false` — identical in both modes); `Identity.Application/DTO/AuthDto.cs:3-9`;
+`Identity.Application/Services/Identity/IdentityService.cs:49-79`;
+`Identity.Core/Entities/Role.cs` (the closed lower-cased vocabulary `user` and `admin`);
+`Pacco/compose/services.yml:4-13` (gateway on host port `5000`).
+
+**Why there is no revocation hop.** `ADR-007` records that neither the gateway nor any domain
+service consults the revocation store, and the three token-management routes have no gateway route
+in any of the four configurations (§3.3 *Unknowns*, GAP-21). A logout that actually invalidated the
+token would therefore require an edge change, which `ADR-021` §5 rule 5 deliberately does not make.
+The `Note` on the diagram states the consequence rather than leaving it to be inferred.
+
+**Two error paths not drawn, because they are client behaviour and not platform interaction.** An
+invalid credential and an `identity-service` failure both return a non-success response through the
+same hops, and `ADR-021` §8 `N2` requires `Pacco.Web` to render a fixed non-technical message for
+both — necessary because the gateway sets `customErrors.includeExceptionMessage: true`, so the raw
+downstream exception message does reach the browser `[confirmed]`. An expired token takes the logout
+path above with a session-expired message.
+
 ---
 
 ## 4. Deployment Topology
@@ -1023,6 +1088,44 @@ no secret material is reproduced here. Whether any of it is live is `[unknown]` 
 No CI or CD pipeline definition exists in the orchestration repository `[confirmed]`. Individual
 service repositories were not observed to carry a shared pipeline template either. Whether images
 are built by hand or by a pipeline outside the workspace is `[unknown]`.
+
+### 4.6 `Pacco.Web` process placement — [Confidence: recorded by ADR-021]
+
+`ADR-021` §5 rule 6 places the browser client **outside both deployment mechanisms**: it runs as its
+own local process on the developer's host, beside the Compose stack, not in it.
+
+```mermaid
+graph TD
+    host["Developer host"]
+    web["Pacco.Web<br/>own local process<br/>own local origin<br/>no Compose entry, no PM2 app"]
+    gwport["Host port 5000 published by Compose"]
+
+    subgraph NET2["Docker network pacco-network - unchanged"]
+        gw2["api-gateway container"]
+        svcs["ten backend service containers"]
+        infra2["MongoDB, Redis, RabbitMQ, Consul, Fabio, Vault"]
+    end
+
+    host --> web
+    host --> gwport
+    web -->|"one configured gateway URL, no per-service URL [ADR-021]"| gwport
+    gwport -->|"published by compose/services.yml ports 5000 to 80 [confirmed]"| gw2
+    gw2 --> svcs
+    svcs --> infra2
+```
+
+Four deployment facts follow, and all four are decisions rather than omissions:
+
+| Fact | Where it is recorded |
+|------|---------------------|
+| `Pacco.Web` has **no entry in `compose/services.yml`** and no entry in either PM2 manifest | `ADR-021` §5 rule 6, §6.3 item 1 |
+| It takes **no port in the platform's `5000`–`5009` block** — it serves on its own local origin, which is not yet fixed | `ADR-021` §5 rule 4, blocker B1 |
+| It has **no gateway route**, because the gateway does not serve it — the browser loads it from `Pacco.Web` directly and only calls the gateway for data | `ADR-021` §3 F2, §5 rule 3 |
+| It is **not in any backend image**, so no backend build or release carries it | `ADR-021` §5 rule 2, honouring `ADR-018` |
+
+Adding it to Compose later — as its own service, never inside a backend container — is a change to
+the orchestration repository (`CAP-16`) and to nothing else. §4.1 through §4.4 are unaffected by this
+record and are unchanged.
 
 ---
 

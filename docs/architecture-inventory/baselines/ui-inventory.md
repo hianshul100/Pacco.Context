@@ -156,6 +156,15 @@ list fixed by backlog issue 12998, so its emptiness is a **material finding, not
 recorded as **Unverifiable — Missing Source Evidence** for the question "does a Pacco web client
 exist outside this workspace", and carried as **B1**. Confidence in the observation itself: **high**.
 
+*Decision recorded since this inventory was first authored.* `ADR-021` names `Pacco.Web` as the
+platform's standalone browser client and the single owner of its web presentation boundary — a local
+process beside the Compose backend, reaching the platform only through the local gateway at
+`http://localhost:5000`, never bundled into a backend image and never served by Ntrada. That answers
+B1's question — **no client exists outside this workspace, and this repository is the one that will
+hold it** — and it answers Q7's "which browser client was the `*`-origin CORS policy written for":
+none, and the wildcard is replaced by `Pacco.Web`'s exact local origin. **The observation above is
+unchanged: the repository still tracks one file and contains no frontend code.**
+
 ### 1.5 — Node and JS tooling manifest search
 
 *Observed.* A workspace-wide search for `package.json`, `package-lock.json`, `yarn.lock`,
@@ -644,6 +653,7 @@ compiled defaults, fetched from a CDN. **No token is defined, overridden, or the
 | Shared vs surface-specific split | **Not applicable.** One repo-owned surface exists; nothing is shared *between* surfaces because there is nothing to share (§2.4) | High |
 | Packaging | **Not observed.** Not a standalone npm package, not a monorepo workspace, not co-located as a library. The three assets are loose files under one service's web root | High |
 | Third-party design system in use | Bootstrap 4.0.0, CSS only, unmodified, CDN-hosted, SRI-pinned | High |
+| Authored stylesheet, owned | **None in the workspace.** `ADR-021` §5 rule 7 assigns `STYLE_README.md` and `pacco-material-you.css` to `Pacco.Web` as the platform's first authored stylesheet and the shared visual foundation for its screens. They are **client-scoped assets, not a platform design system** — no versioning, no distribution mechanism and no consumer contract is decided, and a second consumer would force that decision (`ADR-021` §6.2 item 4, FA6). Nothing about §10.1–§10.3 changes: the workspace still contains no authored stylesheet | High |
 
 ---
 
@@ -730,8 +740,8 @@ the capability.
 | Capability | UI coverage in the workspace | Evidence | Conf. |
 |---|---|---|---|
 | **CAP-11 — Operation Status Projection & Real-Time Notification** | **Covered by Surface 1**, partially: the *push* half only. The console renders `operation_pending` / `operation_completed` / `operation_rejected` transitions live, and does **not** exercise the poll half (`GET /operations/{operationId}`, §8.2) | `app.js:34-44`; `capability-baseline.md` CAP-11 evidence list, which itself cites `wwwroot/ui/index.html` and `wwwroot/ui/js/app.js` | High |
-| CAP-01 Identity & Access Management | **No UI.** No sign-in, sign-up, or user screen exists. The JWT is obtained out of band (§9) | §7.3; §8.2 | High |
-| CAP-02 Edge Routing & Access Enforcement | **No UI**, and no UI asset routes through the gateway at all (§8.3) | §8.3 | High |
+| CAP-01 Identity & Access Management | **No UI in the workspace.** No sign-in, sign-up, or user screen exists and the JWT is obtained out of band (§9). The Login screen that consumes `POST /identity/sign-in` is assigned to `Pacco.Web` under CAP-17 | §7.3; §8.2; `ADR-021` §5 | High |
+| CAP-02 Edge Routing & Access Enforcement | **No UI**, and no UI asset routes through the gateway at all (§8.3). `ADR-021` §5 rule 3 makes `Pacco.Web` the first UI that does, through the single local gateway URL | §8.3; `ADR-021` §5 | High |
 | CAP-03 Customer Profile & Lifecycle | **No UI** | §7.3 | High |
 | CAP-04 Resource Availability & Reservation | **No UI** | §7.3 | High |
 | CAP-05 Vehicle Fleet Catalogue | **No UI** | §7.3 | High |
@@ -745,9 +755,10 @@ the capability.
 | CAP-14 Platform Observability | **No repo-owned UI.** Grafana, Jaeger and Seq consoles are vendor-supplied and excluded (§2.3) | §2.3 | High |
 | CAP-15 Secrets & Service-Identity Management | **No UI.** The Vault console is vendor-supplied | §2.3 | High |
 | CAP-16 Environment & Deployment Definition | **No UI** | §7.3 | High |
+| **CAP-17 — Web Presentation & Browser Session** | **The owning capability for UI itself**, added to `capability-baseline.md` alongside `ADR-021`. `Pacco.Web` owns it. **No asset exists in the workspace yet** — the capability records an owner and a boundary, not observed code | `capability-baseline.md` CAP-17; `ADR-021` §5 | High |
 
-**Summary: 1 of 16 capabilities has a repo-owned user interface, and that one is covered
-partially.** Confidence: **high**.
+**Summary: 1 of 17 capabilities has a repo-owned user interface in this workspace, and that one is
+covered partially.** CAP-17 has a named owner and no asset. Confidence: **high**.
 
 ---
 
@@ -921,7 +932,7 @@ shows; it proposes no technology, no target architecture, and no modernization a
 
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** The `Pacco.Web` repository is on the discovery scope list but contains only a one-line `README.md` — no code at all. We cannot tell from here whether a real Pacco web client exists in a repository we were not given, or whether this is an abandoned placeholder. The platform's own `README.md` and `scripts/git-clone.sh` do not list `Pacco.Web` at all (§13.2) | Completing the UI picture. If a real web client exists, this inventory is missing its main subject, and the gateway's 41 routes and `*`-origin CORS surface have a consumer nobody has examined | Platform owner | Someone must state plainly whether a Pacco web client exists. If it does, give us the repository and re-run this inventory against it. If it does not, drop `Pacco.Web` from the scope list so it stops reading as a gap | TBD |
+| B1 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** No Pacco web client exists anywhere — not in this workspace and not outside it. `Pacco.Web` was an unexplained placeholder, and `ADR-021` makes it the platform's standalone browser client and the owner of CAP-17. It stays on the scope list because it now has a recorded purpose. The inventory is not missing a subject: there is no unexamined browser consumer of the gateway's 41 routes. The empty-repository observation in §1.4 still stands as the current code reality | — | Platform owner | — | Closed |
 
 ### Open Questions
 
@@ -933,4 +944,4 @@ shows; it proposes no technology, no target architecture, and no modernization a
 | Q4 | **[ACTION NOW]** The knowledge catalogue answers Pacco frontend questions with material about a WebPT EMR scheduling SPA and its micro-frontend programme — a different product entirely. Is Pacco frontend knowledge missing from the catalogue, or is the catalogue scoped to a different project than this workspace? | If a later stage queries the same catalogue and does not notice the mismatch, it may attribute an SPA and an MFE architecture to Pacco, which the code flatly contradicts (§6, §13.4) | The tenant catalogue holds no Pacco frontend content. Until it does, frontend statements about Pacco must come from the repositories only | Whoever owns the catalogue's tenant scoping |
 | Q5 | **[handled later by architecture_evolution_validation]** `@aspnet/signalr` 1.1.0 (2019) and `es6-promise` 4.2.2 (2017) are committed as pre-built bytes with no manifest, lockfile, or tooling. How should these vendored assets be tracked for currency? | There is nothing to bump and no pipeline that would rebuild them, so a security advisory against either has no mechanism to act on. Both sit on the runtime critical path (§14.9) | None proposed — recording the constraint is this stage's job; choosing a handling approach is not | Architecture stage, with the `operations-service` maintainer |
 | Q6 | **[ACTION NOW]** `appendMessage` interpolates `JSON.stringify(data)` and a caller-supplied `type` into `innerHTML` with no escaping, so server-pushed operation payloads are parsed as markup (§14.12). Is that payload content trusted end to end? | Operation payloads originate from broker messages published by eight services and from user-supplied command fields, so what reaches this rendering path is not necessarily operator-authored | Confirm whether the page's audience and network exposure make this acceptable, or whether the rendering path needs attention. This stage records the observation only | `operations-service` maintainer / security reviewer |
-| Q7 | **[ACTION NOW]** The gateway sets `allowedOrigins: ['*']` with `allowCredentials: true` and exposes correlation headers, yet no UI asset in this workspace calls any of its 41 routes (§8.2). Which browser client was that written for? | A permissive browser-facing CORS policy with no identified consumer is either serving a client nobody has seen (which reopens B1) or is configured for a client that does not exist | Most likely written speculatively for a web client that was never built — consistent with the empty `Pacco.Web`. Resolving B1 resolves this too | Platform owner |
+| Q7 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** The proposed answer was right: the wildcard policy was written speculatively for a client that was never built. `ADR-021` §5 rule 4 replaces `allowedOrigins: ['*']` with the exact `Pacco.Web` local origin in all four `ntrada*.yml` files while keeping `allowCredentials: true`, so the edge names its one browser consumer. Two follow-ons stay open and are carried in `risk-constraint-gap-register.md`: the exact local origin is not yet fixed (`R-01`), and `allowedMethods` still omits `get` (`R-04`) | — | — | Platform owner |
