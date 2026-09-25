@@ -38,9 +38,10 @@
 - [§6. Functional Requirements](#6-functional-requirements)
 - [§7. Business Rules](#7-business-rules)
 - [§8. Data Specification](#8-data-specification)
-  - [Entities in scope](#entities-in-scope)
-  - [`BrowserSession` fields](#browsersession-fields)
-  - [Consistency, locking, audit and retention](#consistency-locking-audit-and-retention)
+  - [§8.1 Entities in scope](#81-entities-in-scope)
+  - [§8.2 `BrowserSession` fields](#82-browsersession-fields)
+  - [§8.3 Non-functional requirement traceability](#83-non-functional-requirement-traceability)
+  - [§8.4 Consistency, locking, audit and retention](#84-consistency-locking-audit-and-retention)
 - [§9. Interface Specification](#9-interface-specification)
   - [§9.1 `signIn` — the only interface in scope](#91-signin--the-only-interface-in-scope)
   - [§9.2 Operations in scope that bind to no interface](#92-operations-in-scope-that-bind-to-no-interface)
@@ -66,6 +67,7 @@
   - [§13.3 Deployment, rollout and rollback](#133-deployment-rollout-and-rollback)
   - [§13.4 Observability](#134-observability)
   - [§13.5 Ownership and support](#135-ownership-and-support)
+  - [§13.6 Operator note — what logout does and does not do](#136-operator-note--what-logout-does-and-does-not-do)
 - [§14. Test Specification](#14-test-specification)
   - [§14.A Test Strategy & Coverage Plan](#14a-test-strategy--coverage-plan)
     - [E2E scenarios](#e2e-scenarios)
@@ -158,14 +160,19 @@ Four facts from the current platform shape every decision in this document.
    `auth: false` and `use: downstream` in all four gateway configurations, proxying to
    `identity-service/sign-in`, which returns `AuthDto` carrying `AccessToken`, `RefreshToken`, `Role`
    and `Expires`. Both the authentication outcome DO1 needs and the role claim DO2 needs exist today
-   (`Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:264-270`,
+   (`Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:263-269`,
    `Pacco.Services.Identity/src/Pacco.Services.Identity.Application/DTO/AuthDto.cs`).
-3. ✅ **The edge's CORS policy is wildcard-with-credentials.** `extensions.cors` declares
+3. ✅ **The edge's CORS policy allows every origin.** `extensions.cors` declares
    `allowedOrigins: ['*']` together with `allowCredentials: true`, byte-identically at lines 27-41 of
-   `ntrada.yml`, `ntrada.docker.yml`, `ntrada-async.yml` and `ntrada-async.docker.yml`. The WHATWG
-   Fetch Standard's CORS protocol forbids that pair for credentialed requests, so no browser can use
-   the edge as configured. `ADR-021` §5 rule 4 replaces the wildcard with the exact `Pacco.Web` local
-   origin while keeping `allowCredentials: true`.
+   `ntrada.yml`, `ntrada.docker.yml`, `ntrada-async.yml` and `ntrada-async.docker.yml`. This
+   capability's one browser call does **not** run in credentials mode (DD-12), so the wildcard would
+   function for it as it stands; what it would also do is grant every origin on the internet
+   cross-origin read access to the edge. `ADR-021` §5 rule 4 replaces the wildcard with the exact
+   `Pacco.Web` local origin while keeping `allowCredentials: true`. The change is therefore a
+   **policy hardening** — the edge names its one browser caller instead of naming none — and it is
+   also what makes the configuration internally consistent should a credentialed call ever be added,
+   since the WHATWG Fetch Standard forbids a wildcard `Access-Control-Allow-Origin` on a credentialed
+   request. See §12.2.
 4. ✅ **Token revocation is not reachable from the edge.** No gateway configuration declares a route
    for `access-tokens/revoke`, `refresh-tokens/use` or `refresh-tokens/revoke`, and `ADR-007`
    obligation 4 records that the gateway does not consult the revocation store. A logout that
@@ -357,9 +364,11 @@ the lock.
 
 The request goes to one configured URL and one route. `Pacco.Web` holds the gateway base URL
 `http://localhost:5000` and no per-service URL, so no browser code can address `identity-service`
-directly even by accident (`ADR-021` §5 rule 3). Because the request is cross-origin, carries
-`Content-Type: application/json` and is credentialed, the browser issues a preflight first — which is
-exactly why the wildcard origin has to go.
+directly even by accident (`ADR-021` §5 rule 3). Because the request is cross-origin and carries
+`Content-Type: application/json`, the browser issues a preflight first. That call is **not** made in
+credentials mode (DD-12): the route is anonymous, no cookie is sent, and the session lives in the
+browser rather than in a `Set-Cookie`. Narrowing the allow-list to the one exact origin is therefore
+a policy hardening rather than a functional precondition for this DO — see §12.2.
 
 The error path is the load-bearing part of this DO. ✅ `identity-service` maps **every** mapped
 exception to HTTP **400 Bad Request** with a body of `{code, reason}` — it never returns 401 for bad
@@ -467,7 +476,7 @@ learn it from a rejected call. The first two are settled by `ADR-023`, the third
 | ASM-1 | The exact `Pacco.Web` local origin — scheme, host and port — is not fixed anywhere in the workspace or in `ADR-021`. `http://localhost:3000` appears in `ADR-021` §5 rule 4 as an illustrative example, not a decision. Until the value is fixed, neither the four `ntrada*.yml` edits nor the client's dev-server binding can be written | 🚫 `BLOCKING_FOR_LLD` |
 | ASM-2 | No frontend technology, framework, package manager, bundler, test runner or module layout is decided for `Pacco.Web` anywhere in the workspace. `ADR-021` deliberately does not choose one, and the UI inventory proves an exhaustive absence of any frontend build across all fourteen repositories. Module paths in §4 and §5.9 stay unresolved until it is chosen | 🚫 `BLOCKING_FOR_LLD` |
 | ASM-3 | The approved style assets `STYLE_README.md` and `pacco-material-you.css` named by `ADR-021` §5 rule 7 and by DO1 do not exist in any of the fourteen repositories — a workspace-wide filename search returns nothing. The UI foundation they are supposed to supply cannot be grounded until they are provided | 🚫 `BLOCKING_FOR_LLD` |
-| ASM-4 | Ntrada's `extensions.cors` is assumed to behave as an exact-match origin allow-list that echoes the matched origin with `Access-Control-Allow-Credentials: true`, and to answer the credentialed `OPTIONS` preflight that a JSON `POST` triggers. Ntrada is a NuGet reference and its source is not in the workspace, so this is read from the key names, not proven from code. The same gap applies to today's wildcard-plus-credentials pair | ⚠️ `NON_BLOCKING_ASSUMPTION` |
+| ASM-4 | Ntrada's `extensions.cors` is assumed to behave as an exact-match origin allow-list that echoes the matched origin in `Access-Control-Allow-Origin`, and to answer the `OPTIONS` preflight that a JSON `POST` triggers. Ntrada is a NuGet reference and its source is not in the workspace, so this is read from the key names, not proven from code. The same gap applies to today's wildcard value | ⚠️ `NON_BLOCKING_ASSUMPTION` |
 | ASM-5 | `extensions.cors.allowedMethods` lists `post`, `put` and `delete` and omits `get`. This capability issues only a `POST` through the edge, so the omission does not affect DO1 or DO2. It is assumed that the preflight for that `POST` succeeds without `get` or `options` being listed | ⚠️ `NON_BLOCKING_ASSUMPTION` |
 | ASM-6 | `AuthDto.Expires` is a `long` produced by `Convey.Auth`'s `IJwtHandler`, whose source is not in the workspace, so its unit — seconds or milliseconds since epoch — cannot be verified here. The design does not depend on it: session expiry is read from the JWT's standard `exp` claim, whose unit RFC 7519 fixes as seconds since epoch. `expires` is carried in the session for diagnostics only | ⚠️ `NON_BLOCKING_ASSUMPTION` |
 | ASM-7 | The local Docker Compose stack loads `ntrada-async.docker.yml` — `NTRADA_CONFIG` is set to that value at `Pacco/compose/services.yml:4-13`. Which file each *other* environment loads is unrecorded, which is why the CORS change is applied to all four rather than to the one believed to be live | ⚠️ `NON_BLOCKING_ASSUMPTION` |
@@ -516,8 +525,9 @@ end of this document. Each 🚫 item additionally appears there as a Blocker.
 4. The client disables the submit control and enters the processing state. Any further activation of
    the control is ignored until the request settles — one submission is in flight at a time.
 5. The client issues `POST http://localhost:5000/identity/sign-in` with
-   `Content-Type: application/json` and body `{"email": "...", "password": "..."}`. The browser first
-   issues the credentialed preflight, which the edge answers from its exact-origin allow-list.
+   `Content-Type: application/json` and body `{"email": "...", "password": "..."}`, **not** in
+   credentials mode (DD-12). The browser first issues the `OPTIONS` preflight that the JSON content
+   type triggers, which the edge answers from its exact-origin allow-list.
 6. The gateway matches the anonymous `identity` route and proxies to `identity-service/sign-in`
    without adding or validating a token.
 7. `identity-service` validates the email against `EmailRegex`, loads the user, verifies the password,
@@ -543,8 +553,8 @@ sequenceDiagram
     W-->>U: render the Login screen, no session found
     U->>W: enter email and password, activate Sign in
     W->>W: validate required fields, disable submit, enter processing state
-    W->>GW: OPTIONS identity/sign-in credentialed preflight
-    GW-->>W: allow the exact Pacco.Web origin with credentials
+    W->>GW: OPTIONS identity/sign-in preflight, no credentials mode
+    GW-->>W: allow the exact Pacco.Web origin
     W->>GW: POST identity/sign-in with JSON email and password
     GW->>ID: proxy to identity-service sign-in, anonymous route
     ID->>ID: validate email, verify password, mint JWT with role claim
@@ -566,7 +576,7 @@ sequenceDiagram
 | AF-1 | The user submits with one or both fields empty | Submission is blocked in the browser, the empty field is marked with a visible message and programmatically associated with the field, focus moves to the first offending field, and no request is sent |
 | AF-2 | The user activates Sign in repeatedly while a request is in flight | The second and subsequent activations are ignored. Exactly one request reaches the edge per user-initiated submission |
 | AF-3 | The user navigates directly to `/welcome` with no session | The guard redirects to `/login` before the landing page renders |
-| AF-4 | The user reloads `/welcome` with a live session | The session survives the reload and the same role-aware message renders. A session that does not survive reload fails AC-16 |
+| AF-4 | The user reloads `/welcome` with a live session | The session survives the reload and the same role-aware message renders. A session that does not survive reload fails AC-20 and E2E-9 |
 | AF-5 | The session role is absent, empty, or a value outside `user` and `admin` | "Welcome" renders. The administrator message is unreachable |
 | AF-6 | The user presses the browser Back control after logout | The guard finds no session and `/login` renders. The landing page is not restored from history in a signed-out state |
 | AF-7 | The user opens the client with an expired session already held | The guard treats it as no session, discards it, and renders `/login` with the session-expired notice |
@@ -613,7 +623,7 @@ flowchart LR
     rest["Eight other Pacco domain services<br/>not reached by this capability"]
 
     user -->|"loads the client from its own local origin"| web
-    web -->|"one configured base URL - localhost port 5000 - credentialed JSON"| gw
+    web -->|"one configured base URL - localhost port 5000 - JSON, no credentials mode"| gw
     gw -->|"POST identity/sign-in - anonymous downstream proxy - unchanged"| idsvc
     gw -.->|"existing routes - out of scope for this capability"| rest
 ```
@@ -684,8 +694,8 @@ sequenceDiagram
     participant ID as identity-service
 
     Note over W,GW: canonical happy path
-    W->>GW: OPTIONS identity/sign-in - Origin header, credentialed preflight
-    GW-->>W: 204 with Access-Control-Allow-Origin exact and Allow-Credentials true
+    W->>GW: OPTIONS identity/sign-in - Origin header, no credentials mode
+    GW-->>W: 204 with Access-Control-Allow-Origin set to the exact origin
     W->>GW: POST identity/sign-in - application/json - email and password
     GW->>ID: POST sign-in - auth false, no bearer added
     ID-->>GW: 200 AuthDto - accessToken, refreshToken, role, expires
@@ -708,7 +718,7 @@ sequenceDiagram
 
 Three details are load-bearing and each is read from source, not assumed. ✅ The route is declared
 `auth: false` in both the synchronous and the asynchronous gateway configurations
-(`ntrada.yml:264-270` and `ntrada-async.docker.yml:308-314`), so the gateway's sync-versus-async mode
+(`ntrada.yml:263-269` and `ntrada-async.docker.yml:308-314`), so the gateway's sync-versus-async mode
 does not gate this capability. ✅ Failures arrive as **400**, not 401 —
 `ExceptionToResponseMapper.cs` maps `DomainException`, `AppException` and the unmatched default all
 to `HttpStatusCode.BadRequest`. ✅ The route sets `responseHeaders.content-type: application/json`,
@@ -800,10 +810,11 @@ capability does define is listed in §11 and is local to the browser.
 
 A user opens `Pacco.Web` at its own local origin (§5.8.E). The application shell renders `/login`
 (§5.8.B). The user submits credentials; the gateway client — the only module with network reach —
-issues one credentialed cross-origin `POST` to `http://localhost:5000/identity/sign-in`, which the
-system context (§5.8.A) shows as the single platform edge this capability uses. The browser preflights
-that call, and the edge answers it only because the exact `Pacco.Web` origin now appears in
-`extensions.cors.allowedOrigins` — the one configuration change this capability makes. The gateway
+issues one cross-origin `POST` to `http://localhost:5000/identity/sign-in` — not in credentials mode
+(DD-12) — which the system context (§5.8.A) shows as the single platform edge this capability uses.
+The browser preflights that call because of its JSON content type, and the edge answers it because
+the exact `Pacco.Web` origin now appears in `extensions.cors.allowedOrigins` — the one configuration
+change this capability makes, and the one place the edge names its browser caller. The gateway
 proxies anonymously to `identity-service` (§5.8.C), which authenticates and returns `AuthDto`.
 
 The client writes a `BrowserSession` from that response (§5.8.D): it keeps the access token, keeps
@@ -853,6 +864,7 @@ No ADR is superseded. No existing ADR body is modified by this stage.
 | DD-9 | Keep the route guard client-side and say so | Add a gateway route for the landing page, or have the landing page call a protected endpoint to prove the session | Either would add a gateway route or an authenticated call, contradicting DO2's zero-new-routes target and the out-of-scope list. The guard protects the experience, not data — the page holds none. Stated in §12 rather than overclaimed |
 | DD-10 | Leave `includeExceptionMessage: true` at the edge and mitigate client-side | Turn it off in the gateway configuration | That setting is part of the edge's public contract under `ADR-004` and affects all forty-one routes and every existing machine caller. A browser-scoped problem does not justify a platform-scoped change (`R-02`) |
 | DD-11 | Submit the single credential field as `email` | Support a username form as the label implies | ✅ `SignIn.cs` carries only `Email` and `Password`, and `IdentityService.SignInAsync` validates against `EmailRegex` before anything else. `identity-service` has no username concept to call. ASM-10 records the label-versus-contract mismatch |
+| DD-12 | **Issue the sign-in call outside credentials mode** — no cookie, no HTTP authentication entry and no client certificate is attached, so the browser sends no credentials with the request or its preflight | Run the call in credentials mode (`fetch` with `credentials: 'include'`, or the equivalent) | ✅ The route is `auth: false` at the edge and `identity-service` sets no cookie on it — `AuthDto` is returned in the response body and the session is held by the client (§8). There is no credential for the browser to attach, so credentials mode would buy nothing and would make the call fail against a wildcard origin for no delivered benefit. **Consequence for the CORS change:** the exact-origin value is a *policy hardening*, not a functional precondition for DO1, and `allowedHeaders: ['*']` stays valid and untouched (§12.2). If a future surface needs credentials mode, the exact origin is already in place and `allowedHeaders` must be narrowed to an explicit list in the same change |
 
 ### §5.9 Implementation binding (machine-readable)
 
@@ -929,7 +941,7 @@ wave that carries it, per §2.8.
 | FR-8 | Every non-success outcome is mapped to exactly one message from the closed set in §5.7. The response body, the `reason` field, the HTTP status and any stack trace are never rendered, never written to browser storage and never included in telemetry | DO1 | Error mapper | Frontend implementer, wave-1 | Test per §5.7 row asserting the exact rendered string and that the raw body text appears nowhere in the DOM or in storage |
 | FR-9 | After any failed sign-in the Login screen remains fully usable: the email field retains its value, the password field is cleared, the submit control is re-enabled, and a further submission is possible without reloading | DO1 | Login module | Frontend implementer, wave-1 | Test asserting the post-failure control state and a successful retry in the same page session |
 | FR-10 | No password value is written to any log, console line, browser storage, URL, analytics payload or error report. Console diagnostics emitted by the client redact the request body | DO1 | Gateway client, Login module | Frontend implementer, wave-1 | Console and storage capture during a full sign-in run, asserting the password string appears in neither; source review of every logging call site |
-| FR-11 | `extensions.cors.allowedOrigins` carries the exact `Pacco.Web` local origin — scheme, host and port — in place of `['*']`, identically in all four `ntrada*.yml` files, with `allowCredentials: true` retained and `allowedMethods`, `allowedHeaders`, `exposedHeaders` and every route unchanged | DO1 | `api-gateway` configuration | Platform owner, reviewed as a public-contract change per `ADR-004` §2 obligation 1 | Diff the CORS block across all four files after the change and assert byte-identity; observe the response headers for an allowed and a disallowed origin on a credentialed preflight |
+| FR-11 | `extensions.cors.allowedOrigins` carries the exact `Pacco.Web` local origin — scheme, host and port — in place of `['*']`, identically in all four `ntrada*.yml` files, with `allowCredentials: true` retained and `allowedMethods`, `allowedHeaders`, `exposedHeaders` and every route unchanged | DO1 | `api-gateway` configuration | Platform owner, reviewed as a public-contract change per `ADR-004` §2 obligation 1 | Diff the CORS block across all four files after the change and assert byte-identity; observe the preflight response headers for an allowed and a disallowed origin |
 | FR-12 | Route `/welcome` renders "Welcome to Admin Area" when the session role equals `admin` after lower-casing, and "Welcome" in every other case, including an absent, empty, whitespace or unrecognised value | DO2 | Welcome module | Frontend implementer, wave-2 | Parameterised test over `admin`, `Admin`, `ADMIN`, `user`, `""`, whitespace, `null`, `administrator`, `superuser` asserting the exact rendered heading |
 | FR-13 | The role is read solely from the session written at sign-in. No code path derives, infers or adjusts a role from an email address, a username, a URL parameter, browser storage set by anything other than the session store, or a user-supplied value | DO2 | Welcome module, session store | Frontend implementer, wave-2 | Source review of every read of the role value; test asserting an administrator email with a `user` role renders "Welcome" |
 | FR-14 | A request for `/welcome` with no live session redirects to `/login` before the landing page renders, on first navigation, on reload and on restore from browser history | DO2 | Route guard | Frontend implementer, wave-2 | Test navigating directly to `/welcome` with cleared storage, asserting the redirect and that the landing markup never mounts |
@@ -958,7 +970,7 @@ wave that carries it, per §2.8.
 no new collection, table, index, migration or transaction boundary. Stating that plainly is more
 useful than populating a schema section with structures that do not exist.
 
-### Entities in scope
+### §8.1 Entities in scope
 
 | Entity | Owner | Write authority | Read authority | Lifecycle | Classification |
 |---|---|---|---|---|---|
@@ -967,7 +979,7 @@ useful than populating a schema section with structures that do not exist.
 | `User` document | `identity-service` | `identity-service` only. **This capability performs no write** | Read indirectly, only through the sign-in response | Unchanged | Stores an email (PII), a hashed password and a role |
 | `RefreshToken` document | `identity-service` | `identity-service`, on every sign-in, exactly as it does today for every caller | **Not read by this capability.** The value returned in `AuthDto` is discarded unread | Unchanged | Bearer secret, never held by this client |
 
-### `BrowserSession` fields
+### §8.2 `BrowserSession` fields
 
 | Field | Type | Source | Notes |
 |---|---|---|---|
@@ -976,7 +988,30 @@ useful than populating a schema section with structures that do not exist.
 | `expiresAt` | timestamp | The access token's `exp` claim, per RFC 7519, seconds since epoch (DD-4) | Used to decide whether the session is live. Never used to grant anything |
 | `expiresRaw` | number, optional | `AuthDto.expires` | Carried for diagnostics only. ⚠️ Its unit is unverified (ASM-6) and no logic depends on it |
 
-### Consistency, locking, audit and retention
+### §8.3 Non-functional requirement traceability
+
+`ADR-021` §8 defines the capability's non-functional register as eight rows, `N1`–`N8`, and
+solution-design §5.4 makes **every** row a required verification, with `N1`–`N7` as pass/fail gates.
+`N6` is the deliberate exception: it exists to **measure** the accepted residual risk `R-03`, not to
+pass. The table below is the mapping the register needs to be enforceable — no row is left without a
+named FR, criterion and test.
+
+| NFR | Posture (`ADR-021` §8) | Gate | FR | AC | E2E / test | Wave |
+|---|---|---|---|---|---|---|
+| `N1` | Credential confidentiality — no password logged or displayed, no credential compiled into the client | pass/fail | FR-6, FR-10 | AC-7, AC-14 | §14.A secret scan over source and bundle; console/storage/telemetry capture across a full run | 1 |
+| `N2` | No raw backend error reaches the user — every non-success response maps to a fixed message, the body is never rendered | pass/fail | FR-8 | AC-9, AC-10, AC-11, AC-12 | E2E-3, E2E-4, E2E-7, plus the 7 error-mapper tests in §19 | 1 |
+| `N3` | Session protection — no unauthenticated request reaches the landing page, and an expired token takes the same path | pass/fail | FR-14, FR-15 | AC-20, AC-21, AC-23 | E2E-8, E2E-9, E2E-11 | 2 |
+| `N4` | Role fidelity — the role comes only from the authenticated response, and an unknown role never renders the admin message | pass/fail | FR-12, FR-13 | AC-17, AC-18, AC-19 | E2E-1, E2E-2, plus the 9 parameterised role cases | 2 |
+| `N5` | Edge access-control posture — exactly one origin is allowed and the change is present in all four files | pass/fail | FR-11, FR-17 | AC-15, AC-16, AC-24, AC-25 | E2E-12, plus the four-file byte-identity diff and the no-`Origin` machine-caller call | 1 |
+| `N6` | **Revocation exposure — accepted residual risk.** A discarded session's token stays valid at the edge until expiry | **measurement, not a gate** — it is expected to succeed, and that success is the recorded limitation | FR-16, FR-19 | AC-22 (the client half — zero requests, empty storage) | **E2E-13** — capture the token, log out, replay it against an authenticated route, assert it is still accepted, record the result as the `R-03` measurement | 2 |
+| `N7` | Duplicate submission — submission is disabled for the duration of the in-flight request | pass/fail | FR-4 | AC-4, AC-5 | E2E-6 | 1 |
+| `N8` | Availability / performance — **no numeric target is set, and none is invented here** | **not a gate** — no threshold exists to gate against (ASM-8, B1) | — | — | §14.A records sign-in round-trip time so a threshold can be attached once an owner sets one | 1 |
+
+🚫 `N6` must never be reported as a failing test. A run in which the replayed token is **rejected**
+means the platform's revocation posture changed underneath this capability, which invalidates §12.6
+and `ADR-021` §5 rule 5 and must be raised rather than celebrated.
+
+### §8.4 Consistency, locking, audit and retention
 
 - **Consistency.** One writer, one store, one browsing context — no concurrency model is required. The
   one unresolved consistency fact is deliberate and recorded: a discarded session does not discard
@@ -1011,7 +1046,7 @@ behaviour in this spec is left bound to nothing.
 | **`operationId`** | `identitySignIn` (provisional — the platform publishes no OpenAPI document for this route, so the identifier is assigned by this spec for traceability and is not a contract change) |
 | **Contract version** | None. Pacco publishes no API version for this route |
 | **Owner** | `identity-service` (`CAP-01`), exposed by `api-gateway` (`CAP-02`) |
-| **Edge declaration** | `ntrada.yml:264-270`, `ntrada.docker.yml`, `ntrada-async.yml`, `ntrada-async.docker.yml:308-314` — `upstream: /sign-in`, `method: POST`, `use: downstream`, `downstream: identity-service/sign-in`, `auth: false`, `responseHeaders.content-type: application/json` |
+| **Edge declaration** | `ntrada.yml:263-269`, `ntrada.docker.yml`, `ntrada-async.yml`, `ntrada-async.docker.yml:308-314` — `upstream: /sign-in`, `method: POST`, `use: downstream`, `downstream: identity-service/sign-in`, `auth: false`, `responseHeaders.content-type: application/json` |
 | **Auth model** | ✅ **Anonymous.** `auth: false` at the edge, and `allowAnonymousEndpoints: ["/sign-in","/sign-up"]` in `identity-service`'s `appsettings.json`. No bearer token is sent and none is expected |
 | **Transport** | HTTPS is not in use locally — the gateway is published as plain HTTP on host port 5000 (`Pacco/compose/services.yml:4-13`). See §12 |
 | **Change classification** | **No change.** Neither additive nor breaking. No field, status, header or route is modified |
@@ -1178,7 +1213,7 @@ Three routes. No others are introduced.
 | `/` | — | anonymous | Not a screen. Redirects to `/welcome` when a live session exists, otherwise to `/login` |
 
 ✅ **One screen serves both audiences.** There is no `/admin/login`, no admin toggle, no "I am an
-administrator" control and no user-type selector anywhere in the route set (BR-2, FR-2).
+administrator" control and no user-type selector anywhere in the route set (C1, FR-1, AC-1, AC-28).
 
 #### `/login` — Login
 
@@ -1237,7 +1272,8 @@ credential, no key and no per-service URL is embedded anywhere in the client.
 - **Reveal control:** a `<button type="button">` with `aria-pressed` reflecting the reveal state and
   an accessible name of Show password / Hide password. ⚠️ Revealing the password renders it on
   screen at the user's explicit request — that is the user's own choice and is not a display in the
-  sense BR-6 forbids, which is the application surfacing a password the user did not ask to see.
+  sense C3 and FR-10 forbid, which is the application surfacing, logging or persisting a password the
+  user did not ask to see.
 - **Target:** WCAG 2.1 AA, verified per §14.
 
 **Responsive.** Single-column below 768 px: the card fills the viewport width inside its margins, the
@@ -1361,11 +1397,22 @@ matching is exact and case-normalised. Anything outside that set takes the non-a
 This capability makes exactly one change outside the client: `extensions.cors.allowedOrigins` in the
 four `ntrada*.yml` files moves from `['*']` to the one exact Pacco.Web local origin.
 
-- **Why it is required, not optional.** The four files already set `allowCredentials: true`. The
-  WHATWG Fetch Standard forbids a wildcard `Access-Control-Allow-Origin` on a credentialed request, so
-  the current pair is internally inconsistent and a credentialed browser call against it cannot
-  succeed. Replacing the wildcard makes the configuration valid and simultaneously narrows the origin
-  set from *every* origin to one.
+- **What it is: a policy hardening, not a functional precondition.** This capability's one browser
+  call does not run in credentials mode (DD-12), so it would function against the wildcard as it
+  stands. The reason to change the value is that `allowedOrigins: ['*']` grants *every* origin on the
+  internet cross-origin read access to all forty-one edge routes, and the moment the platform has a
+  browser caller that posture becomes a live exposure rather than a dormant one. The change narrows
+  the origin set from every origin to exactly one — the edge names its browser caller (`ADR-021` §5
+  rule 4). ⚠️ **This is a deliberate correction of an earlier reading of this spec**, which asserted
+  the change was required for the call to work at all; it is not, and overstating it would have hidden
+  the real justification.
+- **The secondary benefit, stated so it is not mistaken for the primary one.** The four files set
+  `allowCredentials: true`, and the WHATWG Fetch Standard forbids a wildcard
+  `Access-Control-Allow-Origin` on a credentialed request. The current pair is therefore internally
+  inconsistent for any *future* credentialed caller. Replacing the wildcard resolves that
+  inconsistency in advance. If a surface ever does need credentials mode, DD-12 records what else
+  must change in the same edit: `allowedHeaders` must move from `['*']` to an explicit list, because
+  a wildcard header list is likewise forbidden on a credentialed request.
 - **Why all four files.** `NTRADA_CONFIG` selects one file at runtime, and ⚠️ it is not verified which
   file each environment loads (ASM-7). Changing all four removes the possibility of editing the file
   the environment does not read — risk R-05.
@@ -1395,7 +1442,7 @@ four `ntrada*.yml` files moves from `['*']` to the one exact Pacco.Web local ori
 
 | Direction | Rule |
 |---|---|
-| Inbound to the client | Every field of the sign-in response is treated as untrusted input: the body is parsed defensively, `accessToken` and `role` are required, and a body that fails either check produces EF-6 and writes no session |
+| Inbound to the client | Every field of the sign-in response is treated as untrusted input: the body is parsed defensively, `accessToken` and `role` are required, and a body that fails either check produces EF-5 — the malformed-200 case — and writes no session |
 | Rendering | 🚫 The `reason` string is **never** rendered, logged or attached to telemetry (ADR-023, BR-5). Only the four fixed messages reach a user. This directly prevents `invalid_email`'s reason — which echoes the submitted value — from being reflected back into the page, and it prevents `includeExceptionMessage: true` at the edge from surfacing a downstream exception to a person (R-02) |
 | Outbound | The identifier and password are sent as a JSON body over the single sign-in route. They are never placed in a query string, a header or a URL fragment |
 | Injection | The client renders no user-supplied HTML and builds no markup from response data, so there is no injection sink in scope |
@@ -1419,10 +1466,48 @@ of the client-side-discard decision and is recorded in ADR-022 and as residual r
 
 | Ref | Risk | Disposition |
 |---|---|---|
-| R-03 | A logged-out user's token stays valid until expiry | **Accepted** by `ADR-021` §5 rule 5. Bounded by the 60-minute lifetime. Stated to users nowhere, stated to operators here and in ADR-022 |
+| R-03 | A logged-out user's token stays valid until expiry | **Accepted** by `ADR-021` §5 rule 5. Bounded by the 60-minute lifetime. **Measured, not merely asserted** — E2E-13 / `N6` replays the token after logout and records that it is still accepted (§8.3). Surfaced to operators in §13.6. ⚠️ Not surfaced to users — recorded as `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` below. Reaffirmation before DO2 ships is carried as blocker `B5` |
 | R-08 | Token reachable by page scripts | Accepted at this scope. Refresh token never stored at all |
 | R-13 | Committed signing key | Out of scope. Pre-existing, unchanged by this capability |
 | R-10 | Refresh token not redeemable at the edge | **Closed as a decision** by ADR-022 — sessions end at access-token expiry by design |
+
+**`ARCHITECTURE_ALIGNMENT_EXCEPTION-03` — the logout limitation is surfaced to operators but not to
+users.** Solution-design obligation §5.2.5 requires the `D8` limitation to be surfaced *wherever
+logout is documented for users or operators*. The operator half is satisfied in full by §13.6. The
+user half is **not** satisfied and is disclosed here rather than quietly dropped: §11.3 fixes the
+client's copy set, and it contains no statement about what logout does to the token at the platform
+level. The reason is a real tension, not an oversight — BR-7 forbids any UI copy that claims logout
+revokes access, and the opposite statement ("your token remains usable elsewhere until it expires")
+is unactionable to a user who has no way to revoke it. **The consequence is concrete: a user on a
+shared machine has no in-product signal that logging out does not end their access at the platform
+level.** Closing the gap properly is a product-copy decision, not a spec edit, and it is the
+substance of `B5`.
+
+**Full register disposition.** The platform register holds `R-01` through `R-14`. Every row is given
+a disposition below so that none is silently dropped — the reviewer finding that prompted this table
+was that five rows were unnamed, and four of those five turned out to be in scope under a different
+identifier rather than genuinely absent.
+
+| Ref | Risk (abbreviated) | Disposition in this capability |
+|---|---|---|
+| R-01 | The exact `Pacco.Web` local origin is not fixed | **In scope, open.** ASM-1 / A1, blocker `B4`. Mitigated by fixing the value before the four-file edit |
+| R-02 | The gateway returns downstream exception messages to the browser | **In scope, mitigated client-side.** `ADR-023`, BR-5, FR-8, DD-1, DD-10 |
+| R-03 | Client-side logout leaves the issued token valid at the edge | **In scope, accepted and measured.** See the row above |
+| R-04 | The edge's allowed-method list omits `get` | **In scope, not exercised.** ASM-5 / A5 — this capability issues only a `POST`. Deferred at the platform level as solution-design `X1`; this capability neither widens nor depends on the list |
+| R-05 | The exact origin lands in a configuration file the environment does not load | **In scope, mitigated.** DD-8, C10, FR-11, AC-15 — all four files change identically, so the unanswered question cannot change this capability's outcome. Carried as Q1 |
+| R-06 | An unknown or unsupported role renders the admin message | **In scope, mitigated.** BR-1, FR-12, AC-18 — admin is the sole explicit match and every other value falls through |
+| R-07 | The landing page is reachable without an authenticated session | **In scope, mitigated — with a stated ceiling.** FR-14, FR-15, AC-20, AC-21. §12.1 records that the guard is presentational: it prevents the unauthenticated *experience* and protects no data, because `/welcome` holds none |
+| R-08 | Credentials or tokens leak into browser storage, logs or URLs | **In scope, mitigated and accepted in part.** See the row above and §12.3 |
+| R-09 | No frontend standard exists, so the first client sets conventions by accident | **In scope, open at the platform level.** ASM-2 / A2, blocker `B2`. This ESD does not choose the stack; solution-design §5.3 item 2 obliges the LL tier to write the four minimum client rules as the client is built |
+| R-10 | The refresh token cannot be redeemed at the edge | **Closed as a decision** by `ADR-022`. See the row above |
+| R-11 | A duplicate sign-in submission is accepted while a request is in flight | **In scope, mitigated.** BR-4, FR-4, DD-7, AC-4, AC-5, `N7` |
+| R-12 | No repository has an owner, so the gateway's public-contract change has no reviewer | **In scope, open.** §1.A, ASM-9 / A9, blocker `B1`, §13.5 |
+| R-13 | The committed JWT signing key now protects an end-user-facing edge | **Out of scope, unchanged.** Pre-existing under `ADR-006` obligation 4. Named in §12.3 so silence is not read as approval |
+| R-14 | The gateway library's actual CORS behaviour is unverified | **In scope, open.** ASM-4 / A4, Q3 — verified by observation against the running gateway, not by reading configuration |
+
+❓ **Architect confirmation is requested on this table**, not assumed — it is carried as open question
+`Q6`. The rows most worth a second pair of eyes are `R-04` and `R-09`, the two that stay open at the
+platform level while this capability neither closes nor worsens them.
 
 ## §13. Operational Specification
 
@@ -1435,11 +1520,11 @@ origins, gateway URLs, DNS names and deployment targets are deliberately defined
 ```
 Pacco.Web  — own local process, own port      (host)
      |
-     v  HTTP, credentialed, exactly one allowed origin
+     v  HTTP, no credentials mode, exactly one allowed origin
 api-gateway — published 5000:80                (Docker Compose)
      |
      v  in-network
-identity-service — 5005:80                     (Docker Compose)
+identity-service — 5004:80                     (Docker Compose)
 ```
 
 ✅ Pacco.Web is **not** built into a backend service image, **not** served by Ntrada, and **not**
@@ -1511,6 +1596,35 @@ owner exists (B1).
 concrete: **there is currently no one to page** when a Pacco browser surface fails, and no one
 empowered to approve a change to the gateway's CORS key on a service they do not own.
 
+### §13.6 Operator note — what logout does and does not do
+
+This subsection exists to discharge solution-design obligation §5.2.5 for the operator audience:
+*surface the `D8` limitation wherever logout is documented for users or operators*. Anyone operating,
+supporting or reviewing this platform reads §13 — so the limitation is written here, in operational
+terms, and not left in an ADR that an on-call responder will not open.
+
+🚫 **Logging out of `Pacco.Web` does not revoke anything.** Logout clears the browser-held session
+and navigates to `/login`. It issues no network call, so no server participates in it and no server
+learns it happened.
+
+What that means in practice, for the three questions an operator will actually be asked:
+
+| Question an operator will be asked | The honest answer |
+|---|---|
+| "The user logged out — is their token dead?" | **No.** The already-issued access token remains acceptable to the gateway and to every domain service until its own `exp` passes. `jwt.expiryMinutes` is `60`, so the worst case is 60 minutes from issue, not from logout |
+| "Can we force-revoke a session right now?" | **No, not through any path this capability adds or exposes.** No `ntrada*.yml` routes `access-tokens/revoke`, `refresh-tokens/use` or `refresh-tokens/revoke`, and `ADR-007` obligation 4 records that the edge does not consult the revocation store. Building that capability is a separate edge decision, explicitly out of scope here (§2.5) |
+| "Can I see in the logs that a user logged out?" | **No.** Logout produces no server-side audit record (§12.5). In platform logs a logged-out session is indistinguishable from an idle one — it simply stops being used |
+
+**Incident guidance.** If a token must be treated as compromised, the only levers that exist today
+are waiting out the 60-minute lifetime or changing the signing key — the latter invalidates *every*
+outstanding token platform-wide and is governed by `ADR-006` obligation 4 and `R-13`, not by this
+capability. Do not tell a reporting user that logging out has contained the exposure; under BR-7 that
+statement is incorrect.
+
+This is `R-03`, **accepted** by explicit reviewer decision under `ADR-021` §5 rule 5 — a recorded
+trade-off, not an undiscovered defect. E2E-13 (`N6`) measures it on every run so that it stays
+visible (§8.3), and `B5` requires the acceptance to be reaffirmed before DO2 ships.
+
 ## §14. Test Specification
 
 Test ownership follows the wave that owns the behaviour (§2.8). No test in this capability requires a
@@ -1549,7 +1663,8 @@ time, so the `session-expired` transition is exercised in milliseconds and the s
 | E2E-9 | Reload `/welcome` with a live session | 2 | Same role-aware heading, no re-authentication, no network call |
 | E2E-10 | Logout from `/welcome` | 2 | Session cleared, redirect to `/login`, **zero** outbound requests, token absent from all storage |
 | E2E-11 | Navigate to `/welcome` with an expired session | 2 | Redirect to `/login` with the session-expired notice, distinct from EF-1 |
-| E2E-12 | Full sign-in round trip against the running gateway from the allowed origin | 1 | 200, session written, and the browser accepts the credentialed response |
+| E2E-12 | Full sign-in round trip against the running gateway from the allowed origin | 1 | 200, session written, and the browser accepts the cross-origin response. The call is made outside credentials mode (DD-12) |
+| E2E-13 | **`N6` — post-logout token replay.** Sign in, capture the access token, log out, then replay that token as a bearer credential against any gateway route marked `auth: true` | 2 | ⚠️ **The replay is expected to be accepted.** Assert that it succeeds and record the result as the measurement of accepted risk `R-03`, **not** as a failure. A rejection means the platform's revocation posture changed underneath this capability and must be raised — see §8.3 and §13.6. The replay is performed outside the client, with a token the test captured, so it asserts nothing about `Pacco.Web`'s own behaviour: FR-16 and AC-22 separately prove the client itself sends nothing after logout |
 
 #### Cross-wave integration map
 
@@ -1613,7 +1728,8 @@ storage · no renewal request between sign-in and expiry · no new gateway route
 |---|---|
 | Accessibility | WCAG 2.1 AA. Automated axe-class scan with zero violations on both routes, plus a manual keyboard-only pass covering the §11.2 focus orders and a screen-reader check that the error region and the welcome heading are announced |
 | Responsive | Both routes usable and free of horizontal scrolling at 320 px, 768 px and 1280 px, and at 200% zoom |
-| Security | Secret scan over source **and** the built bundle; storage and console capture across a full sign-in, landing and logout run |
+| Security | Secret scan over source **and** the built bundle; storage and console capture across a full sign-in, landing and logout run. Plus E2E-13, the `N6` post-logout token replay — run as a **measurement** of accepted risk `R-03`, never reported as a failing gate (§8.3) |
+| NFR register | Every row of `ADR-021` §8 is verified, per the §8.3 mapping. `N1`–`N5` and `N7` are pass/fail gates; `N6` is a measurement; `N8` has no threshold to gate against and records a timing only (ASM-8) |
 | Performance | ❓ No SLO exists (ASM-8, B1). No numeric latency threshold is invented here. The suite records sign-in round-trip time so a threshold can be set once an owner defines one |
 | Resilience | Service-down and slow-response paths, covered by E2E-7 and the timeout case |
 
@@ -1677,7 +1793,7 @@ them without reading the rest of this document.
 | AC-13 | FR-9 | **GIVEN** a failed sign-in, **WHEN** the error is displayed, **THEN** the identifier retains its value, the password field is cleared, the submit control is enabled, **AND** a subsequent correct submission succeeds without a page reload |
 | AC-14 | FR-10 | **GIVEN** a complete sign-in, landing and logout run, **WHEN** console output, every browser storage area and every telemetry payload are captured, **THEN** the password string appears in none of them |
 | AC-15 | FR-11 | **GIVEN** the four `ntrada*.yml` files after the change, **WHEN** their CORS blocks are compared, **THEN** all four are byte-identical, `allowedOrigins` holds exactly one concrete origin with scheme, host and port, **AND** `allowCredentials: true`, `allowedMethods`, `allowedHeaders` and `exposedHeaders` are unchanged from the base ref |
-| AC-16 | FR-11 | **GIVEN** the running gateway, **WHEN** a credentialed request is made from the allowed origin, **THEN** the browser accepts the response, **AND WHEN** the same request is made from any other origin, **THEN** the browser rejects it |
+| AC-16 | FR-11 | **GIVEN** the running gateway, **WHEN** a cross-origin sign-in request is made from the allowed origin, **THEN** the browser accepts the response, **AND WHEN** the same request is made from any other origin, **THEN** the browser rejects it |
 | AC-17 | FR-12 | **GIVEN** a session whose role is `admin` in any letter case, **WHEN** `/welcome` renders, **THEN** the heading reads exactly "Welcome to Admin Area" |
 | AC-18 | FR-12 | **GIVEN** a session whose role is `user`, empty, whitespace, absent, or any unrecognised value such as `administrator` or `superuser`, **WHEN** `/welcome` renders, **THEN** the heading reads exactly "Welcome", **AND** the administrator message is not rendered in any form |
 | AC-19 | FR-13 | **GIVEN** an account whose email address begins with `admin@` but whose authenticated role is `user`, **WHEN** the user signs in, **THEN** `/welcome` shows "Welcome", **AND** a source review confirms no code path reads the identifier when deciding the message |
@@ -1747,7 +1863,7 @@ taken from §14.A. A row with no obligation would be a requirement nobody has to
 | DO1 | FR-8 | AC-9, AC-10, AC-11, AC-12 | Error mapper | `Pacco.Web` | `identitySignIn` | `/login` | Unit, Component | 7 tests — 3 error codes, 2 malformed-body cases, 2 transport cases |
 | DO1 | FR-9 | AC-13 | Login module | `Pacco.Web` | `identitySignIn` | `/login` | Component | 1 test covering post-failure control state and a successful retry in the same page session |
 | DO1 | FR-10 | AC-14 | Gateway client, Login module | `Pacco.Web` | `identitySignIn` | `/login` | NFT, static | 1 capture run over console, storage and telemetry, plus 1 review of every logging call site |
-| DO1 | FR-11 | AC-15, AC-16 | Gateway CORS configuration | `Pacco.APIGateway` | `identitySignIn` | n/a | Configuration, Integration | 1 four-file byte-identity diff, plus 2 credentialed browser checks — allowed origin and disallowed origin |
+| DO1 | FR-11 | AC-15, AC-16 | Gateway CORS configuration | `Pacco.APIGateway` | `identitySignIn` | n/a | Configuration, Integration | 1 four-file byte-identity diff, plus 2 cross-origin browser checks — allowed origin and disallowed origin |
 | DO2 | FR-12 | AC-17, AC-18 | Welcome module | `Pacco.Web` | none | `/welcome` | Component | 9 parameterised role cases asserting the exact heading |
 | DO2 | FR-13 | AC-19 | Welcome module, session store | `Pacco.Web` | none | `/welcome` | Component, static | 1 `admin@`-prefixed account test, plus 1 source review of every role read |
 | DO2 | FR-14 | AC-20 | Route guard | `Pacco.Web` | none | `/welcome` | Component, E2E | 3 guard tests — direct navigation, reload, back-navigation |
@@ -1757,14 +1873,19 @@ taken from §14.A. A row with no obligation would be a requirement nobody has to
 | DO2 | FR-18 | AC-26 | Welcome module | `Pacco.Web` | none | `/welcome` | Component | 1 control-inventory test asserting zero network calls on the route |
 | DO2 | FR-19 | AC-27 | Session store, gateway client | `Pacco.Web` | none | `/welcome` | Static, E2E | 1 source scan for refresh-route references, plus 1 observation run from sign-in past the expiry moment |
 
-**Totals.** 2 DOs · 19 FRs · 28 ACs · 12 E2E scenarios · 2 repositories touched · 1 interface
-consumed · 0 interfaces published · 3 routes.
+**Totals.** 2 DOs · 19 FRs · 28 ACs · 13 E2E scenarios · 8 NFR rows traced in §8.3 · 2 repositories
+touched · 1 interface consumed · 0 interfaces published · 3 routes.
+
+E2E-13 is the one scenario in the set that binds to no FR row above, and deliberately so: it measures
+the platform-level limitation recorded as `R-03` rather than verifying a requirement this capability
+implements. It is traced through `N6` in §8.3 and through §13.6, not here.
 
 ## §19.A Reference Conformance Summary
 
 One row per binding rule extracted during reference consultation, with the rule's own words. Status
-values: `compliant` · `compliant-with-deviation` · `not-applicable-to-this-capability` ·
-`BLOCKING_FOR_LLD`.
+values: `compliant` · `conditionally-compliant` · `compliant-with-deviation` ·
+`not-applicable-to-this-capability` · `BLOCKING_FOR_LLD`. `conditionally-compliant` means the rule is
+satisfied by this spec's design but cannot be *demonstrated* until a named blocker is resolved.
 
 | # | Family | Source | Rule (verbatim) | Strength | Status | Implementing section |
 |---|---|---|---|---|---|---|
@@ -1799,7 +1920,7 @@ values: `compliant` · `compliant-with-deviation` · `not-applicable-to-this-cap
 | 29 | Deployment & infra | `ADR-017` §2 rule 1 | "**Infrastructure and applications are started separately.**" | Binding | `compliant` | §13.1 — the client is a third, separately started process and becomes a startup dependency of nothing |
 | 30 | Deployment & infra | `ADR-017` §2 rule 3 | "**Every deployable is independently startable.**" | Binding | `compliant` | §13.1, §13.3 |
 | 31 | Deployment & infra | `ADR-017` §2 rule 6 | "**A production deployment path must be described before the platform runs anywhere shared.**" | Binding | `not-applicable-to-this-capability` | No shared environment exists and none is introduced. Deferring it is the reviewer decision recorded in `ADR-021` §5 rule 6, not an omission |
-| 32 | Deployment & infra | `ADR-018` §2 rule 1 | "**Every pipeline must run its own tests.**" | Binding | `compliant` | §14.A — the full automated suite is a wave-1 deliverable and is the first thing the client's build runs |
+| 32 | Deployment & infra | `ADR-018` §2 rule 1 | "**Every pipeline must run its own tests.**" | Binding | `conditionally-compliant` — pending `B2` | §14.A specifies the full automated suite as a wave-1 deliverable and requires the client's build to run it first. ⚠️ It cannot yet be claimed as `compliant`: `B2` leaves the test runner, the build tool and the CI pipeline undecided, so there is no pipeline in which to demonstrate the rule. The status resolves to `compliant` when `B2` is closed and the chosen pipeline runs the suite |
 | 33 | Platform runtime | `ADR-020` §2 decision | The platform runtime baseline pins every deployable to one .NET Core version line | Binding | `not-applicable-to-this-capability` | `Pacco.Web` is a browser client and is not a .NET deployable. Stated explicitly so the exclusion is a decision rather than an oversight — ASM-2 and B2 carry the actual technology choice |
 | 34 | Platform runtime | `ADR-002` §2 decision | The shared service toolkit is the platform standard for composing a deployable | Binding | `not-applicable-to-this-capability` | The toolkit is a .NET service library with no browser equivalent. Same reasoning as row 33 |
 
@@ -1807,9 +1928,9 @@ values: `compliant` · `compliant-with-deviation` · `not-applicable-to-this-cap
 
 Append-only. Each review round adds rows and removes none.
 
-| Round | Date | Reviewer | Finding | Resolution | Sections changed |
-|---|---|---|---|---|---|
-| _initial draft — no rows yet_ | | | | | |
+| Round | Reviewer | Date (UTC) | Comment summary | Resolution (what changed in this spec) | Spec section(s) touched | Status |
+|-------|----------|-----------|------------------|----------------------------------------|--------------------------|--------|
+| 1 | internal-review | 2026-09-25 | The credentialed-sign-in premise does not survive stress-testing; `ADR-021` §8's `N1`–`N8` register is untraced and its `N6` replay case absent; solution-design `E4` not carried into ABQ; five risk-register rows unnamed; and a cluster of grounding and cross-reference errors (identity port, `ntrada.yml` line range, EF/AC/BR citations, row-32 compliance claim, README and glossary gaps) | Recorded DD-12 — the sign-in call runs **outside** credentials mode — and restated the CORS change as a policy hardening rather than a functional necessity throughout; added §8.3 tracing `N1`–`N8` to FRs, ACs and E2E cases, and E2E-13 as the `N6` post-logout replay **measurement**; added §13.6 as the operator-facing surfacing of the logout limitation and disclosed the unsatisfied user half as `ARCHITECTURE_ALIGNMENT_EXCEPTION-03`; gave all fourteen `R-*` rows a disposition; added `B5` (carries `E4`) and `Q6`; corrected the identity-service port to `5004:80`, the `ntrada.yml` sign-in range to `263-269`, and the EF-5, C3/FR-10, AC-20/E2E-9 and C1/FR-1 citations; softened §19.A row 32 to `conditionally-compliant` pending `B2`; aligned the README status row and extended its glossary | §2.2, §4 (DO1), §5.2, §5.5, §5.6, §5.8.A, §5.8.C, §5.8.2, §5.8.4, §8.1–§8.4, §9.1, §11.2, §12.2, §12.4, §12.6, §13.1, §13.6, §14.A, §16, §19, §19.A, ABQ; `README.md` | `addressed` |
 
 ## Assumptions, Blockers & Open Questions
 
@@ -1826,14 +1947,14 @@ and is raised here.
 | A1 | The Pacco.Web browser client will be served from exactly one local origin, and that origin's scheme, host and port will be fixed before the gateway configuration is edited | 🚫 `BLOCKING_FOR_LLD`. The gateway must name the origin exactly, and `http://localhost:3000` appears in the source material only as an example. A browser treats `localhost` and `127.0.0.1` as different origins, so a near-miss fails as completely as a wrong port | Every browser call is blocked by the browser's cross-origin check. The failure surfaces to the user as "temporarily unavailable" and looks like an outage rather than a configuration error. See B4 |
 | A2 | A frontend technology, build tool and project layout will be chosen for Pacco.Web before wave 1 implementation begins | 🚫 `BLOCKING_FOR_LLD`. The repository holds a single-line README on one commit. No framework, no package manifest, no build, no test runner and no lint configuration exists, and the platform has no frontend standard to inherit | No file path in this spec can be resolved, §5.9's client component path stays unresolved, and two waves could choose two different stacks for the same client. See B2 |
 | A3 | The approved Pacco style assets named by DO1 will be supplied before the screens are built | 🚫 `BLOCKING_FOR_LLD`. `STYLE_README.md` and `pacco-material-you.css` are named as the required UI foundation, and neither file exists in any of the fourteen repositories in the workspace | The screens are built against an invented visual language and have to be redone when the real assets arrive, and the approved-foundation requirement is silently unmet. See B3 |
-| A4 | The gateway's cross-origin extension honours a single exact origin and emits the matching allow-origin header on a credentialed preflight | ⚠️ `NON_BLOCKING_ASSUMPTION`. The behaviour follows from the configuration vocabulary, but the gateway library is a package reference with no source in the workspace, so it is inferred rather than read | The browser path stays blocked after a correct-looking configuration change, and the cause is invisible in the configuration. Detected loudly by AC-16, which runs against the running gateway. See Q3 |
+| A4 | The gateway's cross-origin extension honours a single exact origin and emits the matching allow-origin header on the preflight a JSON `POST` triggers | ⚠️ `NON_BLOCKING_ASSUMPTION`. The behaviour follows from the configuration vocabulary, but the gateway library is a package reference with no source in the workspace, so it is inferred rather than read | The browser path stays blocked after a correct-looking configuration change, and the cause is invisible in the configuration. Detected loudly by AC-16, which runs against the running gateway. See Q3 |
 | A5 | The allowed-methods list omitting `get` does not affect this capability | ⚠️ `NON_BLOCKING_ASSUMPTION`. Sign-in is a `POST`, and it is the only cross-origin call this capability makes | A later browser `GET` is blocked and the cause is non-obvious. Bounded today because no `GET` is in scope |
 | A6 | Deriving session expiry from the JWT `exp` claim is correct regardless of the unit of the response's `expires` field | ⚠️ `NON_BLOCKING_ASSUMPTION`. `expires` originates inside a package whose source is not in the workspace, so its unit is unverifiable here, whereas `exp` is fixed by RFC 7519 as seconds since epoch | If `exp` cannot be parsed the client treats the response as malformed rather than guessing, so the failure is loud rather than a session with an invented lifetime. See Q5 |
 | A7 | Applying the origin change to all four gateway configuration files removes any dependence on which file an environment loads | ⚠️ `NON_BLOCKING_ASSUMPTION`. The local container stack sets the asynchronous Docker configuration explicitly, but no record states what any other environment loads | If the four files ever diverge, the change lands in a file nobody reads and the browser path fails with a configuration that looks correct. Detected by AC-15's byte-identity check. See Q1 |
 | A8 | No service-level objective, alert threshold or dashboard is expected for a Pacco browser surface in this delivery | ⚠️ `NON_BLOCKING_ASSUMPTION`. None exists for any browser surface because none has ever existed | Release readiness is judged against an unstated numeric bar. Mitigated by defining the telemetry events now so thresholds can be attached later without another client change. See B1 |
 | A9 | A named owner and reviewer will exist for Pacco.Web and for the gateway configuration change before either lands | 🚫 `BLOCKING_FOR_LLD`. No `CODEOWNERS` entry, no recorded owner and no named reviewer exists for the client, and the origin edit is a public-contract change that must be reviewed as one | The edge's public contract changes with no accountable approver, no one can be paged when the browser surface fails, and every §1.A row stays empty. See B1 |
 | A10 | The identifier field accepts an email address, and "username" in the label does not imply a second credential form | ⚠️ `NON_BLOCKING_ASSUMPTION`. The approved screen labels the field "Email or Username", while the sign-in contract carries an `email` field validated against an email pattern | A user who types a username receives the ordinary invalid-credentials message with no explanation. Carried as Q2 rather than resolved by silently changing either the label or the contract |
-| A11 | Exactly one browser origin needs to be allowed at the edge at a time, and it is never the gateway's own origin | ⚠️ `NON_BLOCKING_ASSUMPTION`. One client, one local process, one port. Follows from the decided client boundary | A second surface is added to the allow-list without a decision, which erodes the exactness the credentialed-request rule depends on |
+| A11 | Exactly one browser origin needs to be allowed at the edge at a time, and it is never the gateway's own origin | ⚠️ `NON_BLOCKING_ASSUMPTION`. One client, one local process, one port. Follows from the decided client boundary | A second surface is added to the allow-list without a decision, which erodes the exactness the hardening in §12.2 delivers and that any future credentialed caller would depend on |
 | A12 | Existing machine-to-machine callers of the gateway send no origin header and are therefore unaffected by the origin change | ⚠️ `NON_BLOCKING_ASSUMPTION`. The cross-origin check is enforced by browsers, not by servers, so a caller that sends no origin header is outside its scope | An existing integration breaks at the same moment the browser client ships, and the two changes are hard to tell apart. Detected loudly by AC-25 |
 
 ### Blockers
@@ -1844,6 +1965,7 @@ and is raised here.
 | B2 | **[ACTION NOW]** (A2) No frontend technology, build tool or project layout has been chosen for Pacco.Web | No file path in this spec resolves, §5.9's client component path stays unresolved, and both waves are blocked from writing a single file | Architecture | Decide the framework, package manager, build tool, test runner and directory layout, and record the decision before wave 1 starts |
 | B3 | **[ACTION NOW]** (A3) The approved style assets `STYLE_README.md` and `pacco-material-you.css` do not exist in any repository in the workspace | The screens cannot be built on the approved foundation the requirement names, and building on a substitute guarantees rework | Design / Architecture | Supply both files into Pacco.Web, or record a decision replacing them with a named alternative |
 | B4 | **[ACTION NOW]** (A1) The exact Pacco.Web local origin — scheme, host and port — is not fixed | The gateway configuration cannot be written correctly. A wrong value blocks every browser call and presents as an outage | Architecture with the client owner | Pin the port the client actually serves, and write that exact origin into all four gateway configuration files |
+| B5 | **[ACTION NOW — as an acceptance to reaffirm, not a defect to fix]** Carries solution-design open item `E4`. The accepted residual risk `R-03` must be reaffirmed before DO2 ships: a logged-out session's token stays valid at the gateway and at every domain service until it expires | If it is not consciously accepted at the point of shipping, it surfaces later as a security finding rather than as a recorded trade-off. On a shared machine it is a real access-control gap. Also governs `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` — whether the limitation is surfaced to users at all is a product-copy decision that nobody has taken | Platform owner and Product | Reaffirm the acceptance on the record before wave 2 ships, and decide whether any user-facing copy states the limitation. Unlike B1–B4 this does **not** block low-level design: wave 2 may be specified and built while it is open, and only the DO2 ship gate depends on it. See §12.6, §13.6, `ADR-021` §5 rule 5 / §6.2 item 1 |
 
 ### Open Questions
 
@@ -1851,6 +1973,7 @@ and is raised here.
 |---|---|---|---|---|
 | Q1 | **[handled later by the platform owner, tracked as `ADR-004` §2 obligation 2 and `ADR-017` blocker B2]** Which gateway configuration file does each environment actually load? | `NTRADA_CONFIG` selects one of four files, and the container stack and the process manifests disagree. It is therefore not provable which file is live | Continue to change all four identically, so the answer cannot change the outcome for this capability. Do not attempt to settle the platform question inside this feature | Platform owner |
 | Q2 | **[handled later by the wave-1 low-level spec]** Should the identifier field accept a username, or should its label be narrowed to an email address? | The approved screen says "Email or Username". The sign-in contract accepts `email` only and validates it against an email pattern | Narrow the helper text at the client without changing the label's approved wording, so a user who types a username is guided rather than rejected silently. Changing the contract is a backend change and is out of this feature's scope | Product with Architecture |
-| Q3 | **[ACTION NOW]** Does the gateway emit the expected CORS response headers for one exact origin with credentials enabled? | The gateway library has no source in the workspace, so its behaviour is inferred from configuration keys. Everything in the browser path depends on it | Run one credentialed preflight and one credentialed `POST` against the running gateway from the allowed origin and from a different origin, before wave 1 declares the path viable. This is AC-16, run early rather than at the end | Platform owner |
+| Q3 | **[ACTION NOW]** Does the gateway emit the expected CORS response headers once `allowedOrigins` names one exact origin? | The gateway library has no source in the workspace, so its behaviour is inferred from configuration keys. Everything in the browser path depends on it. Note that this capability's own call is not credentialed (DD-12), so the question is about exact-origin matching, not about the credentials rule | Run one preflight and one `POST` against the running gateway from the allowed origin and from a different origin, before wave 1 declares the path viable. This is AC-16, run early rather than at the end | Platform owner |
 | Q4 | **[handled later by the deployment stage, once a frontend environment exists]** Should Pacco.Web be added to Docker Compose as its own service? | It runs as its own local process today. Adding it later is explicitly permitted, provided it is never bundled into a backend container | Leave it outside Compose for this delivery. Adding it now would fix a port and a build shape while B2 is still open | Platform owner |
 | Q5 | **[handled later by the wave-1 low-level spec]** What is the unit of `AuthDto.expires`? | The field originates inside a package whose source is not in this workspace, so its unit cannot be read here | Do not depend on it. Derive expiry from the JWT `exp` claim, whose unit is fixed by RFC 7519, and treat an unparseable token as a malformed response | Frontend implementer, wave 1 |
+| Q6 | **[ACTION NOW]** Is the full risk-register disposition in §12.6 correct — in particular, are `R-04` (the edge's allowed-method list omits `get`) and `R-09` (no frontend standard exists) genuinely out of this capability's reach rather than quietly dropped? | The register holds `R-01` through `R-14`. An earlier draft of this ESD named nine of them and left five unaddressed. §12.6 now gives all fourteen a disposition, and four of the five turned out to be in scope under a different identifier. `R-04` and `R-09` are the two that stay open at the platform level while this capability neither closes nor worsens them | Confirm the table rather than assume it. The recommendation is to leave both where they are: `R-04` is unexercised because this capability issues only a `POST` (ASM-5), and `R-09` is `B2`'s subject and is discharged by solution-design §5.3 item 2 at the low-level tier. Widening the edge's method list or authoring a platform frontend standard inside a login feature would both exceed this scope | Platform architect |

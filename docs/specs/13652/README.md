@@ -11,8 +11,8 @@ Spec pack for the platform's first browser surface: one common sign-in screen an
 | Tier | High-level baseline architecture (ESD) |
 | Status | Draft — not yet reviewed |
 | Waves | wave-1 (DO1), wave-2 (DO2) |
-| New records authored | `ADR-022`, `ADR-023` |
-| Open blockers | 4, all `[ACTION NOW]` — see the ESD's final section |
+| New records authored | `ADR-021`, `ADR-022`, `ADR-023` — all three are architecture records written for this work item, and all three appear in the reading order below |
+| Open blockers | 5, all `[ACTION NOW]` — see the ESD's final section |
 
 ## Reading order
 
@@ -51,4 +51,6 @@ A disagreement is raised in the ESD's Assumptions, Blockers & Open Questions sec
 | **ABQ** | The Assumptions, Blockers & Open Questions section that closes the ESD and each ADR |
 | **`BLOCKING_FOR_LLD`** | An unresolved item that must be answered before low-level design can proceed |
 | **The edge** | The single north-south API gateway, locally `http://localhost:5000` |
+| **Ntrada** | The declarative, configuration-driven API gateway the platform runs at the edge. It is a NuGet package, not a repository in this workspace — its behaviour is set by the `ntrada*.yml` files in `Pacco.APIGateway`, which declare routes, authentication and the CORS policy. Nothing in this pack writes gateway code; it edits gateway configuration |
 | **Browser session** | Access token, role and expiry held in the browser. Not a server-side session — Pacco has none |
+| **`R-*`** | Identifiers from the platform risk register, `../../architecture-inventory/risk-constraint-gap-register.md`. `R-03` — a logout leaves the already-issued access token valid until it expires — is the one this capability accepts rather than closes; the ESD disposes of the full `R-01`..`R-14` set in its §12.6 |
