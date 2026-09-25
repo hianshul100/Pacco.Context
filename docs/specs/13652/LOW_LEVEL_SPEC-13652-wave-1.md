@@ -1,3 +1,68 @@
+## Table of contents
+
+- [Notation](#notation)
+- [§L.1 Document Control](#l1-document-control)
+  - [Execution metadata](#execution-metadata)
+- [§L.2 Wave Scope](#l2-wave-scope)
+  - [§L.2.1 Wave × DO assignment — copied from HL ESD §2.8, not re-derived](#l21-wave--do-assignment--copied-from-hl-esd-28-not-re-derived)
+  - [§L.2.2 In scope for wave-1](#l22-in-scope-for-wave-1)
+  - [§L.2.3 Out of scope for wave-1](#l23-out-of-scope-for-wave-1)
+  - [§L.2.4 Binding Rule Index](#l24-binding-rule-index)
+- [§L.3 Delivery Outcome Low-Level Design](#l3-delivery-outcome-low-level-design)
+  - [DO1 — Common Pacco Login Experience](#do1--common-pacco-login-experience)
+    - [1. Purpose in this wave](#1-purpose-in-this-wave)
+    - [2. User-visible behaviour](#2-user-visible-behaviour)
+    - [3. Component and module design](#3-component-and-module-design)
+    - [4. State, data and configuration design](#4-state-data-and-configuration-design)
+    - [5. Execution steps](#5-execution-steps)
+    - [6. Interface and contract usage](#6-interface-and-contract-usage)
+    - [7. Platform configuration change](#7-platform-configuration-change)
+    - [8. Error handling and resilience](#8-error-handling-and-resilience)
+    - [9. Security, privacy and observability](#9-security-privacy-and-observability)
+    - [10. Deliberate non-goals of this wave](#10-deliberate-non-goals-of-this-wave)
+- [§L.4 Canonical State Machine — reference only](#l4-canonical-state-machine--reference-only)
+- [§L.5 Build order within the wave](#l5-build-order-within-the-wave)
+- [§L.6 Test design](#l6-test-design)
+  - [§L.6.1 Levels and what each level is for](#l61-levels-and-what-each-level-is-for)
+  - [§L.6.2 Fixture and determinism policy](#l62-fixture-and-determinism-policy)
+  - [§L.6.A Testing Automation Requirements — DO1](#l6a-testing-automation-requirements--do1)
+    - [§L.6.A.1 E2E scenarios owned by wave-1](#l6a1-e2e-scenarios-owned-by-wave-1)
+    - [§L.6.A.2 API-level integration tests](#l6a2-api-level-integration-tests)
+    - [§L.6.A.3 UI and component tests](#l6a3-ui-and-component-tests)
+    - [§L.6.A.4 Negative and security-behaviour anchors](#l6a4-negative-and-security-behaviour-anchors)
+    - [§L.6.A.5 Non-functional test requirements](#l6a5-non-functional-test-requirements)
+    - [§L.6.A.6 Coverage obligations](#l6a6-coverage-obligations)
+- [§L.7 Non-functional implementation contract](#l7-non-functional-implementation-contract)
+  - [§L.7.1 NFR gates carried by wave-1](#l71-nfr-gates-carried-by-wave-1)
+  - [§L.7.2 The four minimum client rules](#l72-the-four-minimum-client-rules)
+  - [§L.7.3 Business-rule placement](#l73-business-rule-placement)
+  - [§L.7.4 FMEA](#l74-fmea)
+- [§L.8 Cross-wave contracts and deferrals](#l8-cross-wave-contracts-and-deferrals)
+  - [§L.8.1 Shared surfaces — single owner each](#l81-shared-surfaces--single-owner-each)
+  - [§L.8.2 Deferred to wave-2 — each with its matching owner](#l82-deferred-to-wave-2--each-with-its-matching-owner)
+  - [§L.8.3 What wave-2 must not do with wave-1's output](#l83-what-wave-2-must-not-do-with-wave-1s-output)
+  - [§L.8.4 Contract ledger position](#l84-contract-ledger-position)
+- [§L.9 Implementation binding](#l9-implementation-binding)
+- [§L.10 Architecture conformance](#l10-architecture-conformance)
+  - [§L.10.1 Governing decisions honoured](#l101-governing-decisions-honoured)
+  - [§L.10.2 Capability placement](#l102-capability-placement)
+  - [§L.10.3 Declared exception](#l103-declared-exception)
+- [§L.11 Source requirement continuity](#l11-source-requirement-continuity)
+  - [§L.11.1 Every raw requirement, traced](#l111-every-raw-requirement-traced)
+  - [§L.11.2 Requirement coverage summary for this wave](#l112-requirement-coverage-summary-for-this-wave)
+- [§L.12 Visual and runtime contract](#l12-visual-and-runtime-contract)
+  - [§L.12.1 Design source inventory](#l121-design-source-inventory)
+  - [§L.12.2 Consumed endpoints](#l122-consumed-endpoints)
+  - [§L.12.3 Dev runbook](#l123-dev-runbook)
+  - [§L.12.4 Reuse versus create](#l124-reuse-versus-create)
+  - [§L.12.5 Design-token contract](#l125-design-token-contract)
+  - [§L.12.6 UI screen coverage matrix](#l126-ui-screen-coverage-matrix)
+- [§L.13 Review Resolution History](#l13-review-resolution-history)
+- [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
+  - [Assumptions](#assumptions)
+  - [Blockers](#blockers)
+  - [Open Questions](#open-questions)
+
 # Low-Level Engineering Solution Design — 13652 · wave-1
 
 **Delivery Outcome owned by this wave: `DO1` — Common Pacco Login Experience.**
@@ -182,10 +247,10 @@ Files:
 
 Implements:
   - FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-10, FR-11
-  - BR-1, BR-4, BR-5, BR-8
+  - BR-2 (at the write only), BR-4, BR-5, BR-8
   - AC-1 to AC-16, and AC-28 jointly with wave-2
   - Constraints C1, C3, C4, C5, C6, C8, C9, C10, C12
-  - NFR gates N1, N2, N5, N7, and the N8 measurement
+  - NFR gates N1, N2, N7, the AC-15 and AC-16 half of N5, and the N8 measurement
 
 External Systems:
   - api-gateway, Ntrada declarative edge, local host port 5000, Docker Compose
@@ -311,9 +376,9 @@ this document restates it.
 3. `LoginRoute` renders `LoginCard` inside `BrandFrame` and emits `login.viewed`. `useSignIn.status` is `idle`.
 4. The user types into `IdentifierField` and `PasswordField`. `LoginRoute` holds both values. Typing clears any message `FormMessage` is showing.
 5. The user activates `Sign in`, or presses Enter inside either field.
-6. `LoginRoute` validates: each of the two values must be non-empty after trimming. This is the only validation the client performs (BR-1). ⚠️ No email-shape check runs in the browser — the identifier may legitimately be a username, and the shape ruling belongs to `identity-service` (FR-3, BR-1).
+6. `LoginRoute` validates: each of the two values must be non-empty after trimming. This is the only validation the client performs (FR-3). ⚠️ No email-shape check runs in the browser — the identifier may legitimately be a username, and the shape ruling belongs to `identity-service` (FR-3, HL §9.1).
 7. If either value is empty, `LoginRoute` marks the empty fields, moves focus to the first one, emits `login.validation_blocked` and **stops**. No request is made. FSM stays `anonymous`.
-8. `useSignIn` attempts the submit lock. If `status` is already `submitting`, it emits `login.duplicate_suppressed` and returns without a request (FR-4, BR-4, AC-5). Otherwise it sets `status = submitting`.
+8. `useSignIn` attempts the submit lock. If `status` is already `submitting`, it emits `login.duplicate_suppressed` and returns without a request (FR-4, BR-4, AC-4). Otherwise it sets `status = submitting`.
 9. `LoginRoute` re-renders: the action is disabled with its processing label and `aria-busy`, both fields become read-only. FSM: `anonymous` → `authenticating`. `login.submitted` is emitted, carrying no field value.
 10. `useSignIn` generates a correlation id and calls `GatewayClient.post('/identity/sign-in', { email, password })` — the identifier goes into `email` verbatim, untrimmed of case and unmodified (HL §9.1). The request carries no credentials mode and no cookie (DD-12).
 11. The edge matches the anonymous `sign-in` route and forwards to `identity-service`. No token is required and none is sent (BRI-3, BRI-9).
@@ -332,7 +397,7 @@ this document restates it.
 21. `ErrorMapper` returns one registry key from the closed set. `invalid_credentials` and `invalid_email` both map to `credentials`; every other value, including one the client has never seen, maps to `generic`; transport and timeout map to `unavailable` (BR-5, BRI-16, BRI-18).
 22. 🚫 If the registry has no entry for a key, the mapper returns `generic`. It never returns the backend string as a fallback (`ADR-023` §5 rule 4).
 23. `useSignIn` sets `message` to the registry string, emits `login.failed` with the bucket and the correlation id — never the `reason` and never a field value — and releases the lock. FSM: `authenticating` → `anonymous`.
-24. `LoginRoute` re-enables the action and the fields, clears the password value, keeps the identifier value, renders the single message through `FormMessage` as `role="alert"`, and moves focus to it (FR-9, AC-11).
+24. `LoginRoute` re-enables the action and the fields, clears the password value, keeps the identifier value, renders the single message through `FormMessage` as `role="alert"`, and moves focus to it (FR-9, AC-13).
 25. ✅ The screen is usable. The user may correct the password and submit again, which re-enters at step 5.
 
 **Execution — arriving at `/login` with a redirect reason (the wave-2 seam).**
@@ -487,7 +552,7 @@ Binding rules for this edit:
 | The password is never persisted | `SessionStore.write()` takes four named arguments, none of which is the password |
 | The password is never in a URL | The only call is a `POST` with a body |
 | The password is rendered masked | `PasswordField` is a masked input; the reveal toggle is the user's own explicit action and is per-render, never sticky across a navigation |
-| No credential is hard-coded | 🚫 No identifier, password, token or seeded account value appears in client source, fixtures shipped to the browser, or configuration. Test credentials live in the test harness only (AC-14, HL §15 rule 6) |
+| No credential is hard-coded | 🚫 No identifier, password, token or seeded account value appears in client source, fixtures shipped to the browser, or configuration. Test credentials live in the test harness only (AC-7, HL §15 rule 6) |
 
 **Token handling.** The access token is a bearer secret. It is written by `SessionStore`, read only by
 code that needs to attach it, and rendered nowhere. 🚫 It is never logged, never placed in a URL,
@@ -515,7 +580,7 @@ classification bucket is one of four client-owned words, not a backend string (H
 ⚠️ The correlation id is generated in the browser and is **not** propagated to the edge as a header —
 Ntrada is not configured to accept or forward one, and adding a header is an edge change this wave is
 forbidden to make. It therefore correlates browser events to each other, not browser events to server
-logs. Carried as `Q4` (N8, HL §13.4).
+logs. Carried as `Q4` (HL §13.4 observability; 🚫 not an `N1`–`N8` register row).
 
 #### 10. Deliberate non-goals of this wave
 
@@ -525,7 +590,7 @@ These are not omissions. Each is a decision recorded upstream and restated here 
 | Not built | Why | Source |
 |---|---|---|
 | A separate Admin login screen or any user-type control | The single-screen property is the DO's point | FR-1, C1 |
-| Any client-side email or username format validation | The shape ruling belongs to `identity-service` | FR-3, BR-1 |
+| Any client-side email or username format validation | The shape ruling belongs to `identity-service` | FR-3, HL §9.1 |
 | "Remember me", token renewal, silent refresh, or any refresh-token use | The refresh token is discarded unread and there is no renewal mechanism anywhere | `ADR-022` rules 1 and 5, BRI-13 |
 | A new gateway route of any kind, including a logout or revoke route | Edge routes are out of scope for this capability | BRI-4, `ADR-021` rule 6 |
 | Any change to JWT validation, revocation or the deny-list | Same | BRI-4, `ADR-007` |
@@ -533,7 +598,7 @@ These are not omissions. Each is a decision recorded upstream and restated here 
 | A Dockerfile, Compose entry, or deployment manifest for `Pacco.Web` | Local dev is the only supported runtime today | BRI-8, `ADR-021` rule 2 |
 | Dev, QA, Staging or Production origins, URLs, DNS names or targets | Those environments do not exist yet | BRI-11, HL §15 rule 11 |
 | A design-token contract or Figma binding | 🚫 No Figma URL exists for this capability | ASM-3, §L.12 |
-| Any dashboard widget, navigation tree or business feature | The post-login surface is deliberately minimal | C11, HL §2.6 |
+| Any dashboard widget, navigation tree or business feature | The post-login surface is deliberately minimal | C7, HL §2.6 |
 | A `.NET` deployable for the client | `ADR-020` §2 pins .NET for platform deployables; the browser client is deliberately not one | BRI-20, `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` |
 
 ## §L.4 Canonical State Machine — reference only
@@ -602,7 +667,7 @@ dev-server port is chosen, and `B2` is unresolved at authoring time.
 - ✅ Expiry-sensitive assertions pin the clock. 🚫 No test computes an expectation from `Date.now()`
   at assertion time.
 - ✅ E2E tests use seeded `identity-service` accounts supplied by the harness. 🚫 No credential is
-  hard-coded in client source, in a fixture shipped to the browser, or in configuration (AC-14).
+  hard-coded in client source, in a fixture shipped to the browser, or in configuration (AC-7).
 - 🚫 No test asserts on a backend `reason` string. Asserting that `reason` is **absent** from the DOM
   and from every telemetry payload is required; asserting its contents would couple the suite to text
   the client must never read.
@@ -621,12 +686,12 @@ Distributed from HL §14.A. Wave-1 owns **6** of the 13 scenarios.
 
 | ID | Scenario | Preconditions | Steps | Expected result | Traces |
 |---|---|---|---|---|---|
-| E2E-3 | Wrong password shows one safe message | Seeded account exists. Stack running | Open `/login`. Enter the seeded identifier and a wrong password. Submit | Message "The email or password you entered is incorrect." is shown once. Identifier retained, password cleared, action re-enabled. 🚫 No `reason`, no stack frame, no status text in the DOM or console. Still on `/login` | FR-8, AC-10, AC-11, EF-1 |
+| E2E-3 | Wrong password shows one safe message | Seeded account exists. Stack running | Open `/login`. Enter the seeded identifier and a wrong password. Submit | Message "The email or password you entered is incorrect." is shown once. Identifier retained, password cleared, action re-enabled. 🚫 No `reason`, no stack frame, no status text in the DOM or console. Still on `/login` | FR-8, FR-9, AC-9, AC-13, EF-1 |
 | E2E-4 | Unknown email is indistinguishable from a wrong password | Address not registered | Open `/login`. Enter an unregistered address and any password. Submit | The **same** string as E2E-3, character for character. 🚫 Nothing indicates whether the address exists | FR-8, BR-5, AC-10 |
-| E2E-5 | Empty fields block submission | — | Open `/login`. Submit with both fields empty. Then fill only the identifier and submit again | Required-field messages appear against the empty fields, focus lands on the first one, and 🚫 **zero** network requests are recorded on either attempt | FR-3, AC-3, AC-4 |
-| E2E-6 | Five rapid activations produce one request | Seeded account exists | Open `/login`. Fill valid credentials. Activate `Sign in` five times within 500 ms | Exactly **one** `POST /identity/sign-in` is recorded. The action is disabled and busy after the first. One navigation to `/welcome` | FR-4, BR-4, AC-5, AC-16 |
-| E2E-7 | `identity-service` stopped leaves the screen usable | Gateway up, `identity-service` container stopped | Open `/login`. Submit valid credentials | Message "Sign-in is temporarily unavailable. Please try again." The screen stays interactive, the action is re-enabled, and a retry after restarting the service succeeds. 🚫 No raw error text anywhere | FR-8, AC-12, EF-3, EF-4 |
-| E2E-12 | Full sign-in round trip against the live stack | Full Compose stack up. `Pacco.Web` running as its own local process | Open `/login` at the `Pacco.Web` origin. Submit seeded valid credentials | HTTP 200 observed at the edge, session written, redirect to `/welcome`. 🚫 No request goes to any port other than 5000. 🚫 No password value appears in any log or console output | FR-2, FR-5, FR-6, FR-7, AC-1, AC-6, AC-7, AC-8, AC-13 |
+| E2E-5 | Empty fields block submission | — | Open `/login`. Submit with both fields empty. Then fill only the identifier and submit again | Required-field messages appear against the empty fields, focus lands on the first one, and 🚫 **zero** network requests are recorded on either attempt | FR-3, AC-3 |
+| E2E-6 | Five rapid activations produce one request | Seeded account exists | Open `/login`. Fill valid credentials. Activate `Sign in` five times within 500 ms | Exactly **one** `POST /identity/sign-in` is recorded. The action is disabled and busy after the first. One navigation to `/welcome` | FR-4, BR-4, AC-4 |
+| E2E-7 | `identity-service` stopped leaves the screen usable | Gateway up, `identity-service` container stopped | Open `/login`. Submit valid credentials | Message "Sign-in is temporarily unavailable. Please try again." The screen stays interactive, the action is re-enabled, and a retry after restarting the service succeeds. 🚫 No raw error text anywhere | FR-8, AC-11, EF-3, EF-4 |
+| E2E-12 | Full sign-in round trip against the live stack | Full Compose stack up. `Pacco.Web` running as its own local process | Open `/login` at the `Pacco.Web` origin. Submit seeded valid credentials | HTTP 200 observed at the edge, session written, redirect to `/welcome`. 🚫 No request goes to any port other than 5000. 🚫 No password value appears in any log or console output | FR-1, FR-5, FR-6, FR-7, AC-1, AC-6, AC-7, AC-8 |
 
 🚫 **Not owned here.** E2E-1, E2E-2, E2E-8, E2E-9, E2E-10, E2E-11 and E2E-13 belong to wave-2 (HL §14.A).
 E2E-1, E2E-2 and E2E-11 stitch across both waves; wave-2 carries them and must run them against
@@ -671,27 +736,29 @@ Driven through `useSignIn` at the HTTP boundary.
 
 | # | Anchor | Assert |
 |---|---|---|
-| N-1 | No backend text escapes | Across every failure case in §L.6.A.2, the DOM, console and telemetry contain none of: `reason`, exception type names, stack frames, status lines, or the downstream URL |
-| N-2 | No password value escapes | Across every case, no telemetry payload, no storage key, no URL and no log line contains the submitted password |
-| N-3 | No credential is embedded | A source and configuration scan of the client finds no identifier, password, token or seeded-account literal |
-| N-4 | No session on a failure path | Every non-200 and every malformed-200 case leaves `SessionStore.read()` empty |
-| N-5 | No refresh token retained | After a successful sign-in, `refreshToken` is absent from every storage key, from the session object, and from every telemetry payload |
+| NEG-1 | No backend text escapes | Across every failure case in §L.6.A.2, the DOM, console and telemetry contain none of: `reason`, exception type names, stack frames, status lines, or the downstream URL |
+| NEG-2 | No password value escapes | Across every case, no telemetry payload, no storage key, no URL and no log line contains the submitted password |
+| NEG-3 | No credential is embedded | A source and configuration scan of the client finds no identifier, password, token or seeded-account literal |
+| NEG-4 | No session on a failure path | Every non-200 and every malformed-200 case leaves `SessionStore.read()` empty |
+| NEG-5 | No refresh token retained | After a successful sign-in, `refreshToken` is absent from every storage key, from the session object, and from every telemetry payload |
+| NEG-6 | **Canonical invalid transition 1** — 🚫 no session is written from any state other than `authenticating`, and only from a parsed HTTP 200 | A source check confirms `SessionStore.write()` has exactly **one** call site, inside the success branch of `useSignIn`. A behavioural test drives every non-200 and every malformed-200 path and asserts the store stays empty (HL §10.1 invalid transition 1) |
+| NEG-7 | **Canonical invalid transition 5, at the write** — 🚫 the session `role` is sourced from `AuthDto.role` and from nothing else | A source check confirms the only expression assigned to the session `role` is the lower-cased `AuthDto.role`, and an integration test with an identifier whose local part is `admin` and a response carrying `role: "user"` asserts the **stored** role is `user` — the identifier reaches no field of the written session. ⚠️ This is the write-side half only; the AC-19 **rendering** half is wave-2's (HL §19, FR-13) and is specified in wave-2 §L.6.A.4 |
 
 #### §L.6.A.5 Non-functional test requirements
 
 | Area | Requirement | Traces |
 |---|---|---|
-| Accessibility | Automated WCAG 2.1 AA scan of `/login` with zero violations. Keyboard-only traversal reaches every control in the documented order. Both message regions announce | N1, HL §11.2 |
-| Responsive | `/login` renders without horizontal scroll or clipping at 320 px, at the 768 px breakpoint, and at 200% zoom | N2 |
-| Security behaviour | N-1 to N-5 above run as a named suite, not as incidental assertions | N5, N7 |
-| Resilience | E2E-7 plus the timeout and transport cases confirm the screen never becomes permanently unusable and the lock is never left held | FR-8 |
-| Edge configuration | ✅ A check asserts all four `ntrada*.yml` files contain the identical exact origin and 🚫 that no `'*'` remains in `allowedOrigins` in any of them | FR-11, AC-15 |
+| Accessibility | Automated WCAG 2.1 AA scan of `/login` with zero violations. Keyboard-only traversal reaches every control in the documented order. Both message regions announce | HL §14.A accessibility row, HL §11.2. ⚠️ Accessibility carries **no** `N` identifier — `ADR-021` §8's register is `N1`–`N8` and holds no accessibility row, so none is invented here |
+| Responsive | `/login` renders without horizontal scroll or clipping at 320 px, at the 768 px breakpoint, and at 200% zoom | HL §14.A responsive row. ⚠️ Likewise carries no `N` identifier |
+| Security behaviour | NEG-1 to NEG-7 above run as a named suite, not as incidental assertions | N1, N2 |
+| Resilience | E2E-7 plus the timeout and transport cases confirm the screen never becomes permanently unusable and the lock is never left held | FR-8, HL §14.A resilience row |
+| Edge configuration — four-file byte identity | ✅ A check asserts the `extensions.cors.allowedOrigins` block is byte-identical across all four `ntrada*.yml` files, that `allowedOrigins` holds **exactly one** entry, that the entry is the exact `Pacco.Web` origin — scheme, host and port — and 🚫 that no `'*'` remains in any of them, with `allowCredentials: true`, `allowedMethods`, `allowedHeaders` and `exposedHeaders` unchanged from the base ref | N5, FR-11, AC-15, BR-8 |
+| Edge configuration — allowed-origin browser check | ✅ Against the **running** gateway, issue the sign-in preflight and request from the `Pacco.Web` origin and assert the browser accepts the response and that `Access-Control-Allow-Origin` echoes that exact origin | N5, FR-11, AC-16, `ADR-021` §8 `N5` |
+| Edge configuration — disallowed-origin browser check | ✅ Issue the **same** preflight and request from a different origin — a second local port is sufficient, since a browser treats it as a distinct origin (BR-8) — and assert the browser **rejects** it: `Access-Control-Allow-Origin` is absent or does not match, and the response is unreadable to the page. ⚠️ Compare the two responses' `Access-Control-Allow-Origin` headers directly; a wildcard config passes the allowed-origin check on its own, so 🚫 the allowed-origin check alone is **not** evidence the change was made | N5, FR-11, AC-16, `ADR-021` §8 `N5` |
 | Performance | 🚫 **No test.** No latency or availability target exists for any Pacco component; an invented threshold would be a fabricated requirement | ASM-8, `G-03` |
-| N8 observation | ⚠️ Measurement only. A run records that the six `login.*` events fired with correct payload shape. There is no pass or fail threshold | N8 |
+| `N8` observation | ⚠️ **Measurement only.** A run records that the six `login.*` events fired with the correct payload shape, and records the sign-in round-trip time. 🚫 There is no pass or fail threshold to gate against, and none is invented | N8, ASM-8, `B1` |
 
 #### §L.6.A.6 Coverage obligations
-
-Carried verbatim from HL §14.A and §19.
 
 | Target | Value | Applies to |
 |---|---|---|
@@ -701,38 +768,47 @@ Carried verbatim from HL §14.A and §19.
 | Overall coverage | ≥ 80% of wave-1 client code | — |
 | Manual only | Screen-reader pass on `/login`; visual comparison against `02_login-page-ux.png` | Not automatable, explicitly excluded from the automated gate |
 
-Per-FR counted obligations for this wave, from HL §19:
+**Per-FR counted obligations.** 🎯 The `Obligation` column below is HL §19's own wording for the DO1
+rows, reproduced without change. The `Discharged by` column is this wave's mapping onto it, and 🚫 a
+row is not discharged until **every** counted item in its obligation has a named owner.
 
-| FR | Obligation | Covered by |
+| FR | Obligation (HL §19, verbatim) | Discharged by |
 |---|---|---|
-| FR-1 | 1 structural check — no user-type control exists on the screen | UI rendering group |
-| FR-2 | 1 E2E | E2E-12 |
-| FR-3 | 3 unit + 1 E2E | Validation group, E2E-5 |
-| FR-4 | 2 unit + 1 E2E | Submit-lock group, E2E-6 |
-| FR-5 | 2 integration + 1 E2E | API 1, API 10, E2E-12 |
-| FR-6 | 1 integration + 1 E2E | API 1, E2E-12 |
-| FR-7 | 3 unit + 1 E2E | `SessionStore` units, E2E-12 |
-| FR-8 | 6 integration + 3 E2E | API 4 to 9, E2E-3, E2E-4, E2E-7 |
-| FR-9 | 2 component | Password-field and messaging groups |
-| FR-10 | 3 negative | N-1, N-2, N-3 |
-| FR-11 | 1 configuration check | Edge-configuration row in §L.6.A.5 |
+| FR-1 | 1 UI test for the single-screen control set, plus E2E-1 and E2E-2 as the two-audience proof | The UI rendering group's single-screen control-set test. ⚠️ E2E-1 and E2E-2 are **wave-2's** rows in HL §14.A and are marked cross-wave there, driven through **this** wave's real `/login`. 🚫 They are not re-declared here, and 🚫 E2E-12 does not substitute for them — it proves one audience, not two |
+| FR-2 | 3 UI tests — masked by default, reveal toggle, value absent from every other DOM node | Password-field group, all three cases, with E2E-12 exercising the reveal toggle in the browser |
+| FR-3 | 3 UI tests, one per empty combination, each asserting zero network calls | Validation group — identifier empty, password empty, both empty — each asserting zero network calls. E2E-5 is the browser proof |
+| FR-4 | 2 tests — 1 for exactly-one-request under five activations, 1 for lock release on a failed request | Submit-lock group, both cases. E2E-6 is the browser proof |
+| FR-5 | 1 network assertion on the single contacted origin, plus 1 source scan for stray hosts and ports | API 1 (the single contacted origin is the gateway at `http://localhost:5000`) **and** API 10 / the source scan for stray hosts and ports |
+| FR-6 | 1 secret scan over source and 1 over the built bundle | The AC-7 no-hard-coded-credential scan, run over source **and** over the built bundle. ⚠️ Both runs are required; 🚫 a source-only scan does not discharge the row |
+| FR-7 | 2 tests — success parse and stored session shape, refresh token absent from every storage key | `SessionStore` unit group — the success parse and stored shape, and the assertion that `refreshToken` appears under no storage key |
+| FR-8 | 7 tests — 3 error codes, 2 malformed-body cases, 2 transport cases | API 4 to 9 plus the malformed-body units, with E2E-3, E2E-4 and E2E-7 as the browser proof |
+| FR-9 | 1 test covering post-failure control state and a successful retry in the same page session | The messaging group's post-failure-then-retry case, asserting the controls are re-enabled and the second attempt succeeds without a reload |
+| FR-10 | 1 capture run over console, storage and telemetry, plus 1 review of every logging call site | NEG-1, NEG-2, NEG-3 (the capture run) **and** the §L.3 item 9 call-site review |
+| FR-11 | 1 four-file byte-identity diff, plus 2 cross-origin browser checks — allowed origin and disallowed origin | The three edge-configuration rows in §L.6.A.5: the byte-identity diff, the allowed-origin check **and** the disallowed-origin check. ⚠️ The disallowed-origin half is AC-16's second clause; 🚫 the allowed-origin check alone does not discharge the row |
 
 ## §L.7 Non-functional implementation contract
 
 ### §L.7.1 NFR gates carried by wave-1
 
-| NFR | Gate | How wave-1 implements it | Verified by |
-|---|---|---|---|
-| N1 | Accessibility — WCAG 2.1 AA on delivered screens | Visible `<label>` per field; helper and error text bound with `aria-describedby`; `aria-invalid` only on failed fields; failure message in `role="alert"` receiving focus; session notice in `role="status"`; `aria-busy` on the submitting action; documented keyboard order | §L.6.A.5 accessibility row, plus the manual screen-reader pass |
-| N2 | Responsive — usable at 320 px, at the 768 px breakpoint, and at 200% zoom | Fluid card, no fixed pixel width on the card or the fields, no horizontal scroll | §L.6.A.5 responsive row |
-| N5 | No backend text reaches a user | `ErrorMapper` receives a code string and nothing else; the registry is closed; the fallback is `generic` | N-1, and API tests 6, 7, 8 |
-| N7 | No credential value is logged, persisted or displayed | Fixed telemetry event shapes; `SessionStore.write()` takes four named non-credential arguments; the password is not passed to any sink | N-2, N-3, N-5 |
-| N8 | Sign-in outcome observability | The six `login.*` events at the six Execution points | ⚠️ Measurement only — HL §8.3 sets no target |
-| N3, N4 | Role fidelity and guard integrity | 🚫 Not carried by this wave. Owned by wave-2 | — |
-| N6 | Session-expiry handling | ⚠️ Wave-1 provides the `exp` value and the notice surface. The detection gate is wave-2's | — |
+🎯 The register below is `ADR-021` §8's `N1`–`N8`, taken through HL §8.3 **without renumbering**.
+🚫 No `N` identifier is reassigned, added or reused for anything else in this document; the wave's own
+negative anchors are `NEG-1`–`NEG-7` precisely so the two spaces cannot be confused.
 
-🚫 No NFR in HL §8.3 is left uncarried across the batch: N1, N2, N5, N7 and N8 here; N3, N4 and N6 in
-wave-2, which also re-runs N1, N2, N5 and N7 against its own screens.
+| NFR (HL §8.3) | Gate | How wave-1 implements it | Verified by |
+|---|---|---|---|
+| **N1** | Credential confidentiality — 🚫 no password logged or displayed, 🚫 no credential compiled into the client | Fixed telemetry event shapes with no free-form payload; `SessionStore.write()` takes four named non-credential arguments; the password is passed to no sink; 🚫 no identifier, password, token or seeded-account literal in source, in a browser-shipped fixture, or in configuration | NEG-2, NEG-3, NEG-5; the secret scan over source **and** the built bundle; FR-6, FR-10, AC-7, AC-14 |
+| **N2** | No raw backend error reaches the user — every non-success outcome maps to a fixed message and 🚫 the body is never rendered | `ErrorMapper` receives a `code` string and nothing else; the registry is closed; the fallback is `generic` | NEG-1; API tests 4 to 9 and 12; E2E-3, E2E-4, E2E-7; FR-8, AC-9 to AC-12 |
+| **N5** | Edge access-control posture — ✅ exactly one origin is allowed and the change is present in all four files | The four-file `allowedOrigins` substitution, made once and identically (§L.3 item 7) | The three edge-configuration rows in §L.6.A.5 — the byte-identity diff (AC-15) and **both** cross-origin browser checks (AC-16). ⚠️ `N5` is a **shared** gate: wave-2 carries its FR-17 half — the single-changed-key diff review (AC-24) and the no-`Origin` machine-caller regression (AC-25) |
+| **N7** | Duplicate submission — submission is disabled for the duration of the in-flight request | The submit lock acquired at Execution step 8 and released in the settle path on every outcome | Submit-lock component group; E2E-6; FR-4, AC-4, AC-5 |
+| **N8** | Availability / performance — ❓ **no numeric target is set, and none is invented here** | The six `login.*` events at the six Execution points, plus a recorded sign-in round-trip time | ⚠️ **Not a gate.** §L.6.A.5 `N8` observation row records a timing so a threshold can be attached once an owner sets one (ASM-8, `B1`) |
+| N3 | Session protection | 🚫 Not carried by this wave. Owned by wave-2 (FR-14, FR-15) | wave-2 §L.7.1 |
+| N4 | Role fidelity | 🚫 Not carried by this wave. Owned by wave-2 (FR-12, FR-13) | wave-2 §L.7.1 |
+| N6 | Revocation exposure — accepted residual risk, **measured not gated** | ⚠️ Wave-1 issues and stores the token the measurement replays, and owns nothing else of it | wave-2 §L.6.A.1 **E2E-13** |
+
+🚫 No NFR in HL §8.3 is left uncarried across the batch: `N1`, `N2`, `N7` and the `N8` measurement here,
+`N5` jointly, and `N3`, `N4` and `N6` in wave-2. ⚠️ Accessibility and responsive behaviour are required
+by HL §14.A but are **not** rows of the `N1`–`N8` register, so they are traced to §14.A and 🚫 given no
+`N` identifier.
 
 ### §L.7.2 The four minimum client rules
 
@@ -810,7 +886,7 @@ is no deferral in this document without a named destination authored in this sam
 | DEF-7 | Triggering the `session_expired` notice wave-1 built | Wave-1 owns the surface, wave-2 owns the trigger | wave-2 §L.3 item 5 |
 | DEF-8 | Verifying the four-file CORS diff end to end (FR-17) | The check belongs with the wave that runs the full stitched journey | wave-2 §L.6.A |
 | DEF-9 | E2E-1, E2E-2, E2E-8, E2E-9, E2E-10, E2E-11, E2E-13 | Each requires the landing page | wave-2 §L.6.A.1 |
-| DEF-10 | NFR gates N3, N4 and the N6 detection gate | Each is measured on a wave-2 surface | wave-2 §L.7.1 |
+| DEF-10 | NFR gates `N3` and `N4`, the `N6` post-logout replay measurement, and the FR-17 half of `N5` | Each is measured on a wave-2 surface, or — for `N6` — on a token this wave issued but does not replay | wave-2 §L.7.1, §L.6.A.1 E2E-13, §L.6.A.4 |
 
 ### §L.8.3 What wave-2 must not do with wave-1's output
 
@@ -969,7 +1045,7 @@ Each clause of the `DO1` statement in `intents/13652.md`, mapped to where this d
 | Required-field validation when either field is empty | §L.3 item 5 steps 6 to 7, FR-3 |
 | Processing state, duplicate submissions prevented | §L.3 item 5 steps 8 to 9, FR-4 |
 | Authenticated against the existing identity-service sign-in through the declarative gateway | §L.3 items 5 and 6, FR-5 |
-| Redirected to the landing page on success | §L.3 item 5 step 17, FR-6 |
+| Redirected to the landing page on success | §L.3 item 5 step 17, FR-7 |
 | Clear non-technical error on invalid credentials or service failure | §L.3 items 5 and 8, FR-8 |
 | Never asking the user to declare their user type | §L.3 item 2, the structural note, FR-1 |
 | Outcomes surfaced safely and exactly once per submission | §L.3 item 8 invariants 2 and 3 |
@@ -978,9 +1054,10 @@ Each clause of the `DO1` statement in `intents/13652.md`, mapped to where this d
 | Invalid credentials show a clear error | E2E-3, E2E-4 |
 | identity-service failure leaves the screen usable rather than broken | E2E-7 |
 | Full sign-in round trip against the running identity-service through the gateway | E2E-12 |
-| No password value logged or displayed | §L.3 item 9, N-2 |
-| No credentials hard-coded in the frontend | §L.3 item 9, N-3 |
-| No raw backend exception or stack trace reaching the user | §L.3 item 8 invariant 4, N-1 |
+| No password value logged or displayed | §L.3 item 9, NEG-2 |
+| No credentials hard-coded in the frontend | §L.3 item 9, NEG-3 |
+| No raw backend exception or stack trace reaching the user | §L.3 item 8 invariant 4, NEG-1 |
+| A session is written only from a parsed HTTP 200, and its role only from `AuthDto.role` | §L.3 item 5 step 15, NEG-6, NEG-7 |
 | Pacco.Web is the standalone browser client, not embedded and not served by Ntrada | §L.3 item 10, §L.9, BRI-8 |
 | Independently buildable, pipeline addable later | §L.9 `change_kind`, §L.12.3 |
 | Local dev only — own local process alongside the Compose backend | §L.12.3, BRI-8 |
@@ -1001,11 +1078,12 @@ in this document's blockers so the intended foundation can still be supplied.
 | Artifact | Range owned by wave-1 | Count |
 |---|---|---|
 | Functional requirements | FR-1 to FR-11 | 11 |
-| Business rules | BR-1, BR-4, BR-5, BR-8 | 4 |
+| Business rules | BR-2 (write-side only), BR-4, BR-5, BR-8 | 4 |
 | Acceptance criteria | AC-1 to AC-16, and AC-28 jointly | 17 |
 | Constraints | C1, C3, C4, C5, C6, C8, C9, C10, C12 | 9 |
 | E2E scenarios | E2E-3, 4, 5, 6, 7, 12 | 6 |
-| NFR gates | N1, N2, N5, N7, N8 | 5 |
+| Negative and security anchors | NEG-1 to NEG-7 | 7 |
+| NFR gates (HL §8.3 register) | N1, N2, N7, N8 owned; N5 shared with wave-2 | 4 + 1 |
 | Binding rules | BRI-1 to BRI-20 | 20 |
 
 🚫 Nothing in FR-12 to FR-19 is implemented, partially implemented, or stubbed here.
@@ -1117,6 +1195,17 @@ were the approved foundation.
 
 ✅ Every route in HL §11.2 is claimed by a wave, and every state of the wave-1 screens has a covering
 test in §L.6.A.3.
+
+## §L.13 Review Resolution History
+
+⚠️ Append-only. One row per review round, `Round` strictly increasing. 🚫 No existing row is edited or
+removed. ⚠️ **Numbering note.** The house convention names this section `§L.11`; that identifier is
+already taken here by *Source requirement continuity*, so it is carried as `§L.13` rather than
+creating a duplicate section number — precisely the class of identifier collision round 1 flagged.
+
+| Round | Reviewer | Date (UTC) | Comment summary | Resolution | Spec section(s) touched | Status |
+|---|---|---|---|---|---|---|
+| 1 | `esd-generation-internal` | 2026-09-25 | Identifier bookkeeping fails in ways that change what gets built and tested: several `E2E-` trace columns cite requirements the HL ESD assigns elsewhere; BR-1 is cited for field validation that FR-3 owns; `AC-5`, `AC-11` and `AC-14` stand in for `AC-4`, `AC-13` and `AC-7`; `C11` stands in for `C7`; and the negative anchors `N-1`–`N-5` collide with the `N1`–`N8` non-functional register that `ADR-021` §8 owns and HL §8.3 traces, which this wave then renumbers. Two counted obligations are missing: AC-16's second clause — the **disallowed-origin** cross-origin check, HL §19 counting two browser checks for FR-11 — and negative tests for HL §10.1's canonical invalid transitions. Anchor `N-7` asserted only that the `Pacco.Web` origin is present in `allowedOrigins`, which admits an allow-list that BR-8 forbids | All accepted. Every E2E trace column realigned to HL §14.A and §19; the BR-1, AC and C mis-citations corrected against the HL ESD. The negative and security anchors renamed `N-n` → `NEG-n` so `N1`–`N8` means only `ADR-021` §8's register, and §L.7.1 rebuilt to reproduce that register through HL §8.3 **without renumbering**, marking `N5` as a gate shared with wave-2 and `N8` as a measurement rather than a gate. The missing obligations added: §L.6.A.5 now carries three edge-configuration rows — the four-file byte-identity diff, the **allowed-origin** browser check and the **disallowed-origin** browser check — and §L.6.A.4 gained NEG-6 and NEG-7 for HL §10.1 invalid transitions 1 and 5 at the write. The BR-8 hole closed: the CORS assertion now requires `allowedOrigins` to hold **exactly one** entry, the exact `Pacco.Web` origin, with no `'*'` remaining | §L.3 (`Implements` block, field validation, error handling), §L.6.A.1, §L.6.A.4, §L.6.A.5, §L.6.A.6, §L.7.1, §L.11.2, ABQ `Q4` | Resolved |
 
 ## Assumptions, Blockers & Open Questions
 
