@@ -932,6 +932,13 @@ both — necessary because the gateway sets `customErrors.includeExceptionMessag
 downstream exception message does reach the browser `[confirmed]`. An expired token takes the logout
 path above with a session-expired message.
 
+**Refined by work item 13652.** `ADR-022` (`docs/adr/browser-session-bounded-by-access-token-expiry.md`)
+now fixes the end of this flow: the refresh token returned by sign-in is discarded unread, no renewal
+is attempted, and the session ends when the access token expires. `ADR-023`
+(`docs/adr/browser-boundary-error-presentation-contract.md`) fixes the two undrawn error paths: the
+client selects a message from a closed set keyed on the response `code` and never renders the response
+body. The capability specification is `docs/specs/13652/SPECIFICATION.md`.
+
 ---
 
 ## 4. Deployment Topology
@@ -1126,6 +1133,11 @@ Four deployment facts follow, and all four are decisions rather than omissions:
 Adding it to Compose later — as its own service, never inside a backend container — is a change to
 the orchestration repository (`CAP-16`) and to nothing else. §4.1 through §4.4 are unaffected by this
 record and are unchanged.
+
+**Refined by work item 13652.** The one platform-side edge this placement introduces is the gateway's
+`extensions.cors.allowedOrigins` value, which names the `Pacco.Web` local origin exactly and is applied
+identically to all four `ntrada*.yml` files. No node, port, route or container in §4.1 through §4.5
+changes. The capability specification is `docs/specs/13652/SPECIFICATION.md`.
 
 ---
 
