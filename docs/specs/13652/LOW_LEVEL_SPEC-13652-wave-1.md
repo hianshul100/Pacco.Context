@@ -153,7 +153,7 @@ pre-empt any `DO2` behaviour, and it does not renumber or merge waves.
    message registry, authored here because the registry has exactly one owner (§L.8.1).
 9. The root route `/` in its anonymous form.
 10. The `extensions.cors.allowedOrigins` change across all four `ntrada*.yml` files (FR-11).
-11. The four minimum client rules solution-design §5.3 item 2 obliges this tier to write (§L.7.5).
+11. The four minimum client rules solution-design §5.3 item 2 obliges this tier to write (§L.7.2).
 
 ### §L.2.3 Out of scope for wave-1
 
@@ -382,7 +382,7 @@ this document restates it.
 9. `LoginRoute` re-renders: the action is disabled with its processing label and `aria-busy`, both fields become read-only. FSM: `anonymous` → `authenticating`. `login.submitted` is emitted, carrying no field value.
 10. `useSignIn` generates a correlation id and calls `GatewayClient.post('/identity/sign-in', { email, password })` — the identifier goes into `email` verbatim, untrimmed of case and unmodified (HL §9.1). The request carries no credentials mode and no cookie (DD-12).
 11. The edge matches the anonymous `sign-in` route and forwards to `identity-service`. No token is required and none is sent (BRI-3, BRI-9).
-12. On HTTP 200, `useSignIn` parses `AuthDto` and asserts `accessToken` and `role` are both present, non-empty strings. If either is missing, the outcome is re-classified as `malformed` and execution continues at step 19 (EF-6).
+12. On HTTP 200, `useSignIn` parses `AuthDto` and asserts `accessToken` and `role` are both present, non-empty strings. If either is missing, the outcome is re-classified as `malformed` and execution continues at step 19 (EF-5).
 13. `useSignIn` decodes the access token's payload segment and reads the `exp` claim as an integer count of seconds since epoch. **This decode is not a signature verification and grants nothing** (DD-5, BRI-13). If `exp` is absent or not an integer, the outcome is re-classified as `malformed` and execution continues at step 19.
 14. `useSignIn` calls `SessionStore.write({ accessToken, role: role.toLowerCase(), expiresAt: exp, expiresRaw: expires })`. 🚫 `refreshToken` is read from the parsed body by no statement at all (BRI-13).
 15. FSM: `authenticating` → `authenticated`. `login.succeeded` is emitted, carrying the correlation id and no token, no role and no field value.
@@ -466,7 +466,7 @@ no error code is added, removed or renamed by this wave.
 | Method | `POST` | Same |
 | Auth | `auth: false` — anonymous at the edge | Same |
 | Downstream | `identity-service/sign-in` | Same |
-| operationId | `identitySignIn` | ⚠️ Provisional. The platform publishes no OpenAPI document, so this id exists for traceability inside spec-pack `13652` only (HL §9.1, ASM-5) |
+| operationId | `identitySignIn` | ⚠️ Provisional. The platform publishes no OpenAPI document, so this id exists for traceability inside spec-pack `13652` only and is 🚫 not a contract change (HL §9.1) |
 | Request | `{ email: string, password: string }` | `SignIn` command |
 | Success | `200` with `AuthDto { accessToken, refreshToken, role, expires }` | `AuthDto.cs` |
 | Failure | `400` with `{ code, reason }` for **every** mapped failure, including wrong credentials | Convey exception-to-response mapping |
@@ -508,7 +508,7 @@ Binding rules for this edit:
 
 1. ✅ All four files change together. The block is byte-identical across them today and must stay so; a partial edit makes behaviour depend on which config a runtime happens to load (FR-11, AC-15).
 2. 🚫 `allowCredentials: true` is not touched. `allowedMethods`, `allowedHeaders` and `exposedHeaders` are not touched.
-3. 🚫 No route is added, removed or reordered. No `auth:` flag changes. No JWT validation or revocation behaviour changes anywhere (BRI-4, `ADR-021` rule 6).
+3. 🚫 No route is added, removed or reordered. No `auth:` flag changes. No JWT validation or revocation behaviour changes anywhere, and 🚫 no logout or revoke route is added (BRI-4, `ADR-021` §5 rule 5).
 4. ❓ The exact origin string is not knowable yet — it is the port `Pacco.Web` actually listens on, and `B2` blocks that. The implementer sets it from the chosen dev-server port and records it in all four files. 🚫 A wildcard must not survive as a stand-in.
 5. ⚠️ This hardens the config against a combination the Fetch Standard forbids. It is **not** a functional precondition for sign-in, which runs outside credentials mode (DD-12). Sign-in working against a wildcard config is therefore not evidence the change was made — the four-file diff is (AC-15).
 
@@ -534,12 +534,12 @@ Binding rules for this edit:
 2. ✅ The submit lock is released on every row, including the thrown ones — the release is in the settle path, not in the success branch. A path that leaves the lock held makes the screen permanently dead and is a defect against FR-8 and BR-4.
 3. 🚫 Exactly one message is shown. A previous message is replaced, never stacked (`ADR-023` §5 rule 5).
 4. 🚫 No `reason`, exception text, status line, stack frame, header or URL fragment from the platform reaches the DOM or the console on any row (FR-10, C3, BRI-15).
-5. ⚠️ `customErrors.includeExceptionMessage: true` remains set at the edge and is out of scope to change. The client's protection is that it structurally never renders backend text, not that the text stopped arriving (HL §12.6 `R-05`).
+5. ⚠️ `customErrors.includeExceptionMessage: true` remains set at the edge and is out of scope to change. The client's protection is that it structurally never renders backend text, not that the text stopped arriving (HL §12.6 `R-02`, mitigated client-side by `ADR-023`).
 
 **Resilience posture — deliberately thin.**
 
 - 🚫 No retry, no backoff and no circuit breaker in the client. Sign-in is non-idempotent (each call mints a refresh token), and no availability target exists to justify a retry budget (solution-design §5.3 item 3, ASM-8).
-- 🚫 No client-side lockout, rate limit or attempt counter. None exists server-side either, and inventing one in the browser would be trivially bypassable security theatre (HL §12.6 `R-03`, `B5`).
+- 🚫 No client-side lockout, rate limit or attempt counter. `IdentityService.SignInAsync` applies none either — it validates the email, looks the user up and compares the password hash, with 🚫 no attempt counter and 🚫 no throttle — and inventing one in the browser would be trivially bypassable security theatre (solution-design §5.3 item 3). ⚠️ HL §12.6 carries 🚫 **no** rate-limiting or lockout row, so this is an absence recorded here rather than a risk cited from there, and 🚫 it is not `R-03`, which is the accepted post-logout token-replay exposure.
 - ✅ The only resilience mechanism is the timeout, and it exists so EF-4 has a bounded worst case — not as a latency promise.
 
 #### 9. Security, privacy and observability
@@ -592,14 +592,14 @@ These are not omissions. Each is a decision recorded upstream and restated here 
 | A separate Admin login screen or any user-type control | The single-screen property is the DO's point | FR-1, C1 |
 | Any client-side email or username format validation | The shape ruling belongs to `identity-service` | FR-3, HL §9.1 |
 | "Remember me", token renewal, silent refresh, or any refresh-token use | The refresh token is discarded unread and there is no renewal mechanism anywhere | `ADR-022` rules 1 and 5, BRI-13 |
-| A new gateway route of any kind, including a logout or revoke route | Edge routes are out of scope for this capability | BRI-4, `ADR-021` rule 6 |
+| A new gateway route of any kind, including a logout or revoke route | Edge routes are out of scope for this capability | BRI-4, `ADR-021` §5 rule 5 |
 | Any change to JWT validation, revocation or the deny-list | Same | BRI-4, `ADR-007` |
-| Serving `Pacco.Web` from Ntrada, or bundling it into a backend image | It is a standalone browser client | `ADR-021` rules 1 and 2, BRI-8 |
-| A Dockerfile, Compose entry, or deployment manifest for `Pacco.Web` | Local dev is the only supported runtime today | BRI-8, `ADR-021` rule 2 |
+| Serving `Pacco.Web` from Ntrada, or bundling it into a backend image | It is a standalone browser client | `ADR-021` §5 rules 1 and 2, BRI-8 |
+| A Dockerfile, Compose entry, or deployment manifest for `Pacco.Web` | Local dev is the only supported runtime today | BRI-8, `ADR-021` §5 rule 2 |
 | Dev, QA, Staging or Production origins, URLs, DNS names or targets | Those environments do not exist yet | BRI-11, HL §15 rule 11 |
 | A design-token contract or Figma binding | 🚫 No Figma URL exists for this capability | ASM-3, §L.12 |
 | Any dashboard widget, navigation tree or business feature | The post-login surface is deliberately minimal | C7, HL §2.6 |
-| A `.NET` deployable for the client | `ADR-020` §2 pins .NET for platform deployables; the browser client is deliberately not one | BRI-20, `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` |
+| A `.NET` deployable for the client | `ADR-020` §2 pins .NET for platform deployables; the browser client is deliberately not one | BRI-20, HL §19.A row 33 (`not-applicable-to-this-capability`) |
 
 ## §L.4 Canonical State Machine — reference only
 
@@ -715,8 +715,30 @@ Driven through `useSignIn` at the HTTP boundary.
 | 10 | Transport rejection | `unavailable` message. Lock released |
 | 11 | Response exceeding `signInTimeoutMs` | Request aborted. `unavailable` message. Lock released |
 | 12 | HTTP 200 with a body missing `accessToken`, or missing `role`, or with a token carrying no `exp` | `generic` message. 🚫 No session written on any of the three |
+| 13 | **Request shape.** The outbound body carries **exactly** `email` and `password` and 🚫 no other field | A capture of the issued request asserts the JSON body has exactly those two keys — 🚫 no `role`, 🚫 no `deviceId`, 🚫 no correlation id, 🚫 no confirm-password and 🚫 no debug field. `email` holds the identifier verbatim, untrimmed of case (HL §9.1, `SignIn`) |
+| 14 | **Success parse, refresh-token half.** HTTP 200 with a complete `AuthDto` including a populated `refreshToken` | The parse succeeds and `refreshToken` is 🚫 read by no statement, written to no storage key and placed on no session field. ⚠️ Row 1 proves what **is** stored; this row proves what is 🚫 **not** (FR-7, BRI-13) |
+| 15 | **Malformed 200, token half.** HTTP 200 whose `accessToken` payload segment is undecodable, or whose `exp` claim is absent or not an integer | `generic` message. 🚫 No session written. ⚠️ Split out from row 12 so HL §14.A's **2** malformed/incomplete-body tests have two distinct owners: row 12 is the **body**-level case (a missing field or a non-JSON body) and row 15 is the **token**-level case |
 
-✅ 12 API-level tests, matching the HL §14.A API coverage expectation.
+⚠️ **How this maps onto HL §14.A's API coverage expectation.** HL §14.A states a **12**-test API
+budget across the **whole capability**, 🚫 not per wave. The mapping below is explicit so 🚫 the row
+count above is not read as a claim to be that budget — there are fifteen rows here, of which **ten**
+discharge an HL obligation and **five** are wave-local depth. The eleventh HL obligation wave-1 owns,
+configuration non-drift, is discharged at §L.6.A.5 rather than here:
+
+| HL §14.A obligation | Required | Discharged by |
+|---|---|---|
+| Request shape — exactly `email` and `password`, no extra field | 1 | API 13 |
+| Success parse — `accessToken`, `role`, `exp`; `refreshToken` discarded | 2 | API 1 (what is stored) and API 14 (that `refreshToken` is not) |
+| Error mapping — one per `code` (`invalid_credentials`, `invalid_email`, `error`) | 3 | API 4, API 5 and API 6 — API 6 is the `error` / unrecognised-`code` row that the `generic` fallback serves |
+| Malformed / incomplete 200 body | 2 | API 12 (body-level) and API 15 (token-level) |
+| Transport failure and timeout | 2 | API 10 (transport rejection) and API 11 (timeout) |
+| Configuration non-drift across the four `ntrada*.yml` files | 1 | §L.6.A.5's four-file byte-identity row — 🚫 it is not an API-level row and is not counted twice |
+| **Wave-1 subtotal** | **11** | of HL's 12 |
+| Machine caller with no `Origin` header still succeeds | 1 | 🚫 Wave-2's — its §L.6.A.4 NEG-11, driven as its §L.6.A.2 X-6 |
+
+✅ API 2, API 3, API 7, API 8 and API 9 are wave-local depth **beyond** the HL budget — role casing,
+an unrecognised role, an absent `code`, exception-looking `reason` text and an edge `500`. They are
+🚫 not counted against it and 🚫 do not displace any row in the table.
 
 #### §L.6.A.3 UI and component tests
 
@@ -726,11 +748,26 @@ Driven through `useSignIn` at the HTTP boundary.
 | Validation | 4 | Empty identifier, empty password, both empty, whitespace-only input each block submission and mark the right field |
 | Submit lock | 4 | Action disabled and `aria-busy` while submitting; fields read-only; a second activation is a no-op; everything restored on settle |
 | Messaging | 5 | One message at a time; a new outcome replaces the previous; the message region is `role="alert"` and receives focus; typing clears it; `SessionNotice` is a separate `role="status"` region that a form message does not displace |
-| Password field | 3 | Masked by default; reveal shows and re-masks; the value is cleared on every failure outcome |
+| Password field | 3 | 🎯 HL §14.A's three counted cases, verbatim: masked by default; the reveal toggle shows and re-masks; and **the value is present in no other DOM node** — 🚫 not in a hidden input, 🚫 not in a `value` or `data-*` attribute anywhere else in the tree, 🚫 not in an `aria-*` string, and 🚫 not in the accessibility tree. ⚠️ Clearing the field on every failure outcome is asserted too, but as part of the **messaging** group's failure cases — 🚫 it is not HL's third counted case and does not substitute for it |
 | Session notice | 2 | With reason `session_expired` the notice renders the registry entry; with no reason nothing renders |
 | Accessibility wiring | 2 | `aria-describedby` links helper and error text to each input; `aria-invalid` is set only on fields that failed validation |
 
-✅ 26 UI-level tests, matching the HL §14.A UI coverage expectation.
+⚠️ **How this maps onto HL §14.A's UI coverage expectation.** HL §14.A states a **26**-test UI budget
+across the **whole capability**, 🚫 not per wave. Two of its six surfaces are wave-1's, totalling
+**10**; the other four — `/welcome` role rendering (9), `/welcome` guard (3), Logout (3) and the
+landing inventory (1) — are wave-2's **16**. 🚫 The 26 groups-and-cases total above is *not* HL's 26:
+
+| HL §14.A UI surface | Required | Discharged by |
+|---|---|---|
+| `/login` states — ready, validation (3 empty combinations), loading, error, retry | 7 | The **ready** state from the rendering group; the validation group's three empty combinations (its whitespace-only case is 🚫 additional, not a substitute); the **loading** state from the submit-lock group; and the **error** and **retry** states from the messaging group |
+| Password field — masked by default, reveal toggle, value in no other DOM node | 3 | The password-field group, all three cases |
+| **Wave-1 subtotal** | **10** | of HL's 26 |
+| `/welcome` role rendering; `/welcome` guard; Logout; landing inventory | 16 | 🚫 Wave-2's — see wave-2 §L.6.A.3 |
+
+✅ The remaining cases above — the rest of the rendering group, the whitespace-only validation case,
+the submit-lock no-op and restore-on-settle cases, the message-region and `SessionNotice` assertions,
+the session-notice group and the accessibility wiring — are wave-local depth **beyond** the HL
+budget. They are 🚫 not counted against it and 🚫 do not displace any row in the table.
 
 #### §L.6.A.4 Negative and security-behaviour anchors
 
@@ -781,7 +818,7 @@ row is not discharged until **every** counted item in its obligation has a named
 | FR-5 | 1 network assertion on the single contacted origin, plus 1 source scan for stray hosts and ports | API 1 (the single contacted origin is the gateway at `http://localhost:5000`) **and** API 10 / the source scan for stray hosts and ports |
 | FR-6 | 1 secret scan over source and 1 over the built bundle | The AC-7 no-hard-coded-credential scan, run over source **and** over the built bundle. ⚠️ Both runs are required; 🚫 a source-only scan does not discharge the row |
 | FR-7 | 2 tests — success parse and stored session shape, refresh token absent from every storage key | `SessionStore` unit group — the success parse and stored shape, and the assertion that `refreshToken` appears under no storage key |
-| FR-8 | 7 tests — 3 error codes, 2 malformed-body cases, 2 transport cases | API 4 to 9 plus the malformed-body units, with E2E-3, E2E-4 and E2E-7 as the browser proof |
+| FR-8 | 7 tests — 3 error codes, 2 malformed-body cases, 2 transport cases | The 3 error codes are API 4, API 5 and API 6; the 2 malformed-body cases are API 12 (body-level) and API 15 (token-level); the 2 transport cases are API 10 and API 11. ⚠️ API 7, API 8 and API 9 are wave-local depth and 🚫 do not substitute for any of the seven. E2E-3, E2E-4 and E2E-7 are the browser proof |
 | FR-9 | 1 test covering post-failure control state and a successful retry in the same page session | The messaging group's post-failure-then-retry case, asserting the controls are re-enabled and the second attempt succeeds without a reload |
 | FR-10 | 1 capture run over console, storage and telemetry, plus 1 review of every logging call site | NEG-1, NEG-2, NEG-3 (the capture run) **and** the §L.3 item 9 call-site review |
 | FR-11 | 1 four-file byte-identity diff, plus 2 cross-origin browser checks — allowed origin and disallowed origin | The three edge-configuration rows in §L.6.A.5: the byte-identity diff, the allowed-origin check **and** the disallowed-origin check. ⚠️ The disallowed-origin half is AC-16's second clause; 🚫 the allowed-origin check alone does not discharge the row |
@@ -1027,9 +1064,17 @@ manifest, image or Compose entry is added (BRI-8).
 ### §L.10.3 Declared exception
 
 ⚠️ `ADR-020` §2 pins the platform runtime baseline to .NET for deployables. `Pacco.Web` is a browser
-client and is deliberately **not** a .NET deployable. This is recorded upstream as
-`ARCHITECTURE_ALIGNMENT_EXCEPTION-03` and is a stated decision, not drift (HL §12.6, BRI-20). 🚫 No
+client and is deliberately **not** a .NET deployable. This is recorded upstream at **HL §19.A row
+33** as `not-applicable-to-this-capability`, and is a stated decision, not drift (BRI-20). 🚫 No
 attempt is made in this wave to bring the client under that baseline.
+
+🚫 **This is not an architecture alignment exception.** HL §12.6 records exactly three:
+`ARCHITECTURE_ALIGNMENT_EXCEPTION-01` (`ADR-004` §2 obligation 2 — no environment records which
+configuration file it loads), `-02` (`ADR-007` §2 rule 4 — the edge consults no deny-list while
+logout ships as a client-side discard) and `-03` (the logout limitation is surfaced to operators in
+HL §13.6 but 🚫 not to users). 🚫 None of the three concerns `ADR-020`, and 🚫 this wave does not
+attach one to it — a not-applicable scope decision and a compliant-with-deviation exception are
+different dispositions.
 
 ## §L.11 Source requirement continuity
 
@@ -1206,6 +1251,7 @@ creating a duplicate section number — precisely the class of identifier collis
 | Round | Reviewer | Date (UTC) | Comment summary | Resolution | Spec section(s) touched | Status |
 |---|---|---|---|---|---|---|
 | 1 | `esd-generation-internal` | 2026-09-25 | Identifier bookkeeping fails in ways that change what gets built and tested: several `E2E-` trace columns cite requirements the HL ESD assigns elsewhere; BR-1 is cited for field validation that FR-3 owns; `AC-5`, `AC-11` and `AC-14` stand in for `AC-4`, `AC-13` and `AC-7`; `C11` stands in for `C7`; and the negative anchors `N-1`–`N-5` collide with the `N1`–`N8` non-functional register that `ADR-021` §8 owns and HL §8.3 traces, which this wave then renumbers. Two counted obligations are missing: AC-16's second clause — the **disallowed-origin** cross-origin check, HL §19 counting two browser checks for FR-11 — and negative tests for HL §10.1's canonical invalid transitions. Anchor `N-7` asserted only that the `Pacco.Web` origin is present in `allowedOrigins`, which admits an allow-list that BR-8 forbids | All accepted. Every E2E trace column realigned to HL §14.A and §19; the BR-1, AC and C mis-citations corrected against the HL ESD. The negative and security anchors renamed `N-n` → `NEG-n` so `N1`–`N8` means only `ADR-021` §8's register, and §L.7.1 rebuilt to reproduce that register through HL §8.3 **without renumbering**, marking `N5` as a gate shared with wave-2 and `N8` as a measurement rather than a gate. The missing obligations added: §L.6.A.5 now carries three edge-configuration rows — the four-file byte-identity diff, the **allowed-origin** browser check and the **disallowed-origin** browser check — and §L.6.A.4 gained NEG-6 and NEG-7 for HL §10.1 invalid transitions 1 and 5 at the write. The BR-8 hole closed: the CORS assertion now requires `allowedOrigins` to hold **exactly one** entry, the exact `Pacco.Web` origin, with no `'*'` remaining | §L.3 (`Implements` block, field validation, error handling), §L.6.A.1, §L.6.A.4, §L.6.A.5, §L.6.A.6, §L.7.1, §L.11.2, ABQ `Q4` | Resolved |
+| 2 | `esd-generation-internal` | 2026-09-25 | Coverage-budget claims and citation grounding fail in ways that overstate what this wave verifies: §L.6.A.2 asserts "12 API-level tests, matching the HL §14.A API coverage expectation" when HL's 12 is a **capability-wide** budget whose request-shape obligation had no test here at all, whose success-parse obligation counts two tests where only one existed, and whose 2 malformed-body tests were collapsed into one row; §L.6.A.3 asserts "26 UI-level tests, matching the HL §14.A UI coverage expectation" when wave-1's share of that cross-wave budget is 10, and its password-field group substituted "value cleared on every failure outcome" for HL's counted third case, "value in no other DOM node". Alongside these, six citations name the wrong anchor: `§L.7.5` for the four minimum client rules (`§L.7.2`), `EF-6` for the malformed-200 reclassification (`EF-5`), `ASM-5` for the no-OpenAPI-document statement (ASM-5 is the allowed-methods assumption), `ADR-021` rule 6 twice for the no-logout-route rule (rule 5), `R-05` for the edge's `includeExceptionMessage` exposure (`R-02`), `R-03` / `B5` for an absent server-side lockout that HL §12.6 registers nowhere, and `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` for the `ADR-020` .NET-baseline deviation (AAE-03 is the logout limitation not surfaced to users) | All accepted. Added API 13 (request shape — exactly `email` and `password`), API 14 (the success-parse refresh-token half) and API 15 (the token-level malformed-200 case, split from row 12's body-level cases), and replaced both "matching the HL §14.A expectation" claims with explicit obligation-mapping tables showing wave-1's **11 of 12** API share and **10 of 26** UI share, each naming the rows that discharge it and marking the remainder as wave-local depth that 🚫 does not displace an HL row. Restated the password-field group as HL's three counted cases, with the field-clearing assertion moved to the messaging group and flagged as 🚫 not a substitute. Corrected the six mis-citations to `§L.7.2`, `EF-5`, HL §9.1 alone, `ADR-021` §5 rule 5, `R-02`, and — for the lockout row — solution-design §5.3 item 3 plus read-only evidence from `IdentityService.SignInAsync`, stating explicitly that HL §12.6 carries no rate-limiting row. Replaced the AAE-03 attribution with HL §19.A row 33 (`not-applicable-to-this-capability`) and added a note naming what AAE-01, -02 and -03 actually cover. 🚫 No heading was added, removed, renamed or reordered, so the table of contents is unchanged. `CONTRACT_LEDGER.md` carried the same `ASM-5` correction | §L.2.2, §L.3 items 5, 7 and 8, §L.6.A.2, §L.6.A.3, §L.6.A.6 (FR-8), §L.8.3, §L.10.3; `contracts/CONTRACT_LEDGER.md` | `addressed` |
 
 ## Assumptions, Blockers & Open Questions
 

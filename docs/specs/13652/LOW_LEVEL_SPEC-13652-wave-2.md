@@ -599,15 +599,21 @@ navigation, which is why steps 7, 8 and 9 are one uninterrupted sequence with no
 🚫 That sequencing is a wave-2 implementation choice, **not** a quotation from HL §10.1 and 🚫 not one
 of its numbered invalid transitions.
 
-🎯 **The two HL §10.1 invalid transitions this wave owns as required negative tests.** HL §10.1 states
-that each invalid transition is a required negative test in §14; wave-2 carries numbers 4 and 5:
+🎯 **The three HL §10.1 invalid transitions this wave owns as required negative tests.** HL §10.1
+states that each invalid transition is a required negative test in §14; wave-2 carries numbers 2, 4
+and 5:
 
 | HL §10.1 invalid transition | Wave-2's negative test |
 |---|---|
+| 2 — `session-expired` → `authenticated` without a fresh sign-in. 🚫 There is no renewal path (FR-19) | §L.6.A.4 NEG-15, discharged jointly with NEG-12 (source scan) and NEG-13 (observation run) |
 | 4 — `authenticated` → `authenticated` with a **mutated role**. The role is written once at sign-in and is never rewritten while a session lives | §L.6.A.4 NEG-8 |
 | 5 — any transition into `authenticated` where the session role was sourced from anything **other than** `AuthDto.role` (FR-13) | §L.6.A.4 NEG-9, with the write-side half at wave-1 §L.6.A.4 NEG-7 |
 
-🚫 Transitions 1, 2 and 3 are wave-1's (§L.6.A.4 NEG-6 there, and its submit-lock group).
+⚠️ **Transition 2 is wave-2's, not wave-1's.** Wave-1 owns neither the `session-expired` state nor
+FR-19; this wave enters `session-expired`, leaves it, and owns the no-renewal guarantee, so the
+owning anchor must sit here. 🚫 Only transitions **1** and **3** are wave-1's — 1 at its
+§L.6.A.4 NEG-6 (no session written from anything but a parsed HTTP 200 body) and 3 at its submit-lock
+group (BR-4).
 
 ## §L.5 Build order within the wave
 
@@ -695,7 +701,7 @@ wave-1's **real** surface (HL §14.A cross-wave integration map).
 | X-3 | Logout returns to a `/login` that still works | Wave-1's real `/login` route | After logout, the real login form accepts input and a second real sign-in succeeds |
 | X-4 | The exact-origin CORS config permits the real browser journey | Wave-1's real four-file change, with the gateway restarted | The full journey completes from the `Pacco.Web` origin with 🚫 no CORS error in the console |
 | X-5 | **The `DO2` operational verification journey (HL §17).** "The role-aware message and the redirect behave identically on reload and after logout against live `identity-service` tokens" | Both seeded accounts, wave-1's real sign-in, the running stack | Sign in as admin → reload `/welcome` → log out → attempt `/welcome` → sign in as the ordinary user → reload → log out → attempt `/welcome`. Each message matches its account on the first render **and** the reload; each post-logout attempt lands on `/login`; 🚫 no state leaks between the two sessions. ⚠️ This is the stitched composite of E2E-2, E2E-9 and E2E-10 named in HL §17 — it is carried under a wave-local `X-` id precisely so 🚫 no HL §14.A `E2E-` identifier is reused for it |
-| X-6 | **The FR-17 machine-caller regression (AC-25).** A non-browser caller of `POST /identity/sign-in` that sends **no** `Origin` header still succeeds after the wildcard is replaced | The running gateway with wave-1's exact-origin config loaded | Issue the sign-in request from a non-browser client — `curl` or an HTTP client — with 🚫 no `Origin` header at all, and assert the response is byte-for-byte the outcome it produced against the base ref. ⚠️ This is the detection mechanism assumption `A12` names for the regression HL §9.1 warns about: CORS is a browser-enforced policy, so a machine caller must be unaffected, and if it is not, the change did more than it was allowed to do | FR-17, AC-25, `N5`, HL §14.A regression anchors, HL §9.1 |
+| X-6 | **The FR-17 machine-caller regression (AC-25).** A non-browser caller of `POST /identity/sign-in` that sends **no** `Origin` header still succeeds after the wildcard is replaced | The running gateway with wave-1's exact-origin config loaded | Issue the sign-in request from a non-browser client — `curl` or an HTTP client — with 🚫 no `Origin` header at all, and assert the response is byte-for-byte the outcome it produced against the base ref. ⚠️ This is the detection mechanism HL ABQ assumption `A12` names for the regression HL §9.1 warns about: CORS is a browser-enforced policy, so a machine caller must be unaffected, and if it is not, the change did more than it was allowed to do. Traces FR-17, AC-25, `N5`, HL §14.A regression anchors and HL §9.1 |
 
 #### §L.6.A.3 Unit and component tests
 
@@ -713,24 +719,44 @@ wave-1's **real** surface (HL §14.A cross-wave integration map).
 | Single decision source | 1 | The heading and the chip always agree, asserted across all **nine** `RoleDecision` inputs |
 | Accessibility wiring | 2 | `Logout` is reachable and operable by keyboard with a programmatic name; the landing heading is the page's `h1` and focus lands in the document correctly after the redirect |
 
+⚠️ **How this maps onto HL §14.A's UI coverage expectation.** HL §14.A states a **26**-test UI budget
+across the **whole capability**, 🚫 not per wave. Four of its six surfaces are wave-2's, totalling
+**16**; the other two — `/login` states (7) and the password field (3) — are wave-1's **10**. The
+mapping below is explicit so 🚫 no wave claims the other's share, and 🚫 the group table above is not
+read as a claim to have met a 26-test figure:
+
+| HL §14.A UI surface | Required | Discharged by |
+|---|---|---|
+| `/welcome` role rendering — parameterised over `admin`, `Admin`, `ADMIN`, `user`, `""`, whitespace, `null`, `administrator`, `superuser` | 9 | The `RoleDecision` group, all nine cases, each asserting the exact rendered heading |
+| `/welcome` guard — no session, expired session, live session | 3 | The guard-decision group's live, expired and absent rows (its remaining two rows — unreadable `expiresAt` and a throwing store — are 🚫 **additional** to HL's count, not substitutes for it) |
+| Logout — state cleared, redirect, zero requests | 3 | The Logout group, one row each |
+| Landing inventory — no widget, no table, no chart, no business navigation | 1 | The **Landing control inventory** row |
+| **Wave-2 subtotal** | **16** | of HL's 26 |
+| `/login` states; password field | 10 | 🚫 Wave-1's — see wave-1 §L.6.A.3 |
+
+✅ The remaining groups above — guard side effects, liveness re-evaluation, root route, `WelcomeCard`,
+`TopBar`, single decision source and accessibility wiring — are wave-local depth **beyond** the HL
+budget. They are 🚫 not counted against it and 🚫 do not displace any row in the table.
+
 #### §L.6.A.4 Negative, security-behaviour and conformance anchors
 
 | # | Anchor | Assert | Traces |
 |---|---|---|---|
-| NEG-1 | Never Admin by default | Across every non-`admin` input, the string "Admin Area" is absent from the DOM. 🎯 This is the DO's headline target — 0 unknown-role or normal users shown the Admin message | FR-12, BR-1, `N3` |
-| NEG-2 | Never a negation | A source check confirms 🚫 no `role !== 'user'`, `role != 'user'` or equivalent negation drives a presentation decision anywhere in the client | BR-2, `N3` |
-| NEG-3 | Never inferred — **source review** | A source review of **every** read of the role value confirms 🚫 no presentation decision reads an identifier, email, username, URL parameter, or any storage key other than the session store. `RoleDecision`'s signature takes one string | FR-13, AC-19, `N3` |
-| NEG-4 | Never inferred — **behavioural** | 🎯 The second half of HL §19's FR-13 obligation, and 🚫 not substitutable by NEG-3. A session is written through `SessionStore.write()` for an account whose **email begins `admin@`** while its `AuthDto.role` is `user`. `/welcome` must render exactly "Welcome" and the standard chip; 🚫 the string "Admin Area" must be absent from the DOM. ⚠️ A source review cannot prove this — only executing the render can | FR-13, AC-19, `N3` |
-| NEG-5 | No unauthenticated render | Across every deny path, no landing-page element is present in the DOM at any point, including transiently | FR-14, AC-20, `N4` |
-| NEG-6 | No session survives a deny or a logout | After every logout and every expiry deny, 🚫 no storage key holds the token, the role or `expiresAt` | FR-15, FR-16, AC-22, AC-23, `N4` |
-| NEG-7 | No raw role rendered | With an unrecognised role, the raw string appears in neither the DOM nor any telemetry payload. ⚠️ `landing.viewed` carries the derived `roleRecognised` boolean instead — see §L.3 | BR-2, `N1`, `N3` |
-| NEG-8 | **Canonical invalid transition 4** — 🚫 the role is never mutated while a session lives | A source check confirms 🚫 no wave-2 module calls `SessionStore.write()` at all — the write has exactly one call site, in wave-1's `useSignIn`. A behavioural test signs in, then drives every wave-2 interaction (reload, back-navigation, guard re-evaluation, root-route resolution) and asserts the stored `role` is byte-identical before and after each one (HL §10.1 invalid transition 4) | HL §10.1, FR-13, `N3` |
+| NEG-1 | Never Admin by default | Across every non-`admin` input, the string "Admin Area" is absent from the DOM. 🎯 This is the DO's headline target — 0 unknown-role or normal users shown the Admin message | FR-12, BR-1, `N4` |
+| NEG-2 | Never a negation | A source check confirms 🚫 no `role !== 'user'`, `role != 'user'` or equivalent negation drives a presentation decision anywhere in the client | BR-2, `N4` |
+| NEG-3 | Never inferred — **source review** | A source review of **every** read of the role value confirms 🚫 no presentation decision reads an identifier, email, username, URL parameter, or any storage key other than the session store. `RoleDecision`'s signature takes one string | FR-13, AC-19, `N4` |
+| NEG-4 | Never inferred — **behavioural** | 🎯 The second half of HL §19's FR-13 obligation, and 🚫 not substitutable by NEG-3. A session is written through `SessionStore.write()` for an account whose **email begins `admin@`** while its `AuthDto.role` is `user`. `/welcome` must render exactly "Welcome" and the standard chip; 🚫 the string "Admin Area" must be absent from the DOM. ⚠️ A source review cannot prove this — only executing the render can | FR-13, AC-19, `N4` |
+| NEG-5 | No unauthenticated render | Across every deny path, no landing-page element is present in the DOM at any point, including transiently | FR-14, AC-20, `N3` |
+| NEG-6 | No session survives a deny or a logout | After every logout and every expiry deny, 🚫 no storage key holds the token, the role or `expiresAt` | FR-15, FR-16, AC-22, AC-23, `N3` |
+| NEG-7 | No raw role rendered | With an unrecognised role, the raw string appears in neither the DOM nor any telemetry payload. ⚠️ `landing.viewed` carries the derived `roleRecognised` boolean instead — see §L.3 | BR-2, `N1`, `N4` |
+| NEG-8 | **Canonical invalid transition 4** — 🚫 the role is never mutated while a session lives | A source check confirms 🚫 no wave-2 module calls `SessionStore.write()` at all — the write has exactly one call site, in wave-1's `useSignIn`. A behavioural test signs in, then drives every wave-2 interaction (reload, back-navigation, guard re-evaluation, root-route resolution) and asserts the stored `role` is byte-identical before and after each one (HL §10.1 invalid transition 4) | HL §10.1, FR-13, `N4` |
 | NEG-9 | **Canonical invalid transition 5, at the render** — 🚫 the rendered presentation is sourced from the stored session role and nothing else | A test writes a session whose `role` came from `AuthDto.role`, then plants a conflicting role value in a different storage key, in a URL query parameter and in the email local-part. The rendered heading must follow the **session** value in all three cases (HL §10.1 invalid transition 5). ⚠️ The write-side half is wave-1 §L.6.A.4 NEG-7 | HL §10.1, FR-13, AC-19 |
 | NEG-10 | **FR-17 conformance (AC-24)** | A full diff of all four `ntrada*.yml` files against the base ref asserts a **single changed key**. 🚫 Zero gateway routes added, removed or reordered. 🚫 Zero `auth:` flags changed. 🚫 Zero logout or revoke routes. 🚫 Zero changes to the `jwt` block, to JWT validation or to revocation. 🚫 Zero `customErrors` values changed. ✅ All four files hold `extensions.cors.allowedOrigins` with **exactly one** entry — the exact `Pacco.Web` local origin — and 🚫 no `'*'` remaining anywhere. ⚠️ **Exactly one**, not "contains": BR-8 forbids an allow-list, so a file that merely *includes* the origin alongside another entry **fails** this anchor | FR-17, AC-24, BR-8, `N5` |
 | NEG-11 | **FR-17 machine-caller regression (AC-25)** | 🎯 The second half of HL §19's FR-17 obligation. `POST /identity/sign-in` issued from a non-browser client sending 🚫 **no** `Origin` header **still succeeds** against the changed configuration, with the same status and body shape it produced against the base ref. ⚠️ CORS is browser-enforced; a machine caller that starts failing means the change reached past `allowedOrigins`. Driven as §L.6.A.2 X-6 | FR-17, AC-25, `N5` |
 | NEG-12 | **FR-19 conformance — source scan (AC-27, first half)** | A source scan finds 🚫 zero references to `refresh-tokens/use` or any other refresh route, 🚫 no silent re-authentication, 🚫 no timer that extends `expiresAt`, and 🚫 no read of `refreshToken` anywhere in the client | FR-19, AC-27 |
 | NEG-13 | **FR-19 observation run (AC-27, second half)** | 🎯 HL §19 counts FR-19 as a source scan **plus** "1 observation run from sign-in past the expiry moment", and 🚫 the scan alone does not discharge it. A long-running test signs in through wave-1's real path against a session pinned to expire shortly, observes continuously from the moment of sign-in until **after** the expiry moment, and asserts: 🚫 zero outbound requests of any kind in that window, 🚫 no background timer scheduled, and `expiresAt` byte-identical at the end. The guard's post-expiry deny then fires on the next navigation, 🚫 not on a timer | FR-19, AC-27 |
-| NEG-14 | No network from this wave | 🚫 No module in wave-2 imports `GatewayClient` or performs a request. ⚠️ NEG-13's observation run is the runtime counterpart of this static check | FR-18, FR-19, `N4` |
+| NEG-14 | No network from this wave | 🚫 No module in wave-2 imports `GatewayClient` or performs a request. ⚠️ NEG-13's observation run is the runtime counterpart of this static check | FR-18, FR-19, `N3` |
+| NEG-15 | **Canonical invalid transition 2** — 🚫 `session-expired` never returns to `authenticated` without a fresh sign-in | 🎯 The owning anchor for HL §10.1 invalid transition 2, which belongs to this wave because this wave owns the `session-expired` state and FR-19. A session is pinned past its `expiresAt`, `/welcome` is requested, and the guard's expiry deny is observed. The test then drives every route the client exposes — `/welcome` again, `/`, Back, Forward and a reload — and asserts that the client 🚫 never re-enters `authenticated`: 🚫 no session is rewritten, 🚫 no outbound request is issued, and every attempt terminates at `/login`. `authenticated` is reachable again **only** by completing wave-1's real sign-in, which is asserted as the final step. ⚠️ NEG-12 proves 🚫 no renewal path exists in source and NEG-13 proves 🚫 none fires in time; NEG-15 is the state-machine assertion that the transition itself is rejected, and 🚫 neither of the other two discharges it alone | HL §10.1, FR-15, FR-19, AC-21, AC-27, `N3` |
 
 #### §L.6.A.5 Regression carried forward from wave-1
 
@@ -753,17 +779,17 @@ none, 🚫 not because one was dropped.
 
 | Area | Requirement | Traces |
 |---|---|---|
-| Role fidelity | NEG-1, NEG-2, NEG-3, NEG-4, NEG-7, NEG-8 and NEG-9 run as a named suite, together with the nine `RoleDecision` cases | **`N3`** |
-| Guard integrity | NEG-5, NEG-6 and NEG-14 run as a named suite, with E2E-8 and E2E-11 as the browser proof | **`N4`** |
+| Session protection | NEG-5, NEG-6, NEG-14 and NEG-15 run as a named suite, with E2E-8 and E2E-11 as the browser proof | **`N3`** |
+| Role fidelity | NEG-1, NEG-2, NEG-3, NEG-4, NEG-7, NEG-8 and NEG-9 run as a named suite, together with the nine `RoleDecision` cases | **`N4`** |
 | Edge access-control posture — FR-17 half | NEG-10 (single changed key, exactly one origin, no `'*'`) plus NEG-11 (machine caller with no `Origin` header still succeeds) | **`N5`**, shared with wave-1, which owns the FR-11 / AC-15 / AC-16 half |
 | Post-logout token replay | E2E-13, run once per release against the live stack | **`N6`** — ⚠️ **measurement, not a gate** (HL §8.3). The expected reading is *accepted*, and it is filed as the evidence for `R-03` in HL §12.6 |
 | Credential confidentiality | Re-run of wave-1's NEG-2, NEG-3 and NEG-5 against this wave's screens, plus NEG-7 | `N1`, re-applied |
 | No raw backend or storage text in the DOM | Re-run of wave-1's error-presentation anchor against `/welcome` and against the expiry notice | `N2`, re-applied |
 | Duplicate submission | 🚫 **Not carried here.** `N7` is wave-1's, at the sign-in control. This wave has no submitting control | `N7` — wave-1 |
-| Observability | ⚠️ Measurement only, 🚫 no threshold. A run records that the four `landing.*` events fired with the correct payload shape, including `roleRecognised` | `N8` — ⚠️ not a gate (HL §8.3) |
+| Observability | ⚠️ Measurement only, 🚫 no threshold. A run records that the four `landing.*` events fired with the correct payload shape, including `roleRecognised` | ⚠️ **No `N` identifier.** HL §8.3's register has none for observability — 🚫 `N8` is *Availability / performance*, and it is wave-1's. This row is held by HL §13.4 and §L.3 |
 | Accessibility | Automated WCAG 2.1 AA scan of `/welcome` with zero violations. Keyboard-only traversal reaches the `Logout` control. The heading structure is correct and focus is managed across the redirect | ⚠️ **No `N` identifier.** HL §8.3's register has none for accessibility; this row is held by §L.7.2 rule 1 and by AC-28 |
 | Responsive | `/welcome` renders without horizontal scroll or clipping at 320 px, at the 768 px breakpoint, and at 200% zoom | ⚠️ **No `N` identifier**, for the same reason. Held by the HL §16 visual contract |
-| Performance | 🚫 **No test.** No latency or availability target exists for any Pacco component, and this wave makes no network call at all | ASM-8, `G-03` |
+| Availability / performance | 🚫 **No test.** No latency or availability target exists for any Pacco component, and this wave makes no network call at all | `N8` — wave-1, which records the sign-in round-trip time. ASM-8, `G-03` |
 
 #### §L.6.A.7 Coverage obligations
 
@@ -805,23 +831,26 @@ the two can never be confused.
 
 | NFR | Gate (HL §8.3) | How wave-2 implements it | Verified by |
 |---|---|---|---|
-| **`N3`** | Role fidelity — the landing message always matches the authenticated identity role | One pure allow-list `RoleDecision`, matching `admin` exactly after lower-casing, driving both the heading and the chip. 🚫 No negation, 🚫 no inference, 🚫 no second decision | §L.6.A.3 nine `RoleDecision` cases; §L.6.A.4 NEG-1, NEG-2, NEG-3, NEG-4, NEG-7, NEG-8, NEG-9; E2E-1, E2E-2 |
-| **`N4`** | Guard integrity — the post-login surface is never reachable unauthenticated, and an expired session is treated as none | `RequireSession` decides before the child tree is constructed, on every navigation including Back; `isLive` is consulted on every decision and 🚫 never cached, then clear-then-redirect-with-notice | §L.6.A.3 guard-decision, guard-side-effect and liveness groups; §L.6.A.4 NEG-5, NEG-6, NEG-14; E2E-8, E2E-11 |
+| **`N3`** | Session protection — 🚫 no unauthenticated request reaches the landing page, and an expired token takes the same path | `RequireSession` decides before the child tree is constructed, on every navigation including Back; `isLive` is consulted on every decision and 🚫 never cached, then clear-then-redirect-with-notice | §L.6.A.3 guard-decision, guard-side-effect and liveness groups; §L.6.A.4 NEG-5, NEG-6, NEG-14, NEG-15; E2E-8, E2E-11 |
+| **`N4`** | Role fidelity — the role comes only from the authenticated response, and an unknown role 🚫 never renders the admin message | One pure allow-list `RoleDecision`, matching `admin` exactly after lower-casing, driving both the heading and the chip. 🚫 No negation, 🚫 no inference, 🚫 no second decision | §L.6.A.3 nine `RoleDecision` cases; §L.6.A.4 NEG-1, NEG-2, NEG-3, NEG-4, NEG-7, NEG-8, NEG-9; E2E-1, E2E-2 |
 | **`N5`** | Edge access-control posture — the gateway accepts the browser origin and nothing wider, with 🚫 no other gateway behaviour changed | ⚠️ **Shared gate.** Wave-1 owns the FR-11 half (the four-file change, AC-15, AC-16). Wave-2 owns the **FR-17 half**: proving the diff touched a single key and that a machine caller is unaffected | §L.6.A.4 NEG-10, NEG-11; §L.6.A.2 X-6 |
 | **`N6`** | Post-logout token replay | ⚠️ **Measurement, not a gate** (HL §8.3). 🚫 Nothing in this wave implements it — the client cannot revoke a token, and `ADR-021` §5 rule 5 forbids trying. The wave **measures** the residual behaviour instead | §L.6.A.1 **E2E-13**, filed as the evidence for `R-03` in HL §12.6 and HL §13.6, and as the standing answer to blocker `B5` |
 | `N1` | Credential confidentiality — 🚫 no credential value logged, persisted or displayed | Re-applied. Fixed telemetry shapes carrying 🚫 no token and 🚫 no raw role — only the derived `roleRecognised` boolean; `clear()` removes rather than blanks | §L.6.A.6 credential-confidentiality row; §L.6.A.4 NEG-7 |
 | `N2` | 🚫 No raw backend or storage text reaches the DOM | Re-applied. 🚫 No backend outcome is surfaced at all here; the role chip renders a client-owned label, and the one notice comes from wave-1's registry by key | §L.6.A.6 no-raw-text row |
 | `N7` | Duplicate submission suppressed at the submitting control | 🚫 **Not carried.** `N7` lives at wave-1's sign-in control. This wave has 🚫 no submitting control and 🚫 no request to duplicate | Wave-1 §L.7.1 |
-| `N8` | Observability | The four `landing.*` events, with the `roleRecognised` boolean that makes HL §13.4's out-of-vocabulary alert able to fire | ⚠️ **Measurement only** — HL §8.3 sets 🚫 no target and calls it "not a gate" |
+| `N8` | Availability / performance — 🚫 **no numeric target is set, and none is invented here** | 🚫 **Not carried.** HL §8.3 places `N8` in wave-1, where it records the sign-in round-trip time. This wave makes 🚫 no network call at all, so there is nothing here to time | Wave-1 §L.7.1 (ASM-8, `B1`) |
 
 ✅ With `N3`, `N4` and the `N6` measurement carried here, the `N5` halves split across the two waves,
-`N7` in wave-1, and `N1`, `N2`, `N8` re-applied in both, 🚫 no row in HL §8.3's eight-entry register is
-left uncarried across the batch.
+`N7` and `N8` in wave-1, and `N1`, `N2` re-applied in both, 🚫 no row in HL §8.3's eight-entry register
+is left uncarried across the batch.
 
-⚠️ **Accessibility and responsive behaviour carry no `N` identifier.** HL §8.3's register has none for
-them. They are gated all the same — by §L.7.2 rule 1, by AC-28 and by the HL §16 visual contract — and
-their tests are listed in §L.6.A.6. 🚫 Assigning them an `N` number here would have invented a ninth
-and tenth entry in a register this tier does not own.
+⚠️ **Observability, accessibility and responsive behaviour carry no `N` identifier.** HL §8.3's
+register has none for them — in particular 🚫 `N8` is *not* an observability row, and the four
+`landing.*` events are held by HL §13.4 and §L.3, not by the NFR register. Accessibility and
+responsive behaviour are gated all the same — by §L.7.2 rule 1, by AC-28 and by the HL §16 visual
+contract — and every one of the three has its tests listed in §L.6.A.6. 🚫 Assigning them an `N`
+number here would have invented a ninth, tenth and eleventh entry in a register this tier does not
+own.
 
 ### §L.7.2 The four minimum client rules
 
@@ -1020,7 +1049,7 @@ unresolved component. 🚫 No URL is invented anywhere in this binding.
 
 | Decision | Obligation on wave-2 | How it is met |
 |---|---|---|
-| `ADR-004` | The routing configuration is a reviewed architectural artifact | 🚫 Not touched. NEG-7 asserts it |
+| `ADR-004` | The routing configuration is a reviewed architectural artifact | 🚫 Not touched. NEG-10 asserts it |
 | `ADR-006` | Authentication is enforced at the edge | The client guard is presentational and 🚫 grants nothing. 🚫 No `auth:` flag changes |
 | `ADR-007` | The gateway's JWT trust root and revocation posture are untouched | 🚫 No revoke route, 🚫 no deny-list change. The consequence is stated as a limitation, not engineered around |
 | `ADR-017` | Contract changes are declared before use | 🚫 No contract changes. The `none` ledger row is the declaration |
@@ -1041,9 +1070,17 @@ in `CAP-02 Edge Routing & Access Enforcement` or `CAP-16 Environment & Deploymen
 ### §L.10.3 Declared exception
 
 ⚠️ `ADR-020` §2 pins the platform runtime baseline to .NET for deployables. `Pacco.Web` is a browser
-client and is deliberately **not** a .NET deployable. This is recorded upstream as
-`ARCHITECTURE_ALIGNMENT_EXCEPTION-03` and is a stated decision, not drift (HL §12.6, BRI-20). 🚫 No
+client and is deliberately **not** a .NET deployable. This is recorded upstream at **HL §19.A row
+33** as `not-applicable-to-this-capability`, and is a stated decision, not drift (BRI-20). 🚫 No
 attempt is made in this wave to bring the client under that baseline.
+
+🚫 **This is not an architecture alignment exception.** HL §12.6 records exactly three:
+`ARCHITECTURE_ALIGNMENT_EXCEPTION-01` (`ADR-004` §2 obligation 2 — no environment records which
+configuration file it loads), `-02` (`ADR-007` §2 rule 4 — the edge consults no deny-list while
+logout ships as a client-side discard) and `-03` (the logout limitation is surfaced to operators in
+HL §13.6 but 🚫 not to users). 🚫 None of the three concerns `ADR-020`, and 🚫 this wave does not
+attach one to it — a not-applicable scope decision and a compliant-with-deviation exception are
+different dispositions.
 
 ## §L.11 Source requirement continuity
 
@@ -1064,8 +1101,8 @@ Each clause of the `DO2` statement in `intents/13652.md`, mapped to where this d
 | Blocked and redirected back to Login when requested without an authenticated session | §L.3 item 5 steps 1 to 9, FR-14, E2E-8 |
 | Log out and be returned to the login experience | §L.3 item 5 steps 15 to 21, FR-16, E2E-10 |
 | No dashboard widgets or business functionality introduced | §L.3 item 10, C7, FR-18, the §L.6.A.3 control-inventory group |
-| Landing message always matching the authenticated identity role | `N3`, §L.7.1 |
-| Post-login surface never reachable unauthenticated | `N4`, §L.7.1 |
+| Landing message always matching the authenticated identity role | `N4`, §L.7.1 |
+| Post-login surface never reachable unauthenticated | `N3`, §L.7.1 |
 | An unknown or unsupported role does not show the Admin message | The FR-12 nine-case group, NEG-1. ⚠️ Not an E2E row — see the §L.6.2 caveat and `Q2` |
 | A direct landing-page request without a session redirects to Login | E2E-8, FR-14, AC-20 |
 | Logout clears the locally held access token and session state | §L.3 item 5 step 16, NEG-6, AC-23 |
@@ -1095,13 +1132,16 @@ reference images instead, and `B3` is restated in this document's blockers.
 | Constraints | C2, C7, C11 | 3 |
 | E2E scenarios (HL §14.A ids, HL §14.A scenarios) | E2E-1, 2, 8, 9, 10, 11, 13 | 7 |
 | Cross-wave integration edges (wave-local `X-` space) | X-1 to X-6 | 6 |
-| Negative, security and conformance anchors (wave-local `NEG-` space) | NEG-1 to NEG-14 | 14 |
-| NFR gates (the `ADR-021` §8 / HL §8.3 register) | `N3` and `N4` owned as gates; the `N6` measurement owned; the FR-17 half of `N5` owned; `N1`, `N2`, `N8` re-applied; `N7` is wave-1's | 2 + 1 + ½ |
+| Negative, security and conformance anchors (wave-local `NEG-` space) | NEG-1 to NEG-15 | 15 |
+| NFR gates (the `ADR-021` §8 / HL §8.3 register) | `N3` and `N4` owned as gates; the `N6` measurement owned; the FR-17 half of `N5` owned; `N1` and `N2` re-applied; `N7` and `N8` are wave-1's | 2 + 1 + ½ |
 | Binding rules | BRI-1 to BRI-20 | 20 |
 
 🚫 Nothing in FR-1 to FR-11 is re-implemented here. ✅ Across the batch, FR-1 to FR-19, BR-1 to BR-8,
 AC-1 to AC-28, C1 to C12 and E2E-1 to E2E-13 are each owned by exactly one wave, except AC-28, which
-is jointly verified, and BR-1 and BR-2, whose write-side halves sit in wave-1.
+is jointly verified, and BR-2, whose write-side half sits in wave-1 (`SessionStore.write()` stores an
+unrecognised role verbatim rather than normalising it). ⚠️ **BR-1 is wholly this wave's.** It governs
+when the administrator message is shown, and 🚫 nothing in wave-1 renders a role-aware message, so it
+has no write-side half there.
 
 ⚠️ **On identifier spaces.** `FR-`, `BR-`, `AC-`, `C`, `E2E-` and `R-` are the HL ESD's, and `N1`–`N8`
 is `ADR-021` §8's. 🚫 This document creates no identifier in any of them and renumbers none of them.
@@ -1228,6 +1268,7 @@ creating a duplicate section number — precisely the class of identifier collis
 | Round | Reviewer | Date (UTC) | Comment summary | Resolution | Spec section(s) touched | Status |
 |---|---|---|---|---|---|---|
 | 1 | `esd-generation-internal` | 2026-09-25 | The design is sound but the bookkeeping fails in ways that change what gets built: six of thirteen `E2E-` ids denote different scenarios from HL §14.A; FR-13 to FR-18 are shifted by one; BR-1/BR-3 and BR-6/BR-7 are transposed; `C11` stands in for `C7`; the `N1`–`N8` register that `ADR-021` §8 owns is renumbered; §L.6.A.7 claims its rows are "carried verbatim" from HL §14.A and §19 when all eight differ; a quotation attributed to HL §10.1 does not appear there. Eight counted obligations are missing: the AC-16 disallowed-origin check, the AC-25 machine-caller regression, the E2E-13 `N6` replay measurement, the AC-26 control inventory, the AC-27 observation run, three of FR-12's nine role cases, the AC-19 behavioural test, and negative tests for canonical invalid transitions 4 and 5. Three HL premises are contradicted without disclosure: HL §13.4's alert cannot fire under this wave's telemetry, `R-03` is unmeasured, and anchor `N-7` admits an allow-list that BR-8 forbids | All accepted. Every `E2E-` id restored to its HL §14.A scenario, with wave-local composites moved to a new `X-` space (X-5 the HL §17 journey, X-6 the machine-caller regression) so 🚫 no HL id is reused. All FR, BR, AC and C citations realigned to the HL ESD. The negative/conformance anchors renamed `N-n` → `NEG-n`, freeing `N1`–`N8` to mean only `ADR-021` §8's register, which §L.7.1 now reproduces through HL §8.3 without renumbering — including `N6` as a **measurement** bound to E2E-13 and `N5` as a gate shared with wave-1. §L.6.A.7 replaced with HL §19's verbatim obligation wording plus an explicit discharge mapping. The fabricated HL §10.1 quotation deleted and replaced with the real invalid transitions 4 and 5, bound to NEG-8 and NEG-9. The eight missing obligations added: FR-12 raised from 6 to 9 role cases; NEG-4 the AC-19 behavioural `admin@`-with-role-`user` render; a landing control-inventory group for AC-26; NEG-11 the AC-25 no-`Origin` regression; NEG-13 the AC-27 observation run; and E2E-13 the post-logout replay measurement. The three contradictions closed: `landing.viewed` gained a derived `roleRecognised` boolean so HL §13.4's alert can fire without emitting a raw role; `R-03` is now measured by E2E-13; and NEG-10 asserts **exactly one** origin entry, so BR-8's no-allow-list rule holds | §L.2.2, §L.2.3, §L.3 (DO2 block, items 2, 3, 5, 8, 9, telemetry, non-goals), §L.4, §L.6.2, §L.6.A.1 to §L.6.A.7, §L.7.1, §L.8.1, §L.8.2, §L.8.3, §L.10.1, §L.11.1, §L.11.2, §L.12.2, §L.12.6, ABQ `A6`, `A7`, `Q2` | Resolved |
+| 2 | `esd-generation-internal` | 2026-09-25 | Two findings change what gets built and tested. First, §L.7.1, §L.6.A.6 and every `NEG-` trace column renumber the `ADR-021` §8 / HL §8.3 NFR register — `N3` given to *Role fidelity*, `N4` to *Guard integrity* and `N8` to *Observability* — while the surrounding prose explicitly asserts that 🚫 no `N` identifier is reassigned. HL §8.3 holds `N3` = *Session protection*, `N4` = *Role fidelity* and `N8` = *Availability / performance*, the last of which is wave-1's. Second, §L.4 assigns HL §10.1 invalid transition 2 (`session-expired` → `authenticated`, FR-19) to wave-1, which owns neither the `session-expired` state nor FR-19, leaving a mandatory negative test authored by neither wave. Alongside these, four citations name the wrong anchor: HL ABQ assumption `A12` is cited unqualified as though wave-local; `ADR-004` non-drift is attributed to NEG-7 (it is NEG-10); `ARCHITECTURE_ALIGNMENT_EXCEPTION-03` is attributed to the `ADR-020` .NET-baseline deviation (AAE-03 is the logout limitation not surfaced to users); and §L.11.2 claims BR-1 has a write-side half in wave-1 when BR-1 is wholly this wave's | All accepted. Restored HL §8.3's register throughout — `N3` = *Session protection*, `N4` = *Role fidelity*, using HL's own gate wording — swapping the two across §L.7.1, §L.6.A.6 and the NEG-1 to NEG-14 trace columns, and rewrote the `N8` row as *Availability / performance*, 🚫 not carried here because HL §8.3 places it in wave-1; observability is now recorded as carrying 🚫 no `N` identifier and held by HL §13.4 and §L.3. Reassigned HL §10.1 invalid transition 2 to this wave and added **NEG-15** as its owning anchor — the state-machine assertion that `session-expired` never returns to `authenticated` without a fresh sign-in, discharged jointly with NEG-12's source scan and NEG-13's observation run, and 🚫 by neither alone — restating §L.4 as the **three** transitions this wave owns (2, 4, 5) and wave-1's as **1 and 3** only. Corrected the four citations to HL ABQ `A12`, NEG-10, HL §19.A row 33 (`not-applicable-to-this-capability`, with a note naming what AAE-01, -02 and -03 actually cover), and BR-2 alone. Added a §L.6.A.3 mapping table showing wave-2's **16 of 26** share of HL §14.A's cross-wave UI budget. 🚫 No heading was added, removed, renamed or reordered, so the table of contents is unchanged | §L.4, §L.6.A.3, §L.6.A.4, §L.6.A.6, §L.7.1, §L.10.3, §L.11.2 | `addressed` |
 
 ## Assumptions, Blockers & Open Questions
 

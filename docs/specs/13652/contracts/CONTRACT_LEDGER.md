@@ -30,7 +30,8 @@ because nothing about them was altered by this capability.
 | `identitySignIn` | `POST /identity/sign-in` | `Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml:263-269` | `identity-service` | wave-1 (`DO1`) |
 
 `operationId` `identitySignIn` is provisional and exists for traceability inside this spec pack only —
-the platform publishes no OpenAPI document (HL ESD §9.1, ASM-5).
+the platform publishes no OpenAPI document for this route, so the identifier is assigned by the spec
+and is not a contract change (HL ESD §9.1).
 
 ## Browser-internal surfaces
 
