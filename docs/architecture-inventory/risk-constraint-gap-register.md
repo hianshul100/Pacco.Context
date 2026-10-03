@@ -49,10 +49,26 @@ Scoring is the standard FMEA scale, 1 to 10 on each axis, `RPN = S × O × D`.
 highest RPN in this register and is **deliberately accepted**, because removing it was placed out of
 scope by an explicit reviewer decision.
 
-`mitigation type` is one of `architecture_change`, `adr`, `infra`, `process` or `accept`. Where the
-type is `adr` and the owner is the architecture stage, the record was authored **on this patch** —
-`ADR-024`…`ADR-030` exist in `docs/adr/`, and the owner column then names the stage that carries the
-remaining exposure, because a decision is not an implementation.
+`mitigation type` is one of the following seven values. A row may follow its value with an em dash
+and the specific instrument — `adr — ADR-029`, `infra — INF-4`, `accept — scoped by AD-4` — but the
+value before the dash is always one of these seven, and every row in the table below uses one.
+
+| Value | What it means | Rows that use it |
+|-------|---------------|------------------|
+| `adr` | A decision record governs the exposure. Where the owner is a later stage, the record was authored **on this patch** — `ADR-024`…`ADR-030` exist in `docs/adr/` — and the owner column names the stage carrying the remaining exposure, because a decision is not an implementation | `R-15`, `R-16`, `R-18`, `R-19`, `R-20`, `R-21`, `R-22`, `R-24`, `R-26` |
+| `mitigate` | A concrete change reduces the exposure, and the change is named in the row. It is not a decision record and not an infrastructure item | `R-01`, `R-02`, `R-05`, `R-06`, `R-07`, `R-08`, `R-09`, `R-11`, `R-12`, `R-14` |
+| `infra` | A platform or pipeline change owned by DevOps, carried as an `INF-*` item | `R-23`, `R-25` |
+| `process` | A human decision or working practice closes it; no code or configuration changes | `R-17`, `R-27`, `R-29` |
+| `accept` | The exposure is knowingly retained. The residual column says so explicitly and names who accepted it | `R-03`, `R-10`, `R-28`, `R-30` |
+| `transfer` | The exposure moves to a party outside this architecture's control | `R-13` |
+| `defer` | No treatment is chosen yet and the decision itself is scheduled | `R-04` |
+
+This preamble was first written on 2026-10-03 against the `R-15`…`R-30` rows alone, so it omitted
+`mitigate`, `transfer` and `defer` — the three values the carried-forward `R-01`…`R-14` rows use, and
+between them twelve of the thirty rows. The omission was in the list, not in the rows; the list is
+corrected above and no row was reclassified. `architecture_change` is dropped in the same pass: no
+row has ever carried it, and every case it would have covered is recorded as `adr`, because on this
+platform an architecture change is made by writing a decision record.
 
 | id | title | category | S | O | D | RPN | mitigation type | owner stage | residual |
 |----|-------|----------|---|---|---|-----|-----------------|-------------|----------|
@@ -74,7 +90,7 @@ remaining exposure, because a decision is not an implementation.
 | `R-27` | One order can have two delivery documents, which becomes a duplicate row in a customer-facing list | correctness | 7 | 4 | 8 | **224** | process — decide the list behaviour | hls | Medium |
 | `R-08` | Credentials or tokens leak into browser storage, logs or URLs | security | 9 | 4 | 6 | **216** | mitigate — client-side | `DO1` implementation | Low once mitigated |
 | `R-30` | Three aggregates get write integrity and eight do not, with nothing marking the boundary | maintainability | 6 | 6 | 6 | **216** | accept — scoped by `AD-4`, chosen by human | Platform architect | **Medium — accepted** |
-| `R-10` | The refresh token cannot be redeemed at the edge, so sessions end abruptly at expiry | usability | 5 | 9 | 4 | **180** | accept for now, decide later | Platform owner | Medium |
+| `R-10` | The refresh token cannot be redeemed at the edge, so sessions end abruptly at expiry | usability | 5 | 9 | 4 | **180** | accept — for now, with the decision revisited separately | Platform owner | Medium |
 | `R-05` | The exact CORS origin is applied to a gateway configuration file the environment does not load | operability | 7 | 5 | 4 | **140** | mitigate — record the mapping | Platform owner | Low once recorded |
 | `R-06` | An unknown or unsupported role renders the admin landing message | correctness | 9 | 3 | 5 | **135** | mitigate — closed-vocabulary check | `DO2` implementation | Low once mitigated |
 | `R-28` | The append-only rescheduling history grows without bound inside a size-capped document | reliability | 6 | 3 | 7 | **126** | accept — `ASM-13` requires full retention | Platform architect | **Medium — accepted** |
@@ -391,7 +407,9 @@ and what must be verified before the risk can be called closed.
   or any team metadata**, so there is no named reviewer to satisfy that obligation.
 - **Failure mode.** A public-contract change ships unreviewed, and `ADR-021` stays `Proposed` forever.
 - **Effects.** The governing obligation is unenforceable in practice. Every ADR in the corpus —
-  all twenty-one — is blocked from moving past `Proposed` for the same reason.
+  all **thirty**, `ADR-001`…`ADR-030`, including the seven this run authored — is blocked from
+  moving past `Proposed` for the same reason. The count was twenty-one when this row was opened on
+  2026-09-22; the obligation has not changed, only the number of records waiting on it.
 - **Causes.** No ownership metadata has ever existed. Carried as `adr-candidates.md` B4 since the
   ADR corpus was written.
 - **Affected.** `api-gateway` (CAP-02), `Pacco.Web` (CAP-17), the whole ADR corpus.
@@ -807,7 +825,7 @@ A gap is a missing input, not a risk to score. Each one blocks a decision somebo
 
 | id | Gap | Why it matters | Who must supply it | Needed |
 |----|-----|----------------|--------------------|--------|
-| `G-01` | **[ACTION NOW]** No repository has an owner — no `CODEOWNERS`, no contributing guide, no team metadata anywhere in the fourteen clones | Nothing can be approved. All twenty-one ADRs are stuck at `Proposed`, and `C-02`'s review obligation is unenforceable | Platform owner | Now — it blocks `ADR-021`'s approval |
+| `G-01` | **[ACTION NOW]** No repository has an owner — no `CODEOWNERS`, no contributing guide, no team metadata anywhere in the fourteen clones | Nothing can be approved. All **thirty** ADRs (`ADR-001`…`ADR-030`) are stuck at `Proposed` with `Deciders: Unassigned`, and `C-02`'s review obligation is unenforceable. The count was twenty-one when this gap was opened on 2026-09-22 | Platform owner | Now — it blocks `ADR-021`'s approval and the approval of `ADR-024`…`ADR-030` |
 | `G-02` | **[ACTION NOW]** No environment-to-gateway-configuration mapping is recorded | An exact CORS origin must land in the file the running gateway loads (`R-05`) | Platform owner | Now — before `DO1` is exercised end to end |
 | `G-03` | **[ACTION NOW]** No availability target, latency budget or error-rate objective is documented for any service, for the gateway, or for the platform | A client cannot justify a timeout, a retry policy or a loading-state threshold against nothing. Whatever `DO1` picks becomes the de facto target | Platform owner | Now, if the client is to have a justified timeout. Otherwise the first value chosen becomes the standard by accident |
 | `G-04` | **[ACTION NOW]** No frontend standard of any kind exists — state ownership, accessibility, error presentation, client logging and redaction, dependency and lockfile policy | The first client sets all of them by accident (`R-09`) | Platform architect | Now — cheapest while the first screens are being written |

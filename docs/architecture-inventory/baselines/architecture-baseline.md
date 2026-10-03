@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 4** — `ADR-024`…`ADR-030` recorded and mapped into §11.1, whose preamble and corpus accounting are corrected to the thirty-record corpus and now account for `ADR-022` and `ADR-023` explicitly. §4.1 records the first synchronous edge out of `deliveries-service`; §4.2 records its first inbound subscription. The second `### 11.4` heading (quality-attribute assessment) is renumbered `### 11.5`, and `### 11.6` adds the per-requirement quality-attribute assessment for work item 14830. **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 5** — architecture review corrections, no new findings. §11.6's per-requirement quality-attribute table for work item 14830 is **moved out** to `docs/specs/14830/solution-design.md` §4.4, where per-ticket spec content belongs, and §11.6 now states that rule; §11.1's pointer follows it. §12.1 corrects the `architecture-views.md` runtime-flow count from five to eight. §12.2 embeds the three `[recorded by ADR-02x]` edges that artifact gained for 14830, so "reproduced verbatim" is true again, and flags them so a current-state reader does not take them for observed behaviour; §12.3 excludes them from its consistency check. **Rev 4** — `ADR-024`…`ADR-030` recorded and mapped into §11.1, whose preamble and corpus accounting are corrected to the thirty-record corpus and now account for `ADR-022` and `ADR-023` explicitly. §4.1 records the first synchronous edge out of `deliveries-service`; §4.2 records its first inbound subscription. The second `### 11.4` heading (quality-attribute assessment) is renumbered `### 11.5`. **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -548,9 +548,11 @@ customers' operation activity to every connected client.
 
 ## 5. Runtime coordination and process flow
 
-Diagrams for the platform's runtime flows live in `architecture-views.md` §3 (five flows, all
-marked `[Confidence: partial]`). This section explains **how coordination works**, with every hop
-preserved.
+Diagrams for the platform's runtime flows live in `architecture-views.md` §3. Five — §3.1 to §3.5 —
+are drawn from evidence and marked `[Confidence: partial]`; those are the ones this section explains.
+The other three (§3.6 to §3.8) are `[Confidence: recorded by …]` and describe decided behaviour that
+does not run today, so nothing in this current-state narrative rests on them. This section explains
+**how coordination works**, with every hop preserved.
 
 ### 5.1 The order-making saga — the platform's only orchestrated process
 
@@ -1282,7 +1284,7 @@ absent:
 |-------|---------------------------|------------------------|
 | `ADR-001`…`ADR-020` | Reconstructed from repository evidence by `adr_generation` | The table below, or [`../adr-candidates.md`](../adr-candidates.md) |
 | `ADR-021` | Recorded by `architecture_evolution_generation` for work item 13652 — `Pacco.Web` as the standalone browser client | The table below |
-| `ADR-022`, `ADR-023` | Recorded by `architecture_evolution_generation` for work item 13652 — the browser session bound to access-token expiry, and the browser-boundary error presentation contract. **Both are client-boundary records: neither changes a statement in this baseline, which is why neither appears in the table below** | `docs/adr/` only. §11.6 cites `ADR-023` against `NFR-10` and `NFR-14`. [`../adr-candidates.md`](../adr-candidates.md)'s candidate-to-ADR mapping stops at `ADR-021` and has not been extended to either — recorded here as an observation rather than left as a silent omission |
+| `ADR-022`, `ADR-023` | Recorded by `architecture_evolution_generation` for work item 13652 — the browser session bound to access-token expiry, and the browser-boundary error presentation contract. **Both are client-boundary records: neither changes a statement in this baseline, which is why neither appears in the table below** | `docs/adr/` only. [`../../specs/14830/solution-design.md`](../../specs/14830/solution-design.md) §4.4 cites `ADR-023` against `NFR-10` and `NFR-14`. [`../adr-candidates.md`](../adr-candidates.md)'s candidate-to-ADR mapping stops at `ADR-021` and has not been extended to either — recorded here as an observation rather than left as a silent omission |
 | `ADR-024`…`ADR-030` | Recorded by `architecture_evolution_generation` for work item 14830 | The table below |
 
 The ADRs that constrain the platform's structure as described in this document:
@@ -1395,39 +1397,25 @@ exists, the row says so rather than inventing one.
 | **Availability and latency** | **No position exists.** No availability target, latency budget or error-rate objective is documented for any service, for the gateway, or for the platform anywhere in the fourteen clones | — | `risk-constraint-gap-register.md` `G-03`; `ADR-021` §8 `N8` |
 | **Frontend quality rules** (state ownership, accessibility, client logging and redaction, dependency policy) | **No position exists.** No frontend standard exists anywhere in the platform, so the first client will establish conventions by default unless they are written | — | `ui-inventory.md` §10; `ADR-021` §7.1 and `Q4` |
 
-### 11.6 Quality-attribute assessment — per requirement, work item 14830
+### 11.6 Per-work-item quality-attribute assessments live with their work item
 
-§11.5 states the platform's standing posture. This table states, one row per quality requirement
-raised by work item 14830, what was decided about it and where the decision lives. "Sufficient" means
-an existing recorded decision already covers the requirement and nothing changes. "Needs change"
-means this baseline or a service changes. "At risk" means the requirement cannot be met by
-architecture alone and carries an entry in
-[`../risk-constraint-gap-register.md`](../risk-constraint-gap-register.md).
+§11.5 is the platform's **standing** posture and belongs here, because it is current state: it
+survives any one work item and is read by every later stage. A per-requirement disposition — one row
+per `NFR-*` raised by a single ticket, stating what that ticket decided — is **spec content**. It is
+true only of that ticket, it is restated from that ticket's requirement list, and it goes stale the
+moment the ticket's design moves. Keeping a copy here would make this document carry two
+authoritative texts for the same facts, and this baseline is the canonical current-state document,
+not a place where spec content is mirrored.
 
-| Requirement | Attribute | Decision | Where it is decided | Evidence or record |
-|-------------|-----------|----------|---------------------|--------------------|
-| `NFR-1` | Security — ownership and eligibility enforced server-side | Needs change | `ADR-029` Rules 1, 6, 7; `ADR-026` Rule 1 supplies the customer id | `deliveries-service` holds no customer today; §8.3 |
-| `NFR-2` | Security — fail closed on an empty caller context | Needs change | `ADR-029` Rules 1 and 2 | The six duplicated CAP-07 guards admit unauthenticated callers; C7, `R-18` |
-| `NFR-3` | Concurrency — no double-booked slot | Needs change | `ADR-024` Rules 1-3; `ADR-028` Rules 1-2 | `ReplaceOneAsync` result discarded in `availability-service`; `R-19` |
-| `NFR-4` | Concurrency — no silent lost update | Needs change | `ADR-028` Rules 1, 2, 7 | `ADR-008`'s mapper model; `Order` has no version at all; `R-19` |
-| `NFR-5` | Data integrity — failed reschedule leaves prior state intact | Needs change | `ADR-024` Rules 1-4 (take before release in one mutation) | `ADR-011`; `R-19` |
-| `NFR-6` | Data integrity — no silent truncation of a submitted slot | Needs change | `ADR-024` Rule 5 (reject intra-day precision) | `SetDeliveryDate` truncates with `.Date`; `AsDaysSinceEpoch` discards the time; `R-20` |
-| `NFR-7` | Reliability — redelivery produces no second reservation | **At risk** | `ADR-028` Rules 5-7; `ADR-026` Rule 5 | The inbox decorator does not cover the HTTP command path; `R-15` |
-| `NFR-8` | Performance — schedule events reach the exchange within the dispatch interval | Sufficient | `ADR-012` | The outbox dispatch interval is unchanged by this work |
-| `NFR-9` | Performance — outcome observable before the operation record expires | Sufficient | `ADR-014` | `ASM-18`; the 300-second sliding expiry is unchanged |
-| `NFR-10` | Security — no internal detail in customer-facing responses | Sufficient | `ADR-023`, reinforced by `ADR-030` Rule 3 | The existing CAP-09 400-with-exception-message shape is recorded, and governed on new paths only |
-| `NFR-11` | Privacy — bounded instruction text, excluded from log sinks | Needs change | `ADR-026` Rule 6 | The unbounded verbatim `Notes` field is the precedent being avoided |
-| `NFR-12` | Usability — the reschedule screens meet a recognised accessibility bar | **At risk** | `ADR-021` — no client exists to hold the standard | §11.5 "Frontend quality rules: no position exists"; `R-17` |
-| `NFR-13` | Observability — every attempt correlated end to end | Needs change | `ADR-026` Rule 1 (the read answers locally); `ADR-027` `N8` (correlation across the new edge) | §10; `INF-4` |
-| `NFR-14` | Usability — a distinct reason per rejection class | Needs change | `ADR-030` Rules 1, 2, 6 | `ADR-023`; every CAP-09 error is a 400 today |
-| `NFR-15` | Maintainability — convention-correct names on the owning exchange | Needs change | `ADR-030` Rules 4 and 5 | C2 and `ADR-003`; the routing-key/queue divergence `G-09` records |
-| `NFR-16` | Portability — no runtime or toolkit deviation | Sufficient | `ADR-020` | C9; nothing in `ADR-024`…`ADR-030` requires a runtime change |
-| `NFR-17` | Data integrity — additive, backward-compatible persistence | Sufficient | `ADR-008`, applied by `ADR-025` Rule 1 and `ADR-026` Rule 1 | C8 — no migration tooling, so additive is the only safe shape |
-| `NFR-18` | Operational readiness — tests actually execute in the pipeline | Needs change | `ADR-018`, carried by `INF-6` | `availability-service`'s pipeline does not run its tests; `R-25` |
-| `NFR-19` | Scalability — bounded alternative-day retrieval | Needs change | `ADR-024` Rule 6 (at most fourteen ascending days) | C10 |
-| `NFR-20` | Availability — the synchronous dependency degrades to a readable failure | **At risk** | `ADR-010`, applied by `ADR-027` Rules 3 and 4 | §4.1 — `customers-service` is the platform's synchronous leaf, and `deliveries-service` gains its first outbound edge; `R-16`, `R-21` |
-| `NFR-21` | Observability — outbox depth and oldest-message age are alertable | Needs change | `ADR-028` Rule 5, carried by `INF-4` | §11.5 "Availability and latency: no position exists"; `R-23` |
-| `NFR-22` | Security — reserve and release carry the edge-bound customer identity | Needs change | `ADR-029` Rule 4 | `ReleaseResourceReservation` carries no customer identity today |
+So the assessment for **work item 14830** lives in its solution design report, as
+[`../../specs/14830/solution-design.md`](../../specs/14830/solution-design.md) §4.4, with the
+requirement list it is derived from in `intents/14830.md`. Nothing in this baseline depends on that
+table; what the 14830 work actually changed about **current state** is recorded in place — §4.1 for
+`deliveries-service`'s first outbound synchronous edge, §4.2 for its first inbound subscription, and
+§11.1 for the `ADR-024`…`ADR-030` records themselves.
+
+The same rule applies to any later work item: assess its requirements in its own specification, and
+change this baseline only where the platform's standing posture actually moves.
 
 ---
 
@@ -1444,7 +1432,7 @@ it. No new diagrams have been created here.
 |---------|-------------|---------------|
 | §1 | Context (C1) — six diagrams | The platform boundary and its actors, drawn from several perspectives |
 | §2 | Service dependency graphs — two diagrams plus a replication graph | §2.1 synchronous HTTP dependencies; §2.2 asynchronous exchange topology; plus the `customers-service` replication fan-out |
-| §3 | Runtime flow diagrams — five | End-to-end sequences (order making, reservation, delivery, identity, operation tracking). All five carry `[Confidence: partial]` |
+| §3 | Runtime flow diagrams — eight | End-to-end sequences. Five are drawn from evidence (order making, reservation, identity, the saga, delivery lifecycle) and carry `[Confidence: partial]`. Three are **recorded, not observed** — §3.6 browser sign-in (`ADR-021`), §3.7 reschedule confirmation and §3.8 delivery read with revalidation (`ADR-024`…`ADR-030`) — and carry `[Confidence: recorded by …]` |
 | §4 | Deployment views | §4.1 the Docker Compose topology diagram; §4.2 Compose-vs-PM2 comparison; §4.3 the four gateway configurations; §4.4 a doc-vs-code conflict; §4.5 build and release |
 | §5 | Data model — seven ER diagrams | One per service that owns a domain model |
 | §6 | Gap register GAP-1 … GAP-25 | Everything the views could not establish |
@@ -1456,10 +1444,20 @@ Diagram edges there carry an explicit confidence marker — `[confirmed]`, `[inf
 
 Two diagrams are embedded below because §4 of this document depends on them directly. Both were
 verified edge by edge against source configuration before embedding; both are reproduced **verbatim**
-from `architecture-views.md`. Verification found **three defects** — one under-drawn fan-out in the
+from `architecture-views.md` as it stands at this revision, including the three edges that artifact
+gained for work item 14830. Verification found **three defects** — one under-drawn fan-out in the
 synchronous graph and two mislocated edge labels in the asynchronous graph. They are named in full in
 §12.3 and carried as B6 in the closing section. The diagrams are embedded unaltered because this stage
 does not own `architecture-views.md`; read them with the §12.3 caveats in hand.
+
+> **Three edges here are recorded, not observed, and this baseline is a current-state document.**
+> `deliveries --> fabio`, `fabio --> avail` and `xor --> deliveries` carry a
+> `[recorded by ADR-02x]` label instead of `[confirmed]`. They describe behaviour decided by
+> `ADR-026` and `ADR-027` that **does not exist in the code today**: `deliveries-service` has no
+> `httpClient.services` entry, no outbound synchronous call and no inbound subscription at this base
+> ref (§4.1, §4.2). They are reproduced because dropping them would make these copies diverge from
+> the artifact that owns them, and the provenance label is what keeps the current-state reading
+> intact. Every other edge in both graphs is `[confirmed]` and is current behaviour.
 
 **Synchronous dependency graph** (`architecture-views.md` §2.1) — every HTTP call between services,
 showing which callers go through Fabio and which do not.
@@ -1495,6 +1493,8 @@ graph LR
     fabio -->|"gateway downstream only [confirmed]"| deliveries
     fabio -->|"gateway downstream only [confirmed]"| identity
     fabio -->|"gateway downstream only [confirmed]"| ops
+    deliveries -->|"httpClient.type fabio [recorded by ADR-027]"| fabio
+    fabio -->|"GET resource by id from deliveries [recorded by ADR-027]"| avail
 ```
 
 **Asynchronous dependency graph** (`architecture-views.md` §2.2) — the eight topic exchanges with
@@ -1552,12 +1552,13 @@ graph LR
     xor -->|"order_canceled deleted parcel_added_to_order parcel_deleted_from_order [confirmed]"| parcels
     xor -->|"order_created approved parcel_added_to_order vehicle_assigned_to_order [confirmed]"| om
     xde -->|"delivery_started completed failed [confirmed]"| orders
+    xor -->|"order events carrying customer delivery date and reserved resource [recorded by ADR-026]"| deliveries
     xom -->|"all 8 exchanges observed [confirmed]"| ops
     xid -->|"observed [confirmed]"| ops
     xor -->|"observed [confirmed]"| ops
 ```
 
-For the context views, the five runtime flows, the Compose deployment topology, and the seven ER
+For the context views, the eight runtime flows, the Compose deployment topology, and the seven ER
 diagrams, see **[`../architecture-views.md`](../architecture-views.md)** directly — they are not
 duplicated here.
 
@@ -1568,7 +1569,9 @@ Runtime relationships were compared across this narrative, `architecture-views.m
 synchronous callers and their targets; `ordermaker-service` as the sole non-Fabio caller; the eight
 exchanges and their owners; `ordermaker-service` as the sole cross-exchange publisher;
 `operations-service` subscribing to all eight exchanges; and the `customer_created` replication
-fan-out to three services.
+fan-out to three services. The three `[recorded by ADR-02x]` edges flagged above §12.2's first
+diagram are **excluded from this check** — they are decisions, not observations, so there is no
+current-state claim for them to agree or disagree with.
 
 **Four** inconsistencies were found and are **surfaced, not reconciled**: the Travis CI claim in
 `architecture-views.md` §4.5 (X1), the eight-versus-nine `AddRedis()` count in its GAP-9 (X2), the

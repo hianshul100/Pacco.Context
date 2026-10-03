@@ -179,6 +179,58 @@ violation produces an error somebody sees; "silent" means it does not.
 than asserted, and it fails loudly, which is why it is not a blocker: the `DO1` implementer meets it
 at the first compile rather than a customer meeting it in production.
 
+### 4.4 Quality-attribute disposition — one row per requirement
+
+One row per quality requirement `intents/14830.md` raises, stating what was decided about it and
+where the decision lives. This is the per-work-item counterpart to the platform's **standing**
+posture in [`architecture-baseline.md`](../../architecture-inventory/baselines/architecture-baseline.md)
+§11.5; that document records current state and deliberately does not carry a per-ticket table, so
+this is the only authoritative copy of these rows.
+
+- **Sufficient** — an existing recorded decision already covers the requirement and nothing changes.
+- **Needs change** — a service or a decision record changes for it.
+- **At risk** — the requirement cannot be met by architecture alone. Each carries an entry in
+  [`risk-constraint-gap-register.md`](../../architecture-inventory/risk-constraint-gap-register.md),
+  and each appears in §6.1 or §6.2 with a named owner.
+
+Reading the Evidence column. Bare section numbers are `architecture-baseline.md` sections and `C1`
+… `C10` are its binding constraints. Hyphenated ids belong to the register — `C-10`…`C-17`,
+`R-01`…`R-30`, `G-01`…`G-11`. `NFR-*` and `ASM-*` belong to `intents/14830.md`, and `INF-*` to the
+infrastructure obligations the ADRs raise. Everything else is local to this report — `D*` §3,
+`L*` §4.3, `X*` §5, `Y*` §6.2 — and `E*` is always qualified with its section, because §4.2's
+contract edges and §6.1's escalations both use that prefix.
+
+| Requirement | Attribute | Decision | Where it is decided | Evidence or record |
+|-------------|-----------|----------|---------------------|--------------------|
+| `NFR-1` | Security — ownership and eligibility enforced server-side | Needs change | `ADR-029` Rules 1, 6, 7; `ADR-026` Rule 1 supplies the customer id | `deliveries-service` holds no customer today; §8.3; `L1`, `L2` |
+| `NFR-2` | Security — fail closed on an empty caller context | Needs change | `ADR-029` Rules 1 and 2 | The six duplicated CAP-07 guards admit unauthenticated callers; C7, `R-18`, `L13`, §6.1 `E1` |
+| `NFR-3` | Concurrency — no double-booked slot | Needs change | `ADR-024` Rules 1-3; `ADR-028` Rules 1-2 | `ReplaceOneAsync` result discarded in `availability-service`; `R-19`, `L7` |
+| `NFR-4` | Concurrency — no silent lost update | Needs change | `ADR-028` Rules 1, 2, 7 | `ADR-008`'s mapper model; `Order` has no version at all; `R-19`, `L11`, `L4` |
+| `NFR-5` | Data integrity — failed reschedule leaves prior state intact | Needs change | `ADR-024` Rules 1-4 (take before release in one mutation) | `ADR-011`; `R-19`; `D1` |
+| `NFR-6` | Data integrity — no silent truncation of a submitted slot | Needs change | `ADR-024` Rule 5 (reject intra-day precision) | `SetDeliveryDate` truncates with `.Date`; `AsDaysSinceEpoch` discards the time; `R-20`, `L9`, `L12`, `X3a` |
+| `NFR-7` | Reliability — redelivery produces no second reservation | **At risk** | `ADR-028` Rules 5-7; `ADR-026` Rule 5 | The inbox decorator does not cover the HTTP command path; `R-15`, `X2a` |
+| `NFR-8` | Performance — schedule events reach the exchange within the dispatch interval | Sufficient | `ADR-012` | The outbox dispatch interval is unchanged by this work |
+| `NFR-9` | Performance — outcome observable before the operation record expires | Sufficient | `ADR-014` | `ASM-18`; the 300-second sliding expiry is unchanged; §4.2 `E7` |
+| `NFR-10` | Security — no internal detail in customer-facing responses | Sufficient | `ADR-023`, reinforced by `ADR-030` Rule 3 | The existing CAP-09 400-with-exception-message shape is recorded, and governed on new paths only; `L6`, `D11` |
+| `NFR-11` | Privacy — bounded instruction text, excluded from log sinks | Needs change | `ADR-026` Rule 6 | The unbounded verbatim `Notes` field is the precedent being avoided; `G-11`, `X6` |
+| `NFR-12` | Usability — the reschedule screens meet a recognised accessibility bar | **At risk** | `ADR-021` — no client exists to hold the standard | §11.5 "Frontend quality rules: no position exists"; `R-17`, `G-04`, `E8` |
+| `NFR-13` | Observability — every attempt correlated end to end | Needs change | `ADR-026` Rule 1 (the read answers locally); `ADR-027` `N8` (correlation across the new edge) | §10; `INF-4` |
+| `NFR-14` | Usability — a distinct reason per rejection class | Needs change | `ADR-030` Rules 1, 2, 6 | `ADR-023`; every CAP-09 error is a 400 today; `D10`, `L6`, `X5` |
+| `NFR-15` | Maintainability — convention-correct names on the owning exchange | Needs change | `ADR-030` Rules 4 and 5 | C2 and `ADR-003`; the routing-key/queue divergence; `R-24`, `X17` |
+| `NFR-16` | Portability — no runtime or toolkit deviation | Sufficient | `ADR-020` | C9; nothing in `ADR-024`…`ADR-030` requires a runtime change |
+| `NFR-17` | Data integrity — additive, backward-compatible persistence | Sufficient | `ADR-008`, applied by `ADR-025` Rule 1 and `ADR-026` Rule 1 | C8 — no migration tooling, so additive is the only safe shape; `C-14`, `L18`, `R-29`, `E3` |
+| `NFR-18` | Operational readiness — tests actually execute in the pipeline | Needs change | `ADR-018`, carried by `INF-6` | `availability-service`'s pipeline does not run its tests; `R-25`, `L19`, `X13`, `E6` |
+| `NFR-19` | Scalability — bounded alternative-day retrieval | Needs change | `ADR-024` Rule 6 (at most fourteen ascending days) | C10; `C-12`; `ASM-19` |
+| `NFR-20` | Availability — the synchronous dependency degrades to a readable failure | **At risk** | `ADR-010`, applied by `ADR-027` Rules 3 and 4 | §4.1 — `customers-service` is the platform's synchronous leaf, and `deliveries-service` gains its first outbound edge; `R-16`, `R-21`, `G-10`, `D8`, `E2` |
+| `NFR-21` | Observability — outbox depth and oldest-message age are alertable | Needs change | `ADR-028` Rule 5, carried by `INF-4` | §11.5 "Availability and latency: no position exists"; `R-23`, `G-03`, `X14` |
+| `NFR-22` | Security — reserve and release carry the edge-bound customer identity | Needs change | `ADR-029` Rule 4 | `ReleaseResourceReservation` carries no customer identity today; `L16`, `L8`, `X4` |
+
+**Three requirements are at risk and none of the three is at risk for an architectural reason.**
+`NFR-7` depends on where the inbox decorator actually sits, which is an implementation fact nobody
+has recorded (`Y1`). `NFR-12` names a standard against a platform with no frontend at all. `NFR-20`
+cannot be assessed until a timeout exists, and no availability target exists to justify one against.
+Each has a named owner: §6.1 `E2` for `NFR-20`, §6.1 `E8` for `NFR-12`, and §5 `X2a` for `NFR-7`.
+
 ## 5. Downstream design obligations
 
 | # | Obligation | Owner stage | What must be verified |
