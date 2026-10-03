@@ -304,13 +304,19 @@ None found for this record. `ADR-009` describes the replica pattern accurately, 
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Decide the minimum acceptable detection for a stale replica before this ships. Full reconciliation is out of scope; a count-comparison check or an age alarm on the replicated date is not. Without one, a dropped message is permanently invisible (`R-26`) | Platform architect with the platform owner | Before `DO1` ships |
-| `FA2` | **[ACTION NOW]** Decide what the customer-facing list does when one order has two delivery documents — show one, show both, or refuse. Today the answer is "whichever Mongo returns first" (`R-27`) | Product owner with the `DO1` implementer | Before `DO1` ships |
-| `FA3` | **[handled later by HLS]** Confirm, from CAP-09's configuration, whether the inbox decorator's de-duplication is actually active, and record the answer. Rule 5's idempotence is a handler obligation either way; this decides whether the decorator helps or is decorative | `DO1` implementer | During `DO1` high-level design |
-| `FA4` | **[handled later by HLS]** Fix the instruction length bound as a number, and add the instruction field to the redaction set. `NFR-11` requires both; neither value exists yet | `DO3` implementer with the product owner | During `DO3` high-level design |
-| `FA5` | **[handled later by DevOps]** Add consumer-lag and queue-depth signal for CAP-09's new queue. `ADR-021` records that the platform has none today, and this record gives CAP-09 its first queue | Platform owner | Before `DO1` reaches a shared environment |
+| `FA1` | **[ACTION NOW]** Decide the minimum acceptable detection for a stale replica before this ships. Full reconciliation is out of scope; a count-comparison check or an age alarm on the replicated date is not. Without one, a dropped message is permanently invisible (`R-26`) | Platform architect with the platform owner | **2026-12-05** — before `DO1` ships |
+| `FA2` | **[ACTION NOW]** Decide what the customer-facing list does when one order has two delivery documents — show one, show both, or refuse. Today the answer is "whichever Mongo returns first" (`R-27`) | Product owner with the `DO1` implementer | **2026-12-05** — before `DO1` ships |
+| `FA3` | **[handled later by HLS]** Confirm, from CAP-09's configuration, whether the inbox decorator's de-duplication is actually active, and record the answer. Rule 5's idempotence is a handler obligation either way; this decides whether the decorator helps or is decorative | `DO1` implementer | **2026-10-24** — during `DO1` high-level design |
+| `FA4` | **[handled later by HLS]** Fix the instruction length bound as a number, and add the instruction field to the redaction set. `NFR-11` requires both; neither value exists yet | `DO3` implementer with the product owner | **2026-10-24** — during `DO3` high-level design |
+| `FA5` | **[handled later by DevOps]** Add consumer-lag and queue-depth signal for CAP-09's new queue. `ADR-021` records that the platform has none today, and this record gives CAP-09 its first queue | Platform owner | **2026-11-21** — before `DO1` reaches a shared environment |
 
 ## Assumptions, Blockers & Open Questions
 

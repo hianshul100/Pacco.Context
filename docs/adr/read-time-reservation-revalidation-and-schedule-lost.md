@@ -185,9 +185,11 @@ sequenceDiagram
         else the reservation is gone
             AV-->>DEL: resource without that reservation
             DEL-->>GW: delivery marked schedule lost - needs rescheduling
+        else the call fails or exceeds the timeout
+            DEL-->>GW: delivery marked revalidation unavailable
         end
-    else the call fails or exceeds the timeout
-        DEL-->>GW: delivery with revalidation unavailable
+    else no resource id or no date is recorded
+        DEL-->>GW: delivery as recorded, with no revalidation attempted and no outbound call
     end
     GW-->>CUS: response
 ```
@@ -282,13 +284,19 @@ None found for this record.
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[handled later by HLS]** Decide how schedule-lost and revalidation-unavailable are expressed inside the unchanged delivery contract — an additive field is the obvious answer, but the shape is a contract decision | `DO1` implementer with the platform architect | During `DO1` high-level design |
-| `FA2` | **[ACTION NOW]** Fix the revalidation timeout as a number, in configuration, before this path is enabled. `NFR-20` cannot be assessed against an unspecified timeout, and the default on an unconfigured client is effectively unbounded | Platform owner with the `DO1` implementer | Before `DO1` ships |
-| `FA3` | **[handled later by HLS]** Decide whether the schedule-lost observation is persisted on the delivery record. If it is, Rule 5's precedence rule is binding — a fresh read always wins | `DO1` implementer | During `DO1` high-level design |
-| `FA4` | **[handled later by DevOps]** Issue CAP-09's service-identity client certificate and the configuration to present it, and record where it is stored (`INF-3`). Until this exists the path cannot be enabled (`B1`) | Platform owner | Before `DO1` reaches a shared environment |
-| `FA5` | **[handled later by DevOps]** Add a success-rate and latency signal for the new CAP-09-to-CAP-04 edge, so a persistently failing revalidation is distinguishable from nobody rescheduling (`ADR-021`) | Platform owner | Before `DO1` reaches a shared environment |
+| `FA1` | **[handled later by HLS]** Decide how schedule-lost and revalidation-unavailable are expressed inside the unchanged delivery contract — an additive field is the obvious answer, but the shape is a contract decision | `DO1` implementer with the platform architect | **2026-10-24** — during `DO1` high-level design |
+| `FA2` | **[ACTION NOW]** Fix the revalidation timeout as a number, in configuration, before this path is enabled. `NFR-20` cannot be assessed against an unspecified timeout, and the default on an unconfigured client is effectively unbounded | Platform owner with the `DO1` implementer | **2026-12-05** — before `DO1` ships |
+| `FA3` | **[handled later by HLS]** Decide whether the schedule-lost observation is persisted on the delivery record. If it is, Rule 5's precedence rule is binding — a fresh read always wins | `DO1` implementer | **2026-10-24** — during `DO1` high-level design |
+| `FA4` | **[handled later by DevOps]** Issue CAP-09's service-identity client certificate and the configuration to present it, and record where it is stored (`INF-3`). Until this exists the path cannot be enabled (`B1`) | Platform owner | **2026-11-21** — before `DO1` reaches a shared environment |
+| `FA5` | **[handled later by DevOps]** Add a success-rate and latency signal for the new CAP-09-to-CAP-04 edge, so a persistently failing revalidation is distinguishable from nobody rescheduling (`ADR-021`) | Platform owner | **2026-11-21** — before `DO1` reaches a shared environment |
 
 ## Assumptions, Blockers & Open Questions
 

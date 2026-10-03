@@ -191,8 +191,10 @@ and what must be verified before the risk can be called closed.
 - **Who must act.** The `DO2` implementer during high-level design. `ADR-026` `FA3` separately
   confirms whether the decorator is active at all for CAP-09's configuration, so the answer is
   recorded rather than assumed.
-- **Must verify.** `ADR-028` `N7`: replay the same reschedule request and assert one reservation and
-  one history entry. Run it in **both** gateway write modes, because only one of them has the
+- **Must verify.** Carried as downstream obligation `X2a` in
+  [`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5, so this does not rest
+  on the register alone. `ADR-028` `N7`: replay the same reschedule request and assert one reservation
+  and one history entry. Run it in **both** gateway write modes, because only one of them has the
   decorator.
 - **Residual: Medium.** Handler idempotence is a discipline enforced by tests, not by infrastructure.
 
@@ -264,7 +266,9 @@ and what must be verified before the risk can be called closed.
 - **Who must act.** The `DO2` implementer during high-level design.
 - **Must verify.** `ADR-024`'s rejection test, plus `ADR-027` `N6` — drive the revalidation
   comparison with a timestamped date and assert it yields the same verdict as the midnight case or an
-  explicit rejection, never a silent mismatch.
+  explicit rejection, never a silent mismatch. The read-side half is carried as downstream obligation
+  `X3a` in [`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5, so it has an
+  owning stage rather than living only in this entry.
 - **Residual: Low** once rejection replaces truncation on the new path. The two existing truncations
   stay as they are, which is why `orders-service` `Q-6` remains open.
 

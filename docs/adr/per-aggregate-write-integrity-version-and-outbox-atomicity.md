@@ -271,14 +271,20 @@ not an exactly-once mechanism for `DO2`'s edge write.
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[handled later by HLS]** Fix one predicate form — strict equality or the existing less-than — and apply it identically in all three repositories, so Rule 7's three copies do not drift on day one | `DO2` implementer with the platform architect | During `DO2` high-level design |
-| `FA2` | **[ACTION NOW]** Enumerate the existing `Order` and `Delivery` write paths that will begin returning conflicts, and confirm each caller handles one. This changes behaviour on paths `DO2` does not otherwise touch | `DO2` implementer with the platform owner | Before `DO2` ships |
-| `FA3` | **[ACTION NOW]** Confirm, per environment, that the datastore deployment supports transactional writes before `disableTransactions` is set to false. A single-node deployment does not, and the setting will fail at runtime rather than at startup | Platform owner | Before `DO2` ships |
-| `FA4` | **[handled later by DevOps]** Make CAP-04's pipeline execute its tests (`INF-6`, `ADR-018`). Every test in §8 that runs in CAP-04 is otherwise written and never run (`R-25`) | Platform owner | Before `DO2` ships |
-| `FA5` | **[handled later by DevOps]** Add outbox depth and oldest-unpublished-age signal for the three services in scope (`INF-4`, `NFR-21`). An outbox that stops draining is currently indistinguishable from an idle one (`R-23`) | Platform owner | Before `DO2` reaches a shared environment |
-| `FA6` | **[handled later by LLD]** Write the canonical pattern entry for scoped write integrity, and record in it which aggregates are covered and which are not, so the inconsistency in §6.2 is discoverable from the catalog (`R-30`) | `DO2` implementer | During `DO2` low-level design |
+| `FA1` | **[handled later by HLS]** Fix one predicate form — strict equality or the existing less-than — and apply it identically in all three repositories, so Rule 7's three copies do not drift on day one | `DO2` implementer with the platform architect | **2026-12-08** — during `DO2` high-level design |
+| `FA2` | **[ACTION NOW]** Enumerate the existing `Order` and `Delivery` write paths that will begin returning conflicts, and confirm each caller handles one. This changes behaviour on paths `DO2` does not otherwise touch | `DO2` implementer with the platform owner | **2027-01-30** — before `DO2` ships |
+| `FA3` | **[ACTION NOW]** Confirm, per environment, that the datastore deployment supports transactional writes before `disableTransactions` is set to false. A single-node deployment does not, and the setting will fail at runtime rather than at startup | Platform owner | **2027-01-30** — before `DO2` ships |
+| `FA4` | **[handled later by DevOps]** Make CAP-04's pipeline execute its tests (`INF-6`, `ADR-018`). Every test in §8 that runs in CAP-04 is otherwise written and never run (`R-25`) | Platform owner | **2027-01-30** — before `DO2` ships |
+| `FA5` | **[handled later by DevOps]** Add outbox depth and oldest-unpublished-age signal for the three services in scope (`INF-4`, `NFR-21`). An outbox that stops draining is currently indistinguishable from an idle one (`R-23`) | Platform owner | **2027-01-16** — before `DO2` reaches a shared environment |
+| `FA6` | **[handled later by LLD]** Write the canonical pattern entry for scoped write integrity, and record in it which aggregates are covered and which are not, so the inconsistency in §6.2 is discoverable from the catalog (`R-30`) | `DO2` implementer | **2026-12-22** — during `DO2` low-level design |
 
 ## Assumptions, Blockers & Open Questions
 

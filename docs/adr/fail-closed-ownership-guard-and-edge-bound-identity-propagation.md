@@ -272,13 +272,19 @@ Applies `patterns/observability/structured-logging-with-property-redaction.md` f
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Treat the unauthenticated-caller bypass in the six existing CAP-07 handlers as a live finding and give it an owner and a date, independent of this feature. This record prevents new occurrences; it does not fix the existing ones (`R-18`) | Platform owner with the platform architect | Decision before `DO2` ships; fix on its own schedule |
-| `FA2` | **[handled later by LLD]** Converge CAP-07's six guard copies onto the single fail-closed guard from Rule 3, once `FA1` has an owner | `DO2` implementer | During `DO2` low-level design |
-| `FA3` | **[ACTION NOW]** Decide whether the existing unauthorized `GET /deliveries/{deliveryId}` is tightened, and identify who consumes it today. It is a live contract and this record deliberately leaves it alone | Platform owner with the product owner | Before `DO1` ships |
-| `FA4` | **[handled later by HLS]** Fix the additive customer-identity field name on the release message and confirm publisher and consumer agree, per `ADR-030` and `NFR-15` | `DO2` implementer | During `DO2` high-level design |
-| `FA5` | **[handled later by DevOps]** Add the gateway-binding assertion from `N7` to the pipeline that gates gateway configuration changes, so a typo in `ntrada.yml` fails a build rather than a customer | Platform owner | Before `DO2` reaches a shared environment |
+| `FA1` | **[ACTION NOW]** Treat the unauthenticated-caller bypass in the six existing CAP-07 handlers as a live finding and give it an owner and a date, independent of this feature. This record prevents new occurrences; it does not fix the existing ones (`R-18`) | Platform owner with the platform architect | **2027-01-30** — decision before `DO2` ships; fix on its own schedule |
+| `FA2` | **[handled later by LLD]** Converge CAP-07's six guard copies onto the single fail-closed guard from Rule 3, once `FA1` has an owner | `DO2` implementer | **2026-12-22** — during `DO2` low-level design |
+| `FA3` | **[ACTION NOW]** Decide whether the existing unauthorized `GET /deliveries/{deliveryId}` is tightened, and identify who consumes it today. It is a live contract and this record deliberately leaves it alone | Platform owner with the product owner | **2026-12-05** — before `DO1` ships |
+| `FA4` | **[handled later by HLS]** Fix the additive customer-identity field name on the release message and confirm publisher and consumer agree, per `ADR-030` and `NFR-15` | `DO2` implementer | **2026-12-08** — during `DO2` high-level design |
+| `FA5` | **[handled later by DevOps]** Add the gateway-binding assertion from `N7` to the pipeline that gates gateway configuration changes, so a typo in `ntrada.yml` fails a build rather than a customer | Platform owner | **2027-01-16** — before `DO2` reaches a shared environment |
 
 ## Assumptions, Blockers & Open Questions
 

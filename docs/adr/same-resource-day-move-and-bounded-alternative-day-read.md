@@ -329,12 +329,18 @@ reservation rule.
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Fix the integer value of the standard customer-reschedule priority and record it as a named constant with its scale. Nothing in the repository defines the scale, so implementation cannot start without it | Product owner with the platform architect | Before `DO2` high-level design starts |
-| `FA2` | **[ACTION NOW]** Decide and record the behaviour when the alternative-day read is asked for a resource that does not exist. The existing point read returns 404 on null; the new read must not return an empty list that reads as "no days available" | Platform architect | With `DO1` high-level design |
-| `FA3` | **[handled later by HLS]** Size the alternative-day computation against a resource carrying several years of reservations, and record whether an index or a stored projection is needed | `DO1` implementer | During `DO1` low-level design |
-| `FA4` | **[handled later by devops]** Make CAP-04's test suite execute in its pipeline and block image publication on failure, so `N1`–`N8` are gates rather than files (`R-25`, `NFR-18`) | Owner of `Pacco.Services.Availability` — unassigned, see `G-01` | Before the first `DO2` image is published |
+| `FA1` | **[ACTION NOW]** Fix the integer value of the standard customer-reschedule priority and record it as a named constant with its scale. Nothing in the repository defines the scale, so implementation cannot start without it | Product owner with the platform architect | **2026-11-24** — before `DO2` high-level design starts |
+| `FA2` | **[ACTION NOW]** Decide and record the behaviour when the alternative-day read is asked for a resource that does not exist. The existing point read returns 404 on null; the new read must not return an empty list that reads as "no days available" | Platform architect | **2026-10-24** — with `DO1` high-level design |
+| `FA3` | **[handled later by HLS]** Size the alternative-day computation against a resource carrying several years of reservations, and record whether an index or a stored projection is needed | `DO1` implementer | **2026-11-07** — during `DO1` low-level design |
+| `FA4` | **[handled later by devops]** Make CAP-04's test suite execute in its pipeline and block image publication on failure, so `N1`–`N8` are gates rather than files (`R-25`, `NFR-18`) | Owner of `Pacco.Services.Availability` — unassigned, see `G-01` | **2027-01-16** — before the first `DO2` image is published |
 
 ## Assumptions, Blockers & Open Questions
 

@@ -599,7 +599,7 @@ sequenceDiagram
     participant GW as "api-gateway sync config"
     participant FAB as "Fabio 9999"
     participant ORD as "orders-service"
-    participant PAR as "parcels-service"
+    participant PCL as "parcels-service"
     participant ODB as "MongoDB orders-service"
     participant MQ as "RabbitMQ orders exchange"
     participant OPS as "operations-service"
@@ -618,8 +618,8 @@ sequenceDiagram
     GW->>FAB: downstream call [confirmed]
     FAB->>ORD: AddParcelToOrder [confirmed]
     ORD->>FAB: GET parcel by id [confirmed]
-    FAB->>PAR: forward parcel lookup [confirmed]
-    PAR-->>ORD: parcel [confirmed]
+    FAB->>PCL: forward parcel lookup [confirmed]
+    PCL-->>ORD: parcel [confirmed]
     ORD->>ODB: embed parcel in the order document [confirmed]
     ORD->>MQ: publish parcel_added_to_order OrderId ParcelId [confirmed]
     MQ->>OPS: deliver every orders message to the observer [confirmed]
@@ -1415,7 +1415,7 @@ erDiagram
         DateTime DeliveryDate "replica - recorded by ADR-026"
         Guid ReservedResourceId "replica - recorded by ADR-026"
         string DeliveryInstructions "bounded - recorded by ADR-026"
-        bool ScheduleLost "recorded by ADR-026 and ADR-027"
+        enum ScheduleOutcome "three-valued - confirmed, schedule-lost, revalidation-unavailable. Recorded by ADR-026 Rule 1 and ADR-027 Rule 5. Whether it is persisted at all is open to ADR-027 FA3"
         int Version "persisted - recorded by ADR-028"
     }
     DELIVERY_REGISTRATION {
@@ -1437,8 +1437,8 @@ HTTP client for `orders-service` and subscribes to no external event `[confirmed
 be created against an order identifier that does not exist.
 
 **The four original fields are observed; everything else in this diagram is recorded.** The replica
-fields, the instructions, the lost-schedule indicator, the embedded history and the persisted
-`Version` are decided by `ADR-026`, `ADR-027` and `ADR-028` and do not exist in the code today. Three
+fields, the instructions, the schedule outcome, the embedded history and the persisted
+`Version` are decided by `ADR-026`, `ADR-027` and `ADR-028` and do not exist in the code today. Four
 points are worth carrying with the diagram. Every added field is nullable or empty-by-default,
 because the platform has no migration tooling and nothing will backfill the deliveries already
 written. `Version` is the one field the entity already declares — `Delivery.Version` and
@@ -1446,6 +1446,17 @@ written. `Version` is the one field the entity already declares — `Delivery.Ve
 concurrency-safe in source and is last-writer-wins in production; `ADR-028` is what makes the
 declaration true. And the embedded history is append-only with full retention per `ASM-13`, which
 means it grows without bound inside a document that has a hard size ceiling.
+
+**`ScheduleOutcome` is drawn as a three-valued attribute, not as a boolean, and its presence in this
+diagram is conditional.** `ADR-027` Rule 4 names three outcomes a caller must be able to tell apart —
+confirmed, schedule-lost and revalidation-unavailable — and a two-valued field collapses the third
+into one of the other two, which is precisely the "presented an unverified answer as a confirmed one"
+failure Rule 4 forbids. The authoritative answer is **computed at read time** against CAP-04;
+`ADR-027` Rule 5 leaves open whether it is also persisted on the delivery record, and `FA3` owns that
+decision. If `FA3` decides it is not persisted, this attribute leaves the entity and nothing else in
+the diagram changes. If it is persisted, Rule 5's precedence rule binds — a fresh read always wins
+over the stored observation. The concrete expression inside the unchanged delivery contract is
+`ADR-027` `FA1`, delegated to HLS as `Y4`.
 
 ### 5.6 identity-service — [Confidence: confirmed]
 

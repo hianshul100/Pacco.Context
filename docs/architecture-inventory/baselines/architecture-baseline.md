@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 4** — `ADR-024`…`ADR-030` recorded and mapped into §11.1. §4.1 records the first synchronous edge out of `deliveries-service`; §4.2 records its first inbound subscription. The second `### 11.4` heading (quality-attribute assessment) is renumbered `### 11.5`, and `### 11.6` adds the per-requirement quality-attribute assessment for work item 14830. **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 4** — `ADR-024`…`ADR-030` recorded and mapped into §11.1, whose preamble and corpus accounting are corrected to the thirty-record corpus and now account for `ADR-022` and `ADR-023` explicitly. §4.1 records the first synchronous edge out of `deliveries-service`; §4.2 records its first inbound subscription. The second `### 11.4` heading (quality-attribute assessment) is renumbered `### 11.5`, and `### 11.6` adds the per-requirement quality-attribute assessment for work item 14830. **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -1270,9 +1270,20 @@ unreachable still answers `ping` and stays in the Consul registry.
 
 > **Correction.** An earlier revision of this section stated that no ADR files exist anywhere. That
 > was true when this baseline was first authored and is now stale: `docs/adr/` in this repository
-> holds `ADR-001`…`ADR-021`. The statement is corrected here rather than left standing. No decision
+> holds `ADR-001`…`ADR-030`. The statement is corrected here rather than left standing. No decision
 > in the corpus was invented or back-filled from code — `ADR-001`…`ADR-020` were reconstructed from
 > evidence by the `adr_generation` stage, and each carries its own evidence table.
+
+**Corpus accounting — thirty records, all accounted for.** The corpus has grown twice since this
+section was first corrected, and the accounting is stated in full here so no record is silently
+absent:
+
+| Range | How it entered the corpus | Where it is catalogued |
+|-------|---------------------------|------------------------|
+| `ADR-001`…`ADR-020` | Reconstructed from repository evidence by `adr_generation` | The table below, or [`../adr-candidates.md`](../adr-candidates.md) |
+| `ADR-021` | Recorded by `architecture_evolution_generation` for work item 13652 — `Pacco.Web` as the standalone browser client | The table below |
+| `ADR-022`, `ADR-023` | Recorded by `architecture_evolution_generation` for work item 13652 — the browser session bound to access-token expiry, and the browser-boundary error presentation contract. **Both are client-boundary records: neither changes a statement in this baseline, which is why neither appears in the table below** | `docs/adr/` only. §11.6 cites `ADR-023` against `NFR-10` and `NFR-14`. [`../adr-candidates.md`](../adr-candidates.md)'s candidate-to-ADR mapping stops at `ADR-021` and has not been extended to either — recorded here as an observation rather than left as a silent omission |
+| `ADR-024`…`ADR-030` | Recorded by `architecture_evolution_generation` for work item 14830 | The table below |
 
 The ADRs that constrain the platform's structure as described in this document:
 
@@ -1296,7 +1307,10 @@ The ADRs that constrain the platform's structure as described in this document:
 
 The remaining records — `ADR-001`, `ADR-003`, `ADR-005`, `ADR-008`…`ADR-016`, `ADR-019` — are
 catalogued in [`../adr-candidates.md`](../adr-candidates.md), which also carries the candidate-to-ADR
-mapping and the set of topics deliberately excluded from the corpus.
+mapping and the set of topics deliberately excluded from the corpus. `ADR-022` and `ADR-023` sit at
+the browser boundary `ADR-021` established — the session lifetime and the error presentation contract
+are properties of the client, not of the eleven deployables this document describes — so they bite
+nowhere in this baseline's structural statements and are not mapped into the table above.
 
 **The governance catalog agrees.** The CAKE knowledge graph for tenant `6KV9DZ9V` returns the same
 corpus, with each ADR linked to the capability it governs. An earlier query against a different

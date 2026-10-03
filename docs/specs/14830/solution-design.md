@@ -185,7 +185,9 @@ at the first compile rather than a customer meeting it in production.
 |---|-----------|-------------|-----------------------|
 | `X1` | Wire CAP-09's first inbound subscription at every registration point, and confirm whether the inbox decorator's de-duplication is actually active for its configuration | `hls` — `INF-1`, `ADR-026` `FA3` | `ADR-026` `N5`, `N6`, `N7`: idempotence, staleness rejection, and the publisher key asserted against the consumer binding in one test |
 | `X2` | Implement the version-conditioned write **with the result inspected** in all three repositories, with one agreed predicate form, and turn the outbox transactional | `hls` — `INF-2`, `ADR-028` `FA1` | `ADR-028` `N1`-`N4`, `N8`, `N9`. `N4` is the one that matters: a conflicted write publishes nothing |
+| `X2a` | Make the reschedule handler idempotent **on the HTTP path**, not by relying on the inbox decorator, which is not on that path. `R-15` is the register entry | `hls` — `ADR-028` `FA1`, `ADR-026` `FA3` | `ADR-028` `N7`: replay the same reschedule request, assert one reservation and one history entry. Run it in **both** gateway write modes — only the asynchronous one puts the decorator on the path, which is what makes the exposure environment-dependent and easy to miss |
 | `X3` | Build CAP-09's outbound client with an explicit timeout, the degraded branch, and the service-identity certificate | `hls` — `INF-3`, `ADR-027` `FA1`-`FA3` | `ADR-027` `N3`, `N4`, `N5`, `N7`, `N9` |
+| `X3a` | Perform the revalidation comparison in CAP-04's stored day space, so the read side agrees with `ADR-024` Rule 5's write-side rejection of intra-day precision. `R-20` is the register entry, and it names this as the read-side counterpart | `hls` — `ADR-027` Rule 1, `ADR-024` Rule 5 | `ADR-027` `N6`: drive the comparison with a timestamped date and assert the same verdict as the midnight case, or an explicit rejection — never a silent mismatch |
 | `X4` | Carry the edge-bound customer identity into the reserve **and** release legs, and name the additive field so publisher and consumer agree | `hls` — `INF-5`, `ADR-029` `FA4` | `ADR-029` `N6`: a release with a mismatched customer is explicitly refused, not silently returned |
 | `X5` | Fix the five rejection code literals, the customer-facing message per class, and the new message names on each exchange | `hls` — `ADR-030` `FA1`, `FA2` | `ADR-030` `N1`, `N2`, `N6`, `N7` |
 | `X6` | Fix the instruction length bound as a number and add the instruction field to the redaction set | `hls` — `ADR-026` `FA4`, `G-11` | `ADR-026` `N8`, `N9`: over-length text rejected and nothing persisted; the text never appears in a log line |
@@ -200,6 +202,32 @@ at the first compile rather than a customer meeting it in production.
 | `X15` | Issue CAP-09's service-identity client certificate and record where service certificates are stored | `devops` — `INF-3`, `G-09` | `ADR-027` `N7`: CAP-04 refuses the revalidation call when it carries no service identity |
 | `X16` | Add consumer-lag and queue-depth signal for CAP-09's new queue, and success-rate and latency signal for the new CAP-09-to-CAP-04 edge | `devops` — `ADR-026` `FA5`, `ADR-027` `FA5` | That a persistently failing revalidation is distinguishable from nobody rescheduling |
 | `X17` | Add the gateway-binding assertion and the cross-boundary message-name assertion to the pipelines that gate gateway configuration and CAP-04/CAP-09 builds | `devops` — `ADR-029` `FA5`, `ADR-030` `FA4` | `ADR-029` `N7` and `ADR-030` `N6`: a typo in `ntrada.yml` fails a build rather than a customer |
+
+### 5.1 Wave calendar — the dates every ADR follow-up action resolves to
+
+The `By` column in `ADR-024`…`ADR-030` §11 carries a calendar date followed by the milestone it comes
+from. The milestones are the binding commitment; the dates below are the one place those milestones
+are converted into a calendar, so the same milestone never resolves to two different dates across
+seven records. **Wave 1 is `DO1` and `DO3`; wave 2 is `DO2`**, and §4.2 records why that order is load
+bearing rather than merely sequential.
+
+| Milestone | Date | Wave |
+|-----------|------|------|
+| `DO1` / `DO3` high-level design complete | **2026-10-24** | 1 |
+| `DO1` low-level design complete | **2026-11-07** | 1 |
+| `DO1` reaches a shared environment | **2026-11-21** | 1 |
+| `DO1` ships | **2026-12-05** | 1 |
+| `DO2` high-level design starts | **2026-11-24** | 2 |
+| `DO2` high-level design complete | **2026-12-08** | 2 |
+| `DO2` low-level design complete | **2026-12-22** | 2 |
+| `DO2` reaches a shared environment, first `DO2` image published | **2027-01-16** | 2 |
+| `DO2` ships | **2027-01-30** | 2 |
+
+Two notes on reading these dates. They are **planning dates for follow-up actions, not a delivery
+commitment** — the one that genuinely gates a release is `ADR-027` `FA4`, the service-identity
+certificate, which `ADR-027` `B1` records as a blocker rather than a date. And `ADR-029` `FA1` is the
+one entry whose date covers only the **decision**: the fix to the six live fail-open guards runs on a
+schedule its own owner sets, because `E1` in §6.1 deliberately keeps it out of this feature.
 
 ## 6. Open items and escalations
 
@@ -217,7 +245,7 @@ at the first compile rather than a customer meeting it in production.
 | `E8` | **The accessibility bar has no owner, no method and no implementation to hold it.** `NFR-12` names WCAG 2.1 AA against a platform with no frontend standard of any kind | **Fix a testable standard:** the platform architect with the product owner. `R-17`, `G-04` | Nothing immediately. Retrofitting after a component library and interaction model are chosen is materially more expensive, which is why the window is now |
 | `E9` | **Decide whether CAP-09's existing unauthorized delivery read and exception-message-as-reason behaviour are corrected in this increment.** Both are live contracts with consumers this run cannot enumerate | **Decide:** the platform owner with the product owner. `ADR-029` `FA3`, `ADR-030` `FA3` | Nothing in this feature. Two error shapes and two authorization postures coexist in one service until somebody decides |
 | `E10` | **Record, from a running environment, whether a vehicle id and an availability resource id actually hold the same value.** This run removes the reschedule's dependence on the answer; the existing order-advancing correlation still rests on it entirely | **Observe and record:** the platform owner. `ADR-025` `FA3`, `G-08` | Nothing in this feature. A platform-wide correlation keeps resting on an assumption nobody has checked |
-| `E11` | **All twenty-nine ADRs are `Proposed` with `Deciders: Unassigned`**, because no repository has an owner anywhere in the fourteen clones | **Name owners:** the platform owner. `G-01`, `R-12` | Approval of `ADR-024`…`ADR-030`. The records are complete and nobody can accept them |
+| `E11` | **All thirty ADRs are `Proposed` with `Deciders: Unassigned`**, because no repository has an owner anywhere in the fourteen clones | **Name owners:** the platform owner. `G-01`, `R-12` | Approval of `ADR-024`…`ADR-030`. The records are complete and nobody can accept them |
 
 ### 6.2 Delegated downstream — no action now
 

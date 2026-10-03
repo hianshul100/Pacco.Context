@@ -277,12 +277,18 @@ None found for this record.
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[handled later by HLS]** Fix the five literal code strings and the customer-facing message for each, and record them where both the service and the client read them from one source | `DO2` implementer with the product owner | During `DO2` high-level design |
-| `FA2` | **[handled later by HLS]** Fix the names of the new reschedule command and event on each exchange, following Rule 4, and record the single literal each side references | `DO2` implementer | During `DO2` high-level design |
-| `FA3` | **[ACTION NOW]** Decide whether CAP-09's existing exception-message-as-reason behaviour is corrected in this increment or scheduled separately. It leaks internal detail on live routes today and this record does not change it | Platform owner with the platform architect | Before `DO2` ships |
-| `FA4` | **[handled later by DevOps]** Add `N6`'s cross-boundary name assertion to the pipelines for CAP-04 and CAP-09. It is the only control against `GAP-6` recurring, and `ADR-018` records that CAP-04's pipeline does not currently run tests at all (`R-25`) | Platform owner | Before `DO2` reaches a shared environment |
+| `FA1` | **[handled later by HLS]** Fix the five literal code strings and the customer-facing message for each, and record them where both the service and the client read them from one source | `DO2` implementer with the product owner | **2026-12-08** — during `DO2` high-level design |
+| `FA2` | **[handled later by HLS]** Fix the names of the new reschedule command and event on each exchange, following Rule 4, and record the single literal each side references | `DO2` implementer | **2026-12-08** — during `DO2` high-level design |
+| `FA3` | **[ACTION NOW]** Decide whether CAP-09's existing exception-message-as-reason behaviour is corrected in this increment or scheduled separately. It leaks internal detail on live routes today and this record does not change it | Platform owner with the platform architect | **2027-01-30** — before `DO2` ships |
+| `FA4` | **[handled later by DevOps]** Add `N6`'s cross-boundary name assertion to the pipelines for CAP-04 and CAP-09. It is the only control against `GAP-6` recurring, and `ADR-018` records that CAP-04's pipeline does not currently run tests at all (`R-25`) | Platform owner | **2027-01-16** — before `DO2` reaches a shared environment |
 
 ## Assumptions, Blockers & Open Questions
 

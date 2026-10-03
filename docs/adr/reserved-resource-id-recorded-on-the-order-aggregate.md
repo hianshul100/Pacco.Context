@@ -251,11 +251,17 @@ None found for this record.
 
 ## 11. Follow-Up Actions
 
+**Reading the `By` column.** Each entry carries a calendar date followed by the delivery milestone
+that date is derived from. The dates come from the one work-item 14830 wave calendar in
+[`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5.1, so every record in
+`ADR-024`…`ADR-030` resolves the same milestone to the same date. If the wave calendar moves, that
+section is the single place to change and these dates move with it; the milestone is what binds.
+
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Decide what happens to orders already in flight when this ships — accept that they cannot be rescheduled until reserved again, or commission a hand-written backfill. There is no migration tooling, so the second option is a script somebody has to own (`R-29`) | Product owner with the platform architect | Before `DO2` ships |
-| `FA2` | **[handled later by HLS]** Decide whether the recorded resource id is exposed on `OrderDto`. It is an internal correlation today; exposing it changes a public read contract | `DO2` implementer with the platform architect | During `DO2` high-level design |
-| `FA3` | **[ACTION NOW]** Record, from a running environment, whether `resourceId` and `vehicleId` actually hold the same value (`G-08`). This record no longer depends on the answer, but `ADR-026`'s replica and the existing correlation both still do | Platform owner — the only role that can observe a running environment | Before `DO2` ships |
+| `FA1` | **[ACTION NOW]** Decide what happens to orders already in flight when this ships — accept that they cannot be rescheduled until reserved again, or commission a hand-written backfill. There is no migration tooling, so the second option is a script somebody has to own (`R-29`) | Product owner with the platform architect | **2027-01-30** — before `DO2` ships |
+| `FA2` | **[handled later by HLS]** Decide whether the recorded resource id is exposed on `OrderDto`. It is an internal correlation today; exposing it changes a public read contract | `DO2` implementer with the platform architect | **2026-12-08** — during `DO2` high-level design |
+| `FA3` | **[ACTION NOW]** Record, from a running environment, whether `resourceId` and `vehicleId` actually hold the same value (`G-08`). This record no longer depends on the answer, but `ADR-026`'s replica and the existing correlation both still do | Platform owner — the only role that can observe a running environment | **2027-01-30** — before `DO2` ships |
 
 ## Assumptions, Blockers & Open Questions
 
