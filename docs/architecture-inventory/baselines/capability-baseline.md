@@ -64,8 +64,10 @@ independently:
 9. [Service Lookup Index](#service-lookup-index)
 10. [Assumptions, Blockers & Open Questions](#assumptions-blockers--open-questions)
 
-**Capability index.** Sixteen capabilities are evidenced: eleven business/domain capabilities
-(CAP-01 … CAP-11) and five platform/technical capabilities (CAP-12 … CAP-16).
+**Capability index.** Seventeen capabilities: sixteen evidenced in code — eleven business/domain
+(CAP-01 … CAP-11) and five platform/technical (CAP-12 … CAP-16) — plus **CAP-17**, which is
+established by decision (`ADR-021`) rather than observed in code and is marked as such wherever it
+appears.
 
 | ID | Capability | Primary owner |
 |---|---|---|
@@ -85,6 +87,7 @@ independently:
 | CAP-14 | Platform Observability | `Pacco` (definition) + every service (participation) |
 | CAP-15 | Secrets & Service-Identity Management | `Pacco` (definition) + `customers-service` (enforcement point) |
 | CAP-16 | Environment & Deployment Definition | `Pacco` |
+| CAP-17 | Web Presentation & Browser Session | `Pacco.Web` |
 
 ---
 
@@ -374,6 +377,27 @@ infrastructure. Framework plumbing that carries none of those properties is excl
   `compose/rabbitmq/Dockerfile`; `Pacco/services.yml`, `Pacco/prod-services.yml`; `Pacco/Pacco.sln`;
   `Pacco/scripts/git-clone.sh`; each service repo's `Dockerfile`, `.travis.yml`, `scripts/*.sh`.
 
+**Capability: CAP-17 — Web Presentation & Browser Session**
+
+- **Description:** The platform's single web presentation boundary: the browser-rendered screens, the
+  session held in the browser, role-aware UI behaviour, and the client's access path to the platform.
+  `Pacco.Web` owns it. The capability holds **no domain data and no business rule** — it renders and
+  it holds a session, and every rule the platform must stand behind stays in a service. Its access
+  path is the local API Gateway at `http://localhost:5000` and nothing else: no per-service URL and
+  no direct service addressing.
+- **Purpose / business value:** gives the platform an end-user entry point. Every capability from
+  CAP-01 to CAP-11 is reachable today only by a machine caller holding a hand-obtained JWT.
+- **Establishment:** **By decision, not by observation.** `ADR-021` records the boundary; the
+  `Pacco.Web` repository still tracks exactly one file (`README.md`) and contains no frontend code.
+  This entry is the only one in this document that is not evidenced by working source, and it is
+  marked so wherever it appears.
+- **Confidence:** high for the boundary and the access path (both recorded in `ADR-021` §5); **not
+  applicable** for implementation, which does not exist.
+- **Evidence:** `docs/adr/standalone-browser-client-and-browser-caller-edge-contract.md` §5;
+  `intents/13652.md` DO1 and DO2 with the reviewer-resolved architecture answer;
+  `hianshul100_Pacco.Web` (`git ls-files` → `README.md`);
+  `hianshul100_Pacco/compose/services.yml:4-13` for the gateway's local `5000` port.
+
 **Capabilities considered and deliberately not recorded.** Contract testing between
 `orders-service` and `parcels-service` (Pactify 1.1.0, one consumer suite and one provider suite)
 is a **testing practice attached to CAP-06/CAP-07**, not a capability with its own runtime
@@ -409,6 +433,7 @@ any of the thirteen clones. Capability descriptions are not repeated here; see �
 | CAP-14 Platform Observability | `Pacco` (defines Jaeger, Seq, Prometheus, Grafana) | all ten services plus `api-gateway` emit signals; **`ordermaker-service` emits no traces** | high (estate) / medium (coverage) | `Pacco/compose/grafana-seq-jaeger-prometheus.yml`, `compose/prometheus/prometheus.yml`; `jaeger`/`logger`/`metrics` sections per service; no `jaeger` section or package in `Pacco.Services.OrderMaker` |
 | CAP-15 Secrets & Service-Identity Management | `Pacco` (defines Vault and documents its PKI setup) — enforcement point is `customers-service` | `availability-service` (the only certificate-presenting caller); nine of the ten services consume Vault secrets — `ordermaker-service` has no `vault` section and no `Convey.Secrets.Vault` reference | high (config) / medium (enforcement, Q7) | `Pacco/docker-images.txt`; `Pacco/compose/consul-fabio-vault.yml`; `Customers.Api/appsettings.json` (`security.certificate.acl`); `Availability.Infrastructure/Services/Clients/CustomersServiceClient.cs` |
 | CAP-16 Environment & Deployment Definition | `Pacco` | each service repo owns its own `Dockerfile`, `.travis.yml` and `scripts/` | high | `Pacco/compose/*.yml`; `Pacco/services.yml`, `prod-services.yml`; `Pacco/Pacco.sln`; per-repo `Dockerfile` and `.travis.yml` |
+| CAP-17 Web Presentation & Browser Session | `Pacco.Web` | none — sole owner by decision | high (boundary) / n/a (implementation) | `ADR-021` §5. **Ownership recorded by decision, not observed in code** — the repository tracks only `README.md` |
 
 **Notes on shared or ambiguous ownership**
 
@@ -923,6 +948,13 @@ is, not what should change.
 - **Observable quality signals.** Zero C# business logic — the entire capability is declarative
   YAML, so a routing change requires no build. CORS is configured as `allowedOrigins: ['*']`
   together with `allowCredentials: true`, and the token signing key is committed in the repository.
+  `ADR-021` §5 rule 4 replaces the wildcard with the exact `Pacco.Web` local origin across all four
+  `ntrada*.yml` files while keeping `allowCredentials: true` — a configuration change to this
+  capability, with no new route, no new component and no gateway code. Two edge properties stay as
+  they are and both matter to the browser: `allowedMethods` lists only `post`, `put` and `delete`,
+  so no cross-origin `GET` is permitted, and `customErrors.includeExceptionMessage` is `true`, so
+  downstream exception messages reach the caller. The committed signing key is unchanged by that
+  record and remains this capability's most serious quality signal.
 
 ### CAP-03 — Customer Profile & Lifecycle Management
 
@@ -1091,7 +1123,28 @@ is, not what should change.
 - **Dependency surface.** Docker, Docker Compose, PM2, Travis CI, Docker Hub.
 - **Observable quality signals.** Every service builds identically through the same four scripts.
   The compose stacks and the PM2 manifests disagree by one service, and no manifest is marked
-  production.
+  production. `ADR-021` §5 rule 6 keeps `Pacco.Web` out of every stack and manifest by decision: it
+  runs as its own local process beside the Compose backend, so this capability's definition is
+  unchanged. Adding it later as its own independent Compose service — never inside a backend
+  container — is a change to this capability and to nothing else.
+
+### CAP-17 — Web Presentation & Browser Session
+
+- **Coupling / isolation.** Isolated by construction. It shares no code and no build with any
+  deployable, holds no domain data, and depends on the platform through exactly one configured URL —
+  the local gateway. Its only coupling to a contract is the `AuthDto` shape returned by sign-in.
+- **Boundary clarity.** Clear, and drawn on the axis that does not move: browser-rendered
+  presentation on one side, server-owned domain behaviour on the other. Future browser surfaces land
+  inside it without redrawing it.
+- **Dependency surface.** One: `api-gateway` at `http://localhost:5000`. Transitively `identity-
+  service` through the anonymous `POST /identity/sign-in` route, which is unchanged by this
+  capability's arrival.
+- **Observable quality signals.** **None yet — no implementation exists.** Three properties are
+  fixed by decision and are what a reviewer should check first once code lands: the client holds no
+  business rule, it addresses no service directly, and its logout is a session discard that leaves
+  the issued token valid at the edge until expiry (`ADR-021` §5 rule 5). Two platform-level gaps
+  apply to it and have no owner yet: there is no frontend standard anywhere in the platform, and
+  there is no availability or latency target to justify a client timeout against.
 
 ---
 
@@ -1198,6 +1251,7 @@ It remains in scope for the platform per assumption A6.
 | `ordermaker-service` | CAP-10 Automated Order Orchestration | CAP-04 Resource Availability & Reservation, CAP-05 Vehicle Fleet Catalogue, CAP-06 Parcel Catalogue & Volume Calculation, CAP-07 Order Lifecycle Management, CAP-12 Asynchronous Messaging & Event Distribution | medium | Repo `Pacco.Services.OrderMaker`. Commands four capabilities that do not know it exists — the orchestration edge is one-directional and invisible from the owning side. Reachability unproven: no gateway route, absent from both PM2 manifests (B1). Verified to have no `vault` and no `jaeger` section, so it sits outside CAP-15 and emits no traces into CAP-14 |
 | `operations-service` | CAP-11 Operation Status Projection & Real-Time Notification | CAP-12 Asynchronous Messaging & Event Distribution, CAP-14 Platform Observability | low | Repo `Pacco.Services.Operations`. **The `low` reflects CAP-12 only, not CAP-11** — ownership of CAP-11 is `high`. This service hosts `messages.json`, the platform-wide message catalogue, which is a hand-maintained copy of names owned by eight *other* repositories with no generation or validation step; §2 rates that catalogue ownership `low`. A message added anywhere is invisible to CAP-11 until someone edits that file |
 | `Pacco.Services.Operations.GrpcClient` | — | CAP-11 Operation Status Projection & Real-Time Notification | high | Second deployable of repo `Pacco.Services.Operations` (`OutputType: Exe`, `Protobuf Include="Operations.proto"`). A non-containerised console **client** of the CAP-11 gRPC surface — it owns no capability and appears in no compose stack or PM2 manifest. Whether downstream stages should treat it as a platform component or a sample is open (Q16) |
+| `Pacco.Web` | CAP-17 Web Presentation & Browser Session | CAP-01 Identity & Access Management, CAP-02 Edge Routing & Access Enforcement | high (boundary) | **No runtime code exists.** Ownership is recorded by `ADR-021`, not observed: the repository tracks one file. Runs as its own local process beside the Compose stack, absent from every manifest and from the `5000`–`5009` port block by decision. Reaches the platform only through `http://localhost:5000` |
 | `Pacco` | CAP-13 Service Discovery & Load Balancing, CAP-14 Platform Observability, CAP-15 Secrets & Service-Identity Management, CAP-16 Environment & Deployment Definition | CAP-02 Edge Routing & Access Enforcement, CAP-12 Asynchronous Messaging & Event Distribution | medium | Ships **no runtime deployable of its own** — the row name is the repository name because there is none to use. Owns CAP-13/14/15 *by definition* while all ten services own them *by participation*, and participation is uneven (no Jaeger and no Vault in `ordermaker-service`; `Convey.WebApi.Security` only in Availability and Customers). Medium reflects CAP-14 coverage and CAP-15 enforcement (Q7) |
 
 **Capability with no owning component.** CAP-12 Asynchronous Messaging & Event Distribution appears

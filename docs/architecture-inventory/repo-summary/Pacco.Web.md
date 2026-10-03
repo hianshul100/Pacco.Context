@@ -8,6 +8,16 @@ source code, no manifest and no configuration.
 - **Base ref analysed:** `feature/12998/aidlc`
 - **Status: Unverifiable — Missing Source Evidence**
 
+> **Recorded purpose.** The repository's purpose is no longer unknown, even though its contents are
+> unchanged. `ADR-021` ([`../../adr/standalone-browser-client-and-browser-caller-edge-contract.md`](../../adr/standalone-browser-client-and-browser-caller-edge-contract.md))
+> names `Pacco.Web` the platform's **standalone browser client** and the sole owner of **CAP-17 Web
+> Presentation & Browser Session**: the Login page, the Welcome/Landing page, browser session
+> handling, role-aware UI behaviour, and every future Pacco browser surface. It runs as its own local
+> process beside the Docker Compose backend — never inside a backend image, never served by
+> Ntrada — and reaches the platform only through the local API Gateway at `http://localhost:5000`.
+> The `Unverifiable — Missing Source Evidence` status above still stands for the code, because no
+> code exists yet.
+
 ---
 
 ## Contents of the repository, in full
@@ -102,12 +112,12 @@ platform configuration corroborates it. Every dimension is therefore recorded as
 
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
-| B1 | **[ACTION NOW]** This repository is in the discovery scope but contains no source code, so nothing about it can be analysed. We cannot tell whether a Pacco web client exists in a repository we were not given, or whether this is an abandoned placeholder | Completing the platform picture. If a real web client exists, this inventory is missing the platform's entire customer-facing surface — and with it an unexamined consumer of the gateway's authentication and its permissive CORS policy | Platform owner | Someone must state whether a Pacco web client exists. If it does, provide the repository and re-run discovery for it. If it does not, drop `Pacco.Web` from the scope list so it stops appearing as an unresolved gap | TBD |
+| B1 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** No Pacco web client exists in any repository, given or withheld, and this is not an abandoned placeholder. It is the platform's client repository, and it stays in scope. The inventory is therefore not missing a customer-facing surface, and the gateway has no unexamined browser consumer. The repository still holds no code, so nothing about its internals can be analysed and this summary stays `Unverifiable — Missing Source Evidence` until code lands | — | Platform owner | — | Closed |
 
 ### Open Questions
 
 | # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
 |---|----------|----------------|--------------------------|----------------|
-| Q1 | **[ACTION NOW]** Is a Pacco web client planned, built elsewhere, or abandoned? | The answer decides whether this is a gap to fill or a repository to retire. As things stand, the platform has no customer-facing frontend at all — the only browser code in the workspace is a developer diagnostic page in `operations-service` | No evidence points either way; the repository has stood at one empty commit | Platform owner |
+| Q1 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** Planned, and to be built here. This is a gap to fill, not a repository to retire. Work item 13652 (`DO1`, `DO2`) is the first delivery into it: a Login screen and a role-aware Welcome/Landing screen | — | — | Platform owner |
 | Q2 | **[ACTION NOW]** Why is this repository in the discovery scope but absent from the platform README's clone list? | The two sources disagree about what constitutes the Pacco platform. Until that is settled, the boundary of this inventory rests on the backlog rather than on anything the code confirms | The backlog scope may be broader than the platform README, or the README may simply be out of date | Platform owner |
-| Q3 | **[handled later by HLD]** If a web client is built here, which access path should it use? | The gateway currently allows credentialed requests from any origin, and `operations-service` exposes its SignalR hub outside the gateway. A new browser client would inherit both, so its access path needs deciding before it is written rather than after | Settle the client topology alongside the gateway's synchronous-versus-asynchronous mode decision | Platform architect |
+| Q3 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021` §5 rules 3 and 4).** The access path is `Browser → Pacco.Web → local API Gateway at http://localhost:5000 → services in Docker Compose`. The client is configured with that one gateway URL and with no per-service URL, so it cannot inherit the SignalR harness's direct-to-service addressing. The wildcard origin is replaced by the exact `Pacco.Web` local origin in all four `ntrada*.yml` files with `allowCredentials: true` retained. The gateway's sync-versus-async mode does not gate this: `POST /identity/sign-in` is an identical anonymous downstream proxy in both. Two follow-ons remain open — the exact local origin is not yet fixed, and which configuration file each environment loads is still unrecorded (`ADR-021` B1 and B2) | — | — | Platform architect |

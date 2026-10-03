@@ -16,6 +16,13 @@ tracked content is a one-line `README.md`, commit `c3f2843 Add README`).
 The in-scope set matches the repository list in the product backlog attachment
 (`.attachments/01_product_backlog_20260903_170135_37cf143b.xlsx`, issue **12998** "Pacco - Discovery - Attempt-2").
 
+**Revision — Rev 2, 2026-09-22.** `ADR-021` ([`../adr/standalone-browser-client-and-browser-caller-edge-contract.md`](../adr/standalone-browser-client-and-browser-caller-edge-contract.md))
+gives `Pacco.Web` a decided purpose: the platform's **standalone browser client**, owner of **CAP-17
+Web Presentation & Browser Session**. Items §4 S7, §5's `Pacco.Web` stale-doc marker, §6 G1, the §2
+open question for `Pacco.Web` and blocker B2 are annotated against it. **No observation changes** —
+every dimension of the inventory below still reflects `feature/12998/aidlc` as analysed on
+2026-09-03, and `Pacco.Web` still tracks exactly one file and still produces no deployable.
+
 | # | Repository | Primary deployable(s) |
 |---|------------|-----------------------|
 | 1 | `Pacco` | none (orchestration/infrastructure repo) |
@@ -30,7 +37,7 @@ The in-scope set matches the repository list in the product backlog attachment
 | 10 | `Pacco.Services.Parcels` | `parcels-service` |
 | 11 | `Pacco.Services.Pricing` | `pricing-service` |
 | 12 | `Pacco.Services.Vehicles` | `vehicles-service` |
-| 13 | `Pacco.Web` | none — repository is empty |
+| 13 | `Pacco.Web` | none — repository is empty. **By decision (`ADR-021`) it produces no platform deployable at all**: it is the standalone browser client, a local process beside the Compose backend, never in a backend image and never served by Ntrada |
 
 ## Table of contents
 
@@ -59,7 +66,10 @@ Runtime topology observed in code and config:
 
 - **North-south:** clients → `api-gateway` (Ntrada 0.4.*, YAML-declared routes) → either an HTTP
   `downstream` call to a service, or a RabbitMQ `publish` to a service exchange
-  (`Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml` vs `ntrada-async.yml`).
+  (`Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml` vs `ntrada-async.yml`). *No client is
+  observed in the workspace.* `ADR-021` names one by decision — `Pacco.Web`, a standalone browser
+  client running as its own local process beside the Compose backend, reaching the platform only
+  through the local gateway at `http://localhost:5000`.
 - **East-west, async:** a RabbitMQ topic exchange per service (`availability`, `customers`,
   `deliveries`, `identity`, `ordermaker`, `orders`, `parcels`, `vehicles`, `operations`), with
   `snakeCase` message conventions and queue template
@@ -97,7 +107,7 @@ Columns are the 14 required dimensions at summary level. Full detail and evidenc
 | `Pacco.Services.Parcels` | Parcel catalogue, size/variant, volume aggregation | ASP.NET Core 3.1 HTTP API + RabbitMQ subscriber | `src/Pacco.Services.Parcels.Api/Program.cs` | `.Api`/`.Application`/`.Core`/`.Infrastructure`; `Core/Entities/{Parcel,Size,Variant,Customer}.cs` |
 | `Pacco.Services.Pricing` | Stateless order-price/discount calculation | ASP.NET Core 3.1 HTTP API — **query-only, no message broker** | `src/Pacco.Services.Pricing.Api/Program.cs` | Single-project; `Core/Services/CustomerDiscountsService.cs`, `Queries/Handlers/GetOrderPricingHandler.cs` |
 | `Pacco.Services.Vehicles` | Vehicle catalogue and per-service pricing attributes | ASP.NET Core 3.1 HTTP API + RabbitMQ subscriber | `src/Pacco.Services.Vehicles.Api/Program.cs` | `.Api`/`.Application`/`.Core`/`.Infrastructure`; `Core/Entities/{Vehicle,Variants}.cs` |
-| `Pacco.Web` | **Unknown** — repository contains only `README.md` with the text `# Pacco.Web` | None — no runtime present | None | None |
+| `Pacco.Web` | **Decided by `ADR-021`, not observed:** the platform's standalone browser client and sole owner of **CAP-17 Web Presentation & Browser Session** — Login page, Welcome/Landing page, browser session handling, role-aware UI behaviour, and every future Pacco browser surface. It owns no domain data, no business rule and no persistence. **Contents unchanged:** the repository still holds only `README.md` with the text `# Pacco.Web` | None present. **Decided:** a standalone browser client served from its own local origin, running as its own local process beside the Docker Compose backend — never inside a backend image, never served by Ntrada | None — no code exists | None — no code exists. `ADR-021` §5 rule 7 assigns `STYLE_README.md` and `pacco-material-you.css` to it as the client-scoped visual foundation |
 
 ### 2.2 Integrations, data, messaging, APIs
 
@@ -115,7 +125,7 @@ Columns are the 14 required dimensions at summary level. Full detail and evidenc
 | `Pacco.Services.Parcels` | Consul, Fabio, Jaeger, Seq, Prometheus, Redis, Vault | MongoDB `parcels-service`, collections **`parcels`** and **`customers`** + `inbox`/`outbox`. `IMongoRepository<ParcelDocument, Guid>`, `<CustomerDocument, Guid>`. **No migration tool** | Exchange `parcels`. Publishes `parcel_added`, `parcel_deleted` + 2 `*_rejected`. Subscribes `customer_created`, `order_canceled`, `order_deleted`, `parcel_added_to_order`, `parcel_deleted_from_order` | Exposes `GET /parcels`, `GET /parcels/{parcelId}`, `GET /parcels/volume`, `POST /parcels`, `DELETE /parcels/{parcelId}`. Consumes none. Acts as **Pact provider** |
 | `Pacco.Services.Pricing` | `customers-service` over HTTP; Consul; Fabio; Jaeger; Seq; Prometheus | **No data store at all.** No `mongo`/`redis` section, no persistence package. Fully stateless computation | **None.** No `Convey.MessageBrokers.*` package, no `rabbitMq` config section. This is the only service with no broker participation | Exposes `GET /pricing?customerId=&orderPrice=`. Consumes `GET customers-service/customers/{id}` |
 | `Pacco.Services.Vehicles` | Consul, Fabio, Jaeger, Seq, Prometheus, Redis, Vault | MongoDB `vehicles-service`, collection **`vehicles`** + `inbox`/`outbox`. `IMongoRepository<VehicleDocument, Guid>`. **No migration tool** | Exchange `vehicles`. Publishes `vehicle_added`, `vehicle_updated`, `vehicle_deleted` + 3 `*_rejected`. Subscribes: none found | Exposes `GET /vehicles` (paged search), `GET /vehicles/{vehicleId}`, `POST /vehicles`, `PUT /vehicles/{vehicleId}`, `DELETE /vehicles/{vehicleId}`. Consumes none |
-| `Pacco.Web` | None | None | None | None |
+| `Pacco.Web` | None observed. **Decided (`ADR-021` §5 rule 3):** exactly one — the local API Gateway at `http://localhost:5000`. It is configured with that single gateway URL, not with per-service URLs and not with container ports, so no browser code addresses `identity-service` or any other service directly | None, and none by decision — it owns no domain data and no persistence (`ADR-021` §5 rule 1). Browser session state only, held client-side and discarded on logout | **None.** It is not a broker participant: it owns no exchange, publishes nothing and subscribes to nothing | **Exposes none.** **Consumes**, through the gateway only, the existing anonymous `POST /identity/sign-in` route. **No gateway route is added, removed or re-pathed** by `ADR-021`, and no logout or revocation route is introduced |
 
 ### 2.3 Deployment, security, observability, decisions, questions, frontend
 
@@ -133,7 +143,7 @@ Columns are the 14 required dimensions at summary level. Full detail and evidenc
 | `Pacco.Services.Parcels` | `Dockerfile`, `.travis.yml`, `scripts/*`; image `pacco.services.parcels`; port 5007 | JWT bearer; `GetParcelsHandler` scopes by `IAppContext` | Jaeger `serviceName: parcels`, Seq, Prometheus | Clean-architecture split; **Pact provider** tests in `tests/Pacco.Services.Parcels.PactProviderTests` — the counterpart to Orders' consumer tests. **No feature-flag system** | How the Pact file is shared between the two repos (no broker config found) | No frontend assets — checked `src/**/`; no `wwwroot/`, `public/`, `static/`, no `package.json` |
 | `Pacco.Services.Pricing` | `Dockerfile`, `.travis.yml`, `scripts/*`; image `pacco.services.pricing`; port 5008. **No `LICENSE` file** — Pricing and `Pacco.Services.Vehicles` are the two service repos without one; the other eight have it | JWT bearer via `Convey.Security`; no certificate ACL | Jaeger `serviceName: pricing`, Seq, Prometheus | Single-project layout is itself the decision — deliberately *not* clean architecture, matching the README's "another style that is the best fit". `Core/Services/CustomerDiscountsService.cs` holds the discount rules. **No feature-flag system** | Whether discount tiers are hard-coded or configurable | No frontend assets — checked `src/**/` (only `certs/`, `Properties/`, `.idea/`); no `wwwroot/`, `public/`, `static/`, no `package.json` |
 | `Pacco.Services.Vehicles` | `Dockerfile`, `.travis.yml`, `scripts/*`; image `pacco.services.vehicles`; port 5009. **No `LICENSE` file** — one of the two service repos without one, the other being `Pacco.Services.Pricing` | JWT bearer; gateway gates `POST/PUT/DELETE /vehicles` — role claims per `ntrada*.yml` | Jaeger, Seq, Prometheus | Clean-architecture split; `Infrastructure/Extensions.cs`. **No feature-flag system** | Why `vehicle_deleted` is consumed by Availability but no other vehicle event is consumed anywhere | No frontend assets — checked `src/**/`; no `wwwroot/`, `public/`, `static/`, no `package.json` |
-| `Pacco.Web` | None — `git log` shows a single commit `b3bf026 Initial commit` | None | None | None | Is this a placeholder for a planned web client, or an abandoned repo? | No frontend assets — checked the entire clone. The repository contains exactly one tracked file, `README.md` |
+| `Pacco.Web` | None — `git log` shows a single commit `b3bf026 Initial commit`. **Decided (`ADR-021` §5 rules 2 and 6):** it runs as its own local process beside the Docker Compose backend, is never bundled into a backend service image and is never served by Ntrada, takes no port in the `5000`–`5009` block, and is deliberately absent from every compose file, PM2 manifest and `ntrada*.yml`. Only the local runtime path is decided — there are currently no separate Dev, QA, Staging or Production frontend environments, so those origins, gateway URLs, DNS names and deployment targets are defined later | None observed. **Decided (`ADR-021` §5 rules 3–5):** the browser reaches the platform only through the local API Gateway at `http://localhost:5000`, never a service directly; the gateway's `allowedOrigins: ['*']` is replaced by the exact `Pacco.Web` local origin with `allowCredentials: true` retained; sign-in uses the existing anonymous `POST /identity/sign-in` route. **Logout is a client-side session discard only** — no logout or revocation route is added and the gateway's JWT validation and revocation behaviour are unchanged, so **the already-issued token stays valid at the platform level until it expires** | None | None in the repository. The governing record is `ADR-021` | **RESOLVED 2026-09-22 by `ADR-021`:** a placeholder for a planned web client — now the platform's standalone browser client and the owner of CAP-17, to be built here. Not abandoned | No frontend assets — checked the entire clone. The repository contains exactly one tracked file, `README.md`. **`ADR-021` §5 rule 7** assigns it the approved `STYLE_README.md` and `pacco-material-you.css` as its first authored stylesheet, client-scoped and **not** a platform-wide design system |
 
 ---
 
@@ -306,9 +316,15 @@ so its `POST /orders` entry point has no caller path visible in the workspace.
 Owns no service but owns the definition of every environment: the compose stacks, the process
 manifests, the aggregate solution file, and the infrastructure runbook.
 
-### S7 — Unclassified
-`Pacco.Web`. Empty repository; cannot be placed in any subsystem. **Unverifiable — Missing
-Source Evidence.**
+### S7 — Web presentation (confidence: high for the boundary, by decision)
+`Pacco.Web`. Empty repository — no code exists, so nothing about its internals can be inventoried.
+The **boundary** is no longer unclassified: `ADR-021` places it in its own subsystem, the platform's
+standalone browser client and the sole owner of **CAP-17 Web Presentation & Browser Session**. It
+owns the Login page, the Welcome/Landing page, browser session handling, role-aware UI behaviour and
+every future Pacco browser surface — and no domain data, no business rule and no persistence. It
+belongs to none of S1–S6: it is a browser-side consumer of the edge (S1), not a member of it. The
+original `Unverifiable — Missing Source Evidence` status still stands for the repository's
+**contents**, which are unchanged.
 
 ---
 
@@ -338,7 +354,12 @@ seven are substantial architectural facts visible in the tree.
 
 - `Pacco/README.md` lists twelve repositories to clone. `Pacco.Web` is **not** among them, yet
   `Pacco.Web` is in the backlog's repository list for this discovery. Neither the platform README
-  nor any config references it. **Stale doc / scope mismatch — needs validation.**
+  nor any config references it. **Validated 2026-09-22 — stale doc; the backlog wins.** `ADR-021`
+  records `Pacco.Web` as the platform's standalone browser client, so it is legitimately in scope
+  and `Pacco/README.md`'s clone list is the incomplete source. The *config* absence is a separate
+  matter and is **not** stale: `ADR-021` §5 rule 2 deliberately keeps the client out of every
+  backend image, project, solution, compose file, PM2 manifest and `ntrada*.yml`, so no config is
+  expected to reference it. Correcting the platform README is left to that repository's owner.
 - `Pacco/README.md` and every service README state ".NET Core 3.1"; the tree agrees
   (`Dockerfile` uses `mcr.microsoft.com/dotnet/core/sdk:3.1`, `.travis.yml` pins `dotnet: 3.1.100`,
   publish paths are `netcoreapp3.1`). **No conflict.**
@@ -349,7 +370,8 @@ seven are substantial architectural facts visible in the tree.
   `/src/Pacco.Services.Operations`. The actual directory is
   `/src/Pacco.Services.Operations.Api`. **Stale doc.**
 - `Pacco.Web/README.md` (`# Pacco.Web`) and `Pacco.Context/README.md` (`# Pacco.Context`) assert
-  nothing and are contradicted by nothing. **Unknown.**
+  nothing and are contradicted by nothing. **Unknown.** For `Pacco.Web` the purpose the README does
+  not state is now stated elsewhere, in `ADR-021`; the file itself is still a bare heading.
 
 **No documentation/code conflict of substance was found**, because the documentation is too thin
 to conflict with anything. The one directional conflict — the Operations start path — is recorded
@@ -361,7 +383,7 @@ above with code as the source of truth.
 
 | # | Gap | Why it could not be determined |
 |---|---|---|
-| G1 | Purpose and status of `Pacco.Web` | The clone contains one file, `README.md`, with the text `# Pacco.Web`, on a single commit `b3bf026 Initial commit`. No manifest, no source, no config, no reference from any other repo. **Unverifiable — Missing Source Evidence** |
+| G1 | **CLOSED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** Purpose and status of `Pacco.Web` are now recorded: the platform's standalone browser client, owner of CAP-17, planned and to be built here — not abandoned. What is still unknown is narrower and is not a gap in this inventory: **no implementation exists**, so the repository's 14 dimensions stay empty until code lands | The clone still contains one file, `README.md`, with the text `# Pacco.Web`, on a single commit `b3bf026 Initial commit`. The absence of a manifest, a config entry or a reference from any other repo is now the decided state (`ADR-021` §5 rule 2), not missing evidence |
 | G2 | How callers reach `ordermaker-service` — it is deployed by Compose, but reachable only outside the gateway and missing from the PM2 process manifests | It **is** defined in `Pacco/compose/services.yml:78-85` and `Pacco/compose/services-local.yml:78-85` (port 5015), is a `depends_on` entry of `api-gateway`, and is scraped by `compose/prometheus/prometheus.yml:38-40`. But it appears in **neither** PM2 manifest (`Pacco/services.yml`, `Pacco/prod-services.yml`) **nor** any of the four `ntrada*.yml` gateway modules, so its `POST /orders` has no edge route and no process-manifest entry. Whoever calls it does so in-network by a path not present in the workspace |
 | G3 | Chronicle saga state persistence in `ordermaker-service` | `Extensions.cs` calls `builder.Services.AddChronicle()` with no persistence configuration and no `Chronicle.Persistence.*` package. Chronicle's default is in-memory, which would lose saga state on restart, but this is not stated anywhere. **Needs validation at runtime** |
 | G4 | `operations-service` state store | `appsettings.json` configures `mongo.database: operations-service`, but no `AddMongoRepository<...>` call exists in the repo, while `redis` and `requests.expirySeconds: 300` are configured. Which store actually holds operation state is not determinable from static reading of `Services/OperationsService.cs` alone |
@@ -453,7 +475,7 @@ services (`consul`, `fabio`, `grafana`, `jaeger`, `mongo`, `prometheus`, `rabbit
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
 | B1 | **[ACTION NOW]** `Pacco/docker-images.txt` contains five Vault unseal keys and a Vault root token in plaintext, and the same symmetric JWT signing key is committed in four gateway config files and in `Operations/appsettings.json`. Nobody on this side can tell whether these are throwaway demo values or credentials that currently protect something real | Any decision to treat these repositories as safe to publish, fork, or share; and any security discussion in later stages | Platform owner / whoever administers the Pacco Vault instance | A person with access to the running Vault must check whether these keys still unseal it. If they do, rotate them and purge the values from git history before anything else proceeds | TBD |
-| B2 | **[ACTION NOW]** `Pacco.Web` is an empty repository, but it is on the discovery scope list. We cannot tell whether a web client exists somewhere we were not given, or whether the repo is an abandoned placeholder | Completing the platform picture — if a real web client exists, the entire frontend dimension of this inventory is missing a component, and the gateway's CORS and auth surface has an unexamined consumer | Platform owner | Someone must state whether a Pacco web client exists. If it does, provide the repository and re-run discovery for it; if it does not, drop `Pacco.Web` from the scope list | TBD |
+| B2 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** No web client exists anywhere — not in this workspace and not in a repository we were not given — and the repo is not an abandoned placeholder. It stays on the scope list as the platform's client repository (§4 S7). The frontend dimension of this inventory is therefore not missing a component, and the gateway has no unexamined browser consumer: `ADR-021` §5 rule 4 replaces `allowedOrigins: ['*']` with the exact `Pacco.Web` local origin in all four `ntrada*.yml` files while `allowCredentials: true` is retained. Two follow-ons stay open and are carried in `risk-constraint-gap-register.md`, not here: the exact local origin is not yet fixed (`R-01`) and `allowedMethods` still omits `get` (`R-04`) | — | Platform owner | — | Closed |
 | B3 | **[ACTION NOW]** `ordermaker-service` is started by both Compose stacks and scraped by Prometheus, but it is behind no gateway route and in neither PM2 process manifest. How callers reach its `POST /orders` is not answerable from the code | Deciding whether the saga in §4/S5 is a live orchestration path or an unreachable one — this changes how the order-creation flow should be described and whether it needs governing | Platform owner / operations | Someone must state how `POST /orders` on `ordermaker-service` is invoked given there is no gateway route, and whether its omission from `services.yml`/`prod-services.yml` is deliberate | TBD |
 
 ### Open Questions
