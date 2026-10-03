@@ -409,7 +409,18 @@ graph LR
     fabio -->|"gateway downstream only [confirmed]"| deliveries
     fabio -->|"gateway downstream only [confirmed]"| identity
     fabio -->|"gateway downstream only [confirmed]"| ops
+    deliveries -->|"httpClient.type fabio [recorded by ADR-027]"| fabio
+    fabio -->|"GET resource by id from deliveries [recorded by ADR-027]"| avail
 ```
+
+**The two `deliveries-service` edges are recorded, not observed.** Every other edge in this graph is
+proven by an `httpClient.services` entry in a caller's `appsettings.json`. `deliveries-service` has
+no such entry — it has no outbound synchronous call at all today, and it does not carry
+`Convey.WebApi.Security`, so it has no service-identity client certificate either. The two edges are
+drawn because `ADR-027` decides them: a delivery read revalidates its reservation against
+`availability-service` with a point read by resource id, so a customer learns that a higher-priority
+reservation has taken their day. They are marked `[recorded by ADR-027]` and must not be read as
+current behaviour.
 
 **Reading the graph.** `customers-service` is the most-called service — two inbound service callers
 plus the gateway — and calls nothing itself, making it a leaf and a single point of synchronous
@@ -475,10 +486,25 @@ graph LR
     xor -->|"order_canceled deleted parcel_added_to_order parcel_deleted_from_order [confirmed]"| parcels
     xor -->|"order_created approved parcel_added_to_order vehicle_assigned_to_order [confirmed]"| om
     xde -->|"delivery_started completed failed [confirmed]"| orders
+    xor -->|"order events carrying customer delivery date and reserved resource [recorded by ADR-026]"| deliveries
     xom -->|"all 8 exchanges observed [confirmed]"| ops
     xid -->|"observed [confirmed]"| ops
     xor -->|"observed [confirmed]"| ops
 ```
+
+**The `orders` exchange to `deliveries-service` edge is recorded, not observed.** It is the only
+inbound edge `deliveries-service` has, and it does not exist today — the service subscribes to
+nothing. `ADR-026` decides it: `deliveries-service` keeps a local replica of the owning customer, the
+order's delivery date and the reserved resource id so that a customer-facing delivery read can be
+answered from its own store and scoped to its own caller. `orders-service` remains the system of
+record for the delivery date, and the mediation hop is unchanged — `orders-service` has no knowledge
+of the new subscriber.
+
+**The new reschedule routes add no new edge at the gateway.** `ASM-18` makes them inherit the edge
+write mode already configured for the target environment, so the existing `gw` to `xde` and `gw` to
+`xav` edges carry them where the gateway is in asynchronous mode, and the existing synchronous
+downstream route carries them where it is not. `ADR-030` fixes the message names and the five
+rejection classes those routes return; it introduces no exchange and changes no ownership.
 
 To keep the diagram legible only three of the eight `operations-service` observation edges are
 drawn. `operations-service` subscribes to **all 80 messages on all 8 exchanges** via
@@ -557,10 +583,11 @@ ownership metadata exists anywhere, so no edge in this graph can be routed to a 
 
 ## 3. Runtime Interaction Flows
 
-Six flows are generated. Five (§3.1–§3.5) are drawn entirely from evidence. The sixth (§3.6, browser
-sign-in, session and logout) is the one exception in this document: its client half is recorded by
-`ADR-021` rather than observed, and every hop in it is labelled with its provenance so the two
-classes are never confused. Each flow preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
+Eight flows are generated. Five (§3.1–§3.5) are drawn entirely from evidence. Three are recorded
+rather than observed, and every hop in each is labelled with its provenance so the two classes are
+never confused: §3.6 (browser sign-in, session and logout), whose client half is recorded by
+`ADR-021`; and §3.7 and §3.8, which are recorded by `ADR-024`…`ADR-030` and describe behaviour that
+does not exist in the code today. Each flow preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
 and no step is added to make a flow look complete. Where an intermediate step or actor could not be
 evidenced it is marked in the diagram and named under **Unknowns** rather than invented.
 
@@ -939,6 +966,102 @@ is attempted, and the session ends when the access token expires. `ADR-023`
 client selects a message from a closed set keyed on the response `code` and never renders the response
 body. The capability specification is `docs/specs/13652/SPECIFICATION.md`.
 
+### 3.7 Customer reschedule confirmation — [Confidence: recorded by ADR-024, ADR-028, ADR-029, ADR-030]
+
+Every hop below is recorded by a decision, not observed in code. The flow is drawn in the gateway's
+synchronous mode; `ASM-18` makes the asynchronous mode the existing `202 Accepted` plus
+operation-status pattern already drawn in §3.2, with the same service-side hops.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CUS as "Customer"
+    participant GW as "api-gateway"
+    participant FAB as "Fabio 9999"
+    participant DEL as "deliveries-service"
+    participant AV as "availability-service"
+    participant XAV as "availability exchange"
+    participant ORD as "orders-service"
+    CUS->>GW: confirm the new day for a delivery
+    GW->>GW: validate the token and bind customerId from the token
+    GW->>FAB: forward the confirmation
+    FAB->>DEL: route to deliveries-service
+    DEL->>DEL: fail closed unless the caller owns this delivery
+    DEL->>DEL: check eligibility against the replicated order and delivery state
+    DEL->>AV: move the day on the assigned resource carrying the customer identity
+    AV->>AV: one aggregate mutation - take the new day then release the old one
+    AV->>AV: version conditioned write with the result inspected
+    alt the move committed
+        AV->>XAV: publish the reservation events from the outbox
+        XAV->>ORD: order updates its authoritative delivery date
+        AV-->>DEL: moved
+        DEL->>DEL: append a rescheduling history entry
+        DEL-->>CUS: confirmed
+    else the day is gone or held above this priority or the write conflicted
+        AV-->>DEL: refused with the reason class
+        DEL-->>CUS: rejected with one of the five classes
+    end
+```
+
+**What each hop rests on.** The edge binding of `customerId` from the validated token is observed
+`[confirmed]` and is the control `ADR-029` Rule 5 asserts with a test, because a misspelled bind name
+silently restores the client's value. The fail-closed ownership check is `ADR-029` Rules 1 and 2, and
+is a deliberate departure from the guard shape in `orders-service`, which admits an unauthenticated
+caller. The single-aggregate take-then-release is `ADR-024` Rules 1 to 4 — it is what keeps a failed
+reschedule from leaving the customer with no day at all. The inspected version check is `ADR-028`
+Rule 2, and is the hop that does not exist today: `availability-service` already writes with a
+version predicate and **discards the result**, so a lost update currently publishes its events anyway.
+The five rejection classes are `ADR-030` Rule 1.
+
+**Unknowns.** Whether the reschedule enters through the `deliveries` or the `availability` route at
+the edge is an `ADR-030` `FA2` decision and is drawn here as a `deliveries-service` entry because the
+ownership and eligibility checks need the delivery's replica. The exact message names on both legs
+are also `FA2`.
+
+### 3.8 Delivery read with reservation revalidation — [Confidence: recorded by ADR-026, ADR-027, ADR-029]
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CUS as "Customer"
+    participant GW as "api-gateway"
+    participant FAB as "Fabio 9999"
+    participant DEL as "deliveries-service"
+    participant DB as "deliveries database"
+    participant AV as "availability-service"
+    CUS->>GW: request my eligible deliveries
+    GW->>GW: validate the token and bind customerId from the token
+    GW->>FAB: forward the read
+    FAB->>DEL: route to deliveries-service
+    DEL->>DB: read deliveries whose replicated customer matches the caller
+    DB-->>DEL: deliveries with a replicated date and resource
+    DEL->>AV: point read of each distinct resource by id
+    alt the reservation is still held
+        AV-->>DEL: resource carrying the reservation
+        DEL-->>CUS: delivery with the schedule confirmed
+    else the reservation is gone
+        AV-->>DEL: resource without that reservation
+        DEL-->>CUS: delivery marked schedule lost - needs rescheduling
+    else the call fails or exceeds the timeout
+        DEL-->>CUS: delivery marked revalidation unavailable
+    end
+```
+
+**What each hop rests on.** The customer-scoped read is possible only because of the replica — the
+`Delivery` aggregate holds no customer and no date today, so this read cannot be written against the
+current model at all. Scoping by the replicated customer is `ADR-029` Rule 6, and it is the first
+authorization `deliveries-service` has ever performed: `GET /deliveries/{deliveryId}` currently
+returns whatever document it finds to whoever asks `[confirmed]`. The revalidation is `ADR-027`
+Rule 1 and is performed once per **distinct resource**, not once per delivery, which is what keeps it
+inside the point-read constraint. The third branch is `ADR-027` Rule 4: a customer-facing read
+degrades to a labelled answer rather than failing, and an unverified answer is never presented as a
+confirmed one.
+
+**Unknowns.** The revalidation timeout is unset — `ADR-027` `FA2` fixes it, and the quality
+requirement it serves cannot be assessed until it is. `deliveries-service` also has no
+service-identity client certificate, which `ADR-027` `B1` records as the precondition for this flow
+running at all.
+
 ---
 
 ## 4. Deployment Topology
@@ -1282,16 +1405,29 @@ agreement — a row with `AddedToOrder == true` and a null `OrderId` is represen
 ```mermaid
 erDiagram
     DELIVERY ||--o{ DELIVERY_REGISTRATION : "embeds"
+    DELIVERY ||--o{ RESCHEDULING_HISTORY_ENTRY : "embeds - recorded by ADR-026"
     DELIVERY {
         Guid Id PK
         Guid OrderId
         string Status
         DateTime StartedAt
+        Guid CustomerId "replica - recorded by ADR-026"
+        DateTime DeliveryDate "replica - recorded by ADR-026"
+        Guid ReservedResourceId "replica - recorded by ADR-026"
+        string DeliveryInstructions "bounded - recorded by ADR-026"
+        bool ScheduleLost "recorded by ADR-026 and ADR-027"
+        int Version "persisted - recorded by ADR-028"
     }
     DELIVERY_REGISTRATION {
         DateTime DateTime
         string Description
         string Location
+    }
+    RESCHEDULING_HISTORY_ENTRY {
+        DateTime RequestedAt "recorded by ADR-026"
+        DateTime PreviousDate "recorded by ADR-026"
+        DateTime NewDate "recorded by ADR-026"
+        string Outcome "recorded by ADR-026 and ADR-030"
     }
 ```
 
@@ -1299,6 +1435,17 @@ erDiagram
 embedded `[confirmed]`. `OrderId` is stored **without any validating call** — this service holds no
 HTTP client for `orders-service` and subscribes to no external event `[confirmed]`, so a delivery can
 be created against an order identifier that does not exist.
+
+**The four original fields are observed; everything else in this diagram is recorded.** The replica
+fields, the instructions, the lost-schedule indicator, the embedded history and the persisted
+`Version` are decided by `ADR-026`, `ADR-027` and `ADR-028` and do not exist in the code today. Three
+points are worth carrying with the diagram. Every added field is nullable or empty-by-default,
+because the platform has no migration tooling and nothing will backfill the deliveries already
+written. `Version` is the one field the entity already declares — `Delivery.Version` and
+`IncrementVersion` exist in `.Core` and are absent from `DeliveryDocument`, so the aggregate reads as
+concurrency-safe in source and is last-writer-wins in production; `ADR-028` is what makes the
+declaration true. And the embedded history is append-only with full retention per `ASM-13`, which
+means it grows without bound inside a document that has a hard size ceiling.
 
 ### 5.6 identity-service — [Confidence: confirmed]
 

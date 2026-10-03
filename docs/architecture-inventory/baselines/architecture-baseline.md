@@ -10,7 +10,7 @@
 | Repositories analysed | 13 clones fixed by backlog issue 12998 ("Pacco - Discovery - Attempt-2") |
 | Scope | **Current state only.** No target state, no modernisation plan, no migration sequencing |
 | Prior artifact at this path | None — this document was authored fresh |
-| Revision | **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
+| Revision | **Rev 4** — `ADR-024`…`ADR-030` recorded and mapped into §11.1. §4.1 records the first synchronous edge out of `deliveries-service`; §4.2 records its first inbound subscription. The second `### 11.4` heading (quality-attribute assessment) is renumbered `### 11.5`, and `### 11.6` adds the per-requirement quality-attribute assessment for work item 14830. **Rev 3** — `ADR-021` (`Pacco.Web` as the standalone browser client) recorded. §7 preamble corrected (`ui-inventory.md` exists), §7.1 reframed, §7.4 added for the client boundary; §11.1 corrected (the ADR corpus `ADR-001`…`ADR-021` exists) and the ADR-to-baseline mapping added; §11.4 quality-attribute assessment added; X4 resolved. **Rev 2** — architecture-baseline review corrections. §3.3 rewritten (the `messages.json` + `System.Reflection.Emit` mechanism belongs to `operations-service`, not `api-gateway`) and Q9's premise corrected with it; §6.4 separates `identity-service` as an evidenced Redis consumer; §2.1/§2.2 record `ordermaker-service` on host port `5015`; §4.2 records the declared-but-unpublished `operations` exchange; §4.3 adds the per-exchange breakdown of the twenty async write routes; §12.2/§12.3 name three embedded-diagram defects and carry them as B6; X6 added to §11.3 |
 
 ## How to read this document
 
@@ -386,6 +386,16 @@ request payloads in its own logs with `*****`.
 check and every price calculation therefore has a hard synchronous dependency on it being up.
 `orders-service` is the heaviest caller, with three outbound dependencies.
 
+**`deliveries-service` has no outbound synchronous edge today, and `ADR-027` gives it its first.**
+The table above has four callers; `deliveries-service` is not among them, and its `appsettings.json`
+declares no `httpClient.services` map. `ADR-027` adds a point read from `deliveries-service` to
+`availability-service`, keyed on a single resource id, so that a delivery read can tell the customer
+their reserved day is no longer held. Two consequences follow for this section. First, the new edge
+is a point read and therefore sits inside constraint C10 by construction rather than by discipline.
+Second, `deliveries-service` has never needed the service-identity client certificate that
+`ADR-010` requires of a cross-service caller, and does not have one — `ADR-027` `B1` records that as
+the precondition it is.
+
 ### 4.2 Asynchronous messaging — the platform's primary integration fabric
 
 RabbitMQ carries roughly **80 distinct messages** across **eight topic exchanges that carry traffic**,
@@ -431,6 +441,17 @@ exchange", and it is the mechanism by which the saga drives other services.
 **Transactional inbox/outbox.** Convey's inbox/outbox is configured in the service `appsettings.json`
 files, giving at-least-once delivery with deduplication on the consuming side. Whether it is enabled
 in every environment depends on the `outbox.enabled` flag per service.
+
+**`deliveries-service` publishes and does not subscribe — until `ADR-026`.** It owns the `deliveries`
+exchange and publishes `delivery_started`, `delivery_completed`, `delivery_failed` and
+`order_for_delivery_not_found` onto it, and it consumes nothing from any other exchange. `ADR-026`
+adds its first inbound subscription, carrying the owning customer, the order's delivery date and the
+reserved resource id from the `orders` exchange into a local replica. Three consequences follow for
+this section. The mediation hop above applies unchanged — `orders-service` has no knowledge of the
+new subscriber. `deliveries-service` acquires its first queue, so the consumer-lag blind spot this
+document records elsewhere now applies to it. And the subscription is wired by hand at every
+registration point `ADR-013` enumerates, of which one is automatic: a partially wired subscription
+compiles, deploys, and silently receives nothing.
 
 **Message context propagation.** Two headers travel with every message: `message_context` (carrying
 correlation identity, including the originating user) and `span_context` (carrying the Jaeger trace
@@ -1265,6 +1286,13 @@ The ADRs that constrain the platform's structure as described in this document:
 | `ADR-018` | Repository per service, with independent per-repository release | §9.5 the eleven independent Travis pipelines, constraint C3 |
 | `ADR-020` | `.NET Core 3.1` as the platform runtime baseline | Constraint C9 |
 | `ADR-021` | `Pacco.Web` as the standalone browser client, and the browser-caller contract at the edge | §7.4, and the CORS posture §8 records |
+| `ADR-024` | A delivery reschedule is one atomic same-resource day move inside the `Resource` aggregate, with a bounded ascending alternative-day read | §4.1 and constraint C10 — the alternative-day read is bounded by construction, not by discipline |
+| `ADR-025` | The reserved availability resource is recorded on the `Order` aggregate, replacing the assumed vehicle-to-resource correspondence | §6.2 the hand-mapped document model, constraint C8; §4.2 the `(vehicleId, deliveryDate)` correlation it removes dependence on |
+| `ADR-026` | `deliveries-service` holds an event-carried replica of the order's customer and delivery date, and gains its first inbound subscription | §4.2 the subscription fabric, §6 the per-service store, §3.2 the subscriber profile of `deliveries-service` |
+| `ADR-027` | A delivery read revalidates its reservation against `availability-service` and reports a lost schedule | §4.1 — the first synchronous edge out of `deliveries-service`; constraint C10 |
+| `ADR-028` | Version-conditioned writes whose result is inspected, atomic with the outbox, scoped to `Resource`, `Order` and `Delivery` | §6.2 the mapper-level write model; §4.2 the inbox/outbox posture; constraint C8 |
+| `ADR-029` | The ownership guard fails closed on new routes, and edge-bound customer identity is carried into the reserve and release legs | §8.3 and constraint C7 — a deliberate departure from the fail-open form on the paths it names |
+| `ADR-030` | Reschedule message names, routing keys and the five rejection classes are fixed as contracts and asserted across the boundary | §4.2 the naming conventions, constraint C2 — the first cross-boundary assertion against a convention with no build-time signal |
 
 The remaining records — `ADR-001`, `ADR-003`, `ADR-005`, `ADR-008`…`ADR-016`, `ADR-019` — are
 catalogued in [`../adr-candidates.md`](../adr-candidates.md), which also carries the candidate-to-ADR
@@ -1329,7 +1357,10 @@ observable publisher: `ordermaker-service` has no gateway route in any `ntrada*.
 service in the thirteen repositories publishes `MakeOrder`. The saga's entry point cannot be traced
 from the available sources.
 
-### 11.4 Quality-attribute assessment
+### 11.5 Quality-attribute assessment — platform posture
+
+> **Correction.** This heading was numbered `11.4` in Rev 3, duplicating the heading above it. It is
+> renumbered `11.5` here. No content changed.
 
 One row per quality attribute the platform's recorded decisions actually take a position on. The
 "posture" column states what the platform does today — not what it should do. Where no position
@@ -1349,6 +1380,40 @@ exists, the row says so rather than inventing one.
 | **Observability** | Prometheus metrics, Seq logging and correlation-header propagation across services. Nothing covers a browser client, and the gateway's `exposedHeaders` are the only browser-reachable correlation surface | `patterns/observability/correlation-and-span-propagation.md` | §10; `extensions.cors.exposedHeaders` in all four `ntrada*.yml` |
 | **Availability and latency** | **No position exists.** No availability target, latency budget or error-rate objective is documented for any service, for the gateway, or for the platform anywhere in the fourteen clones | — | `risk-constraint-gap-register.md` `G-03`; `ADR-021` §8 `N8` |
 | **Frontend quality rules** (state ownership, accessibility, client logging and redaction, dependency policy) | **No position exists.** No frontend standard exists anywhere in the platform, so the first client will establish conventions by default unless they are written | — | `ui-inventory.md` §10; `ADR-021` §7.1 and `Q4` |
+
+### 11.6 Quality-attribute assessment — per requirement, work item 14830
+
+§11.5 states the platform's standing posture. This table states, one row per quality requirement
+raised by work item 14830, what was decided about it and where the decision lives. "Sufficient" means
+an existing recorded decision already covers the requirement and nothing changes. "Needs change"
+means this baseline or a service changes. "At risk" means the requirement cannot be met by
+architecture alone and carries an entry in
+[`../risk-constraint-gap-register.md`](../risk-constraint-gap-register.md).
+
+| Requirement | Attribute | Decision | Where it is decided | Evidence or record |
+|-------------|-----------|----------|---------------------|--------------------|
+| `NFR-1` | Security — ownership and eligibility enforced server-side | Needs change | `ADR-029` Rules 1, 6, 7; `ADR-026` Rule 1 supplies the customer id | `deliveries-service` holds no customer today; §8.3 |
+| `NFR-2` | Security — fail closed on an empty caller context | Needs change | `ADR-029` Rules 1 and 2 | The six duplicated CAP-07 guards admit unauthenticated callers; C7, `R-18` |
+| `NFR-3` | Concurrency — no double-booked slot | Needs change | `ADR-024` Rules 1-3; `ADR-028` Rules 1-2 | `ReplaceOneAsync` result discarded in `availability-service`; `R-19` |
+| `NFR-4` | Concurrency — no silent lost update | Needs change | `ADR-028` Rules 1, 2, 7 | `ADR-008`'s mapper model; `Order` has no version at all; `R-19` |
+| `NFR-5` | Data integrity — failed reschedule leaves prior state intact | Needs change | `ADR-024` Rules 1-4 (take before release in one mutation) | `ADR-011`; `R-19` |
+| `NFR-6` | Data integrity — no silent truncation of a submitted slot | Needs change | `ADR-024` Rule 5 (reject intra-day precision) | `SetDeliveryDate` truncates with `.Date`; `AsDaysSinceEpoch` discards the time; `R-20` |
+| `NFR-7` | Reliability — redelivery produces no second reservation | **At risk** | `ADR-028` Rules 5-7; `ADR-026` Rule 5 | The inbox decorator does not cover the HTTP command path; `R-15` |
+| `NFR-8` | Performance — schedule events reach the exchange within the dispatch interval | Sufficient | `ADR-012` | The outbox dispatch interval is unchanged by this work |
+| `NFR-9` | Performance — outcome observable before the operation record expires | Sufficient | `ADR-014` | `ASM-18`; the 300-second sliding expiry is unchanged |
+| `NFR-10` | Security — no internal detail in customer-facing responses | Sufficient | `ADR-023`, reinforced by `ADR-030` Rule 3 | The existing CAP-09 400-with-exception-message shape is recorded, and governed on new paths only |
+| `NFR-11` | Privacy — bounded instruction text, excluded from log sinks | Needs change | `ADR-026` Rule 6 | The unbounded verbatim `Notes` field is the precedent being avoided |
+| `NFR-12` | Usability — the reschedule screens meet a recognised accessibility bar | **At risk** | `ADR-021` — no client exists to hold the standard | §11.5 "Frontend quality rules: no position exists"; `R-17` |
+| `NFR-13` | Observability — every attempt correlated end to end | Needs change | `ADR-026` Rule 1 (the read answers locally); `ADR-027` `N8` (correlation across the new edge) | §10; `INF-4` |
+| `NFR-14` | Usability — a distinct reason per rejection class | Needs change | `ADR-030` Rules 1, 2, 6 | `ADR-023`; every CAP-09 error is a 400 today |
+| `NFR-15` | Maintainability — convention-correct names on the owning exchange | Needs change | `ADR-030` Rules 4 and 5 | C2 and `ADR-003`; the routing-key/queue divergence `G-09` records |
+| `NFR-16` | Portability — no runtime or toolkit deviation | Sufficient | `ADR-020` | C9; nothing in `ADR-024`…`ADR-030` requires a runtime change |
+| `NFR-17` | Data integrity — additive, backward-compatible persistence | Sufficient | `ADR-008`, applied by `ADR-025` Rule 1 and `ADR-026` Rule 1 | C8 — no migration tooling, so additive is the only safe shape |
+| `NFR-18` | Operational readiness — tests actually execute in the pipeline | Needs change | `ADR-018`, carried by `INF-6` | `availability-service`'s pipeline does not run its tests; `R-25` |
+| `NFR-19` | Scalability — bounded alternative-day retrieval | Needs change | `ADR-024` Rule 6 (at most fourteen ascending days) | C10 |
+| `NFR-20` | Availability — the synchronous dependency degrades to a readable failure | **At risk** | `ADR-010`, applied by `ADR-027` Rules 3 and 4 | §4.1 — `customers-service` is the platform's synchronous leaf, and `deliveries-service` gains its first outbound edge; `R-16`, `R-21` |
+| `NFR-21` | Observability — outbox depth and oldest-message age are alertable | Needs change | `ADR-028` Rule 5, carried by `INF-4` | §11.5 "Availability and latency: no position exists"; `R-23` |
+| `NFR-22` | Security — reserve and release carry the edge-bound customer identity | Needs change | `ADR-029` Rule 4 | `ReleaseResourceReservation` carries no customer identity today |
 
 ---
 

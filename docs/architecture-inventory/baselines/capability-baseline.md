@@ -955,6 +955,14 @@ is, not what should change.
   so no cross-origin `GET` is permitted, and `customErrors.includeExceptionMessage` is `true`, so
   downstream exception messages reach the caller. The committed signing key is unchanged by that
   record and remains this capability's most serious quality signal.
+- **Recorded evolution.** The reschedule routes are added here as configuration and nothing else —
+  `ASM-18` makes them inherit the edge write mode already configured for the target environment, so
+  no feature-specific mode and no new mechanism appears. One existing property becomes
+  load-bearing in a way it was not before: the `customerId: @user_id` binding at `ntrada.yml:103`
+  overwrites a client-supplied customer id with the token's subject, and a misspelled bind name
+  silently does nothing and lets the client's value through. `ADR-029` Rule 5 turns that from an
+  unexamined configuration string into an asserted control, because nothing in the build would
+  otherwise notice the typo.
 
 ### CAP-03 — Customer Profile & Lifecycle Management
 
@@ -980,6 +988,15 @@ is, not what should change.
   and CAP-10. Outbound: HTTP to CAP-03; events consumed by CAP-07 and CAP-11.
 - **Observable quality signals.** Five test projects — the deepest coverage on the platform,
   including an NBomber load-test project. Transactional outbox enabled with transactions disabled.
+- **Recorded evolution.** `ADR-024` makes a customer reschedule one atomic same-resource day move
+  inside the aggregate — take the new day, release the old one, one command, one write — and bounds
+  the alternative-day query to fourteen ascending calendar days. `ADR-028` requires the version
+  predicate this capability already writes to have **its result inspected**: today the result is
+  discarded, so a lost update publishes its reservation events anyway, and it requires the outbox to
+  become transactional for this service. `ADR-029` carries the owning customer's identity into the
+  release leg, which currently carries none, so a release that does not belong to the caller is
+  refused rather than returning silently. The capability gains one new caller — CAP-09 point-reads a
+  resource by id under `ADR-027` — and its boundary is otherwise unchanged.
 
 ### CAP-05 — Vehicle Fleet Catalogue
 
@@ -1016,6 +1033,14 @@ is, not what should change.
 - **Observable quality signals.** Consumer half of the Pact test. Price is captured once at vehicle
   assignment and never recomputed, so the stored total can diverge from what CAP-08 would return
   later.
+- **Recorded evolution.** `ADR-025` records the reserved availability resource on the order at the
+  moment this capability already consumes `resource_reserved`, replacing an unverified naming
+  correspondence between a vehicle id and a resource id that no repository establishes. The
+  capability remains the system of record for the delivery date (`ASM-10`), and that date is now
+  replicated into CAP-09 as a read-side copy under `ADR-026`. `ADR-028` adds the optimistic
+  concurrency this capability has never had — order updates are whole-document replaces keyed on id
+  alone today, so a concurrent write is silently lost. `ADR-029` governs the ownership guard on new
+  routes and deliberately leaves the six existing fail-open copies for a separately owned fix.
 
 ### CAP-08 — Order Pricing & Discounting
 
@@ -1042,6 +1067,18 @@ is, not what should change.
 - **Observable quality signals.** Registration is a value object with structural equality, making
   duplicate scan submissions naturally idempotent. Its `.csproj` omits `Convey.WebApi.Security`,
   which every other business service references.
+- **Recorded evolution.** This is the capability that changes most. `ADR-026` gives it its **first
+  inbound subscription** — the one-directional edge above becomes bidirectional — carrying the owning
+  customer, the order's delivery date and the reserved resource id into a local replica, and adds
+  bounded delivery instructions and an append-only rescheduling history to the aggregate. `ADR-027`
+  gives it its **first outbound synchronous call**, a point read of one availability resource by id,
+  so a delivery read can report "schedule lost — needs rescheduling"; that call needs the
+  service-identity certificate the missing `Convey.WebApi.Security` reference points at, and the
+  capability does not have one yet. `ADR-029` gives it its **first authorization**: the customer-facing
+  read is scoped to the caller, where `GET /deliveries/{deliveryId}` currently returns whatever
+  document it finds to whoever asks. `ADR-028` persists and enforces the `Version` the aggregate
+  already declares and never increments. The unvalidated `OrderId` above is **not** closed by any of
+  these records.
 
 ### CAP-10 — Automated Order Orchestration
 
@@ -1145,6 +1182,15 @@ is, not what should change.
   the issued token valid at the edge until expiry (`ADR-021` §5 rule 5). Two platform-level gaps
   apply to it and have no owner yet: there is no frontend standard anywhere in the platform, and
   there is no availability or latency target to justify a client timeout against.
+- **Recorded evolution.** The customer-facing reschedule presentation lands inside this capability
+  without redrawing its boundary — the eligible-day list, the confirmation and the rescheduling
+  history are rendered surfaces over server-owned decisions, and `ADR-029` keeps every ownership and
+  eligibility check on the server. Two consequences follow from the "none yet" above. `ADR-030`
+  Rules 2 and 6 require the client to branch on a stable rejection code rather than on prose, and to
+  render a generic retryable message for a code it does not recognise. And `NFR-12` asks these
+  screens to meet WCAG 2.1 AA against a platform that has no frontend standard and no implementation
+  to hold one, which is why that requirement is carried as a risk rather than as a satisfied
+  constraint.
 
 ---
 
