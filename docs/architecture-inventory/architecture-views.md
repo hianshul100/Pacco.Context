@@ -409,7 +409,28 @@ graph LR
     fabio -->|"gateway downstream only [confirmed]"| deliveries
     fabio -->|"gateway downstream only [confirmed]"| identity
     fabio -->|"gateway downstream only [confirmed]"| ops
+    deliveries -->|"httpClient.type fabio [recorded by ADR-027]"| fabio
+    fabio -->|"authenticated reservation verdict read from deliveries [recorded by ADR-027]"| avail
 ```
+
+**The two `deliveries-service` edges are recorded, not observed.** Every other edge in this graph is
+proven by an `httpClient.services` entry in a caller's `appsettings.json`. `deliveries-service` has
+no such entry — it has no outbound synchronous call at all today, and it does not carry
+`Convey.WebApi.Security`, so it has no service-identity client certificate either. The two edges are
+drawn because `ADR-027` decides them: a delivery read revalidates its reservation against
+`availability-service`, so a customer learns that a higher-priority reservation has taken their day.
+They are marked `[recorded by ADR-027]` and must not be read as current behaviour.
+
+**Revised 2026-10-04 — the target of that call changed.** The edge was drawn as a point read of
+`GET /resources/{resourceId}`. `ADR-027` Rule 1 now rules that endpoint out: it returns the
+resource's entire embedded reservation collection (§5.1), which grows without bound and which
+constraint C10 and `NFR-1` both forbid on a per-delivery customer-facing path. The edge is a **new
+narrow authenticated verdict endpoint** on CAP-04 that answers `held`, `not_held` or
+`held_by_another` for one resource, day and order. Two things follow that are not visible in the
+graph. The endpoint does not exist and must be specified — `ADR-027` `FA7`. And authentication has
+two halves: `deliveries-service` must hold a service-identity certificate, and **CAP-04 must refuse a
+caller presenting none** — `ADR-027` Rule 6, because a caller-side-only control is not a control and
+an unauthenticated verdict endpoint is an enumeration oracle over every order id.
 
 **Reading the graph.** `customers-service` is the most-called service — two inbound service callers
 plus the gateway — and calls nothing itself, making it a leaf and a single point of synchronous
@@ -475,10 +496,41 @@ graph LR
     xor -->|"order_canceled deleted parcel_added_to_order parcel_deleted_from_order [confirmed]"| parcels
     xor -->|"order_created approved parcel_added_to_order vehicle_assigned_to_order [confirmed]"| om
     xde -->|"delivery_started completed failed [confirmed]"| orders
+    xor -->|"order events carrying customer delivery date and reserved resource [recorded by ADR-026]"| deliveries
+    xor -->|"order_delivery_date_changed M4 carrying ScheduleRevision [recorded by ADR-025 and ADR-030]"| deliveries
+    xde -->|"reschedule_resource_reservation M2 [recorded by ADR-030]"| avail
+    xav -->|"resource_reservation_rescheduled M3 and its rejection [recorded by ADR-030]"| orders
     xom -->|"all 8 exchanges observed [confirmed]"| ops
     xid -->|"observed [confirmed]"| ops
     xor -->|"observed [confirmed]"| ops
 ```
+
+**The `orders` exchange to `deliveries-service` edge is recorded, not observed.** It is the only
+inbound edge `deliveries-service` has, and it does not exist today — the service subscribes to
+nothing. `ADR-026` decides it: `deliveries-service` keeps a local replica of the owning customer, the
+order's delivery date and the reserved resource id so that a customer-facing delivery read can be
+answered from its own store and scoped to its own caller. `orders-service` remains the system of
+record for the delivery date, and the mediation hop is unchanged — `orders-service` has no knowledge
+of the new subscriber.
+
+**The new reschedule routes add no new edge at the gateway.** `ASM-18` makes them inherit the edge
+write mode already configured for the target environment, so the existing `gw` to `xde` and `gw` to
+`xav` edges carry them where the gateway is in asynchronous mode, and the existing synchronous
+downstream route carries them where it is not. `ADR-030` fixes the message names, payloads and the
+five rejection classes those routes return; it introduces no exchange and changes no ownership.
+
+**Three recorded message edges are new, and they complete a chain that was previously broken.**
+`ADR-030` §5.2 fixes four messages. `M1` `reschedule_delivery` enters at the edge. `M2`
+`reschedule_resource_reservation` goes from CAP-09 to CAP-04. `M3` `resource_reservation_rescheduled`
+— and its rejection counterpart — leaves CAP-04's own `availability` exchange and is consumed by
+CAP-07. `M4` `order_delivery_date_changed` leaves CAP-07's own `orders` exchange and is consumed by
+CAP-09. Every one is published to its publisher's own exchange, so `ADR-001` C1 holds and no
+ownership changes. `M4` is the edge that did not previously exist in any record: without it nothing
+tells CAP-09 that the authoritative delivery date moved, and `ADR-025` Rule 3 records that the first
+revision of these decisions wrongly asserted no new subscription and no new message were needed.
+`ADR-030` Rule 9 requires each to be registered in `messages.json` in the same change — §6 `GAP-15`
+records that file as the exact binding set for `operations-service`, and `GAP-25` shows it is already
+missing `complete_order_rejected`, a message that is published today.
 
 To keep the diagram legible only three of the eight `operations-service` observation edges are
 drawn. `operations-service` subscribes to **all 80 messages on all 8 exchanges** via
@@ -557,10 +609,11 @@ ownership metadata exists anywhere, so no edge in this graph can be routed to a 
 
 ## 3. Runtime Interaction Flows
 
-Six flows are generated. Five (§3.1–§3.5) are drawn entirely from evidence. The sixth (§3.6, browser
-sign-in, session and logout) is the one exception in this document: its client half is recorded by
-`ADR-021` rather than observed, and every hop in it is labelled with its provenance so the two
-classes are never confused. Each flow preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
+Eight flows are generated. Five (§3.1–§3.5) are drawn entirely from evidence. Three are recorded
+rather than observed, and every hop in each is labelled with its provenance so the two classes are
+never confused: §3.6 (browser sign-in, session and logout), whose client half is recorded by
+`ADR-021`; and §3.7 and §3.8, which are recorded by `ADR-024`…`ADR-030` and describe behaviour that
+does not exist in the code today. Each flow preserves **every evidenced hop** — gateway, Fabio, exchange, queue —
 and no step is added to make a flow look complete. Where an intermediate step or actor could not be
 evidenced it is marked in the diagram and named under **Unknowns** rather than invented.
 
@@ -572,7 +625,7 @@ sequenceDiagram
     participant GW as "api-gateway sync config"
     participant FAB as "Fabio 9999"
     participant ORD as "orders-service"
-    participant PAR as "parcels-service"
+    participant PCL as "parcels-service"
     participant ODB as "MongoDB orders-service"
     participant MQ as "RabbitMQ orders exchange"
     participant OPS as "operations-service"
@@ -591,8 +644,8 @@ sequenceDiagram
     GW->>FAB: downstream call [confirmed]
     FAB->>ORD: AddParcelToOrder [confirmed]
     ORD->>FAB: GET parcel by id [confirmed]
-    FAB->>PAR: forward parcel lookup [confirmed]
-    PAR-->>ORD: parcel [confirmed]
+    FAB->>PCL: forward parcel lookup [confirmed]
+    PCL-->>ORD: parcel [confirmed]
     ORD->>ODB: embed parcel in the order document [confirmed]
     ORD->>MQ: publish parcel_added_to_order OrderId ParcelId [confirmed]
     MQ->>OPS: deliver every orders message to the observer [confirmed]
@@ -939,6 +992,155 @@ is attempted, and the session ends when the access token expires. `ADR-023`
 client selects a message from a closed set keyed on the response `code` and never renders the response
 body. The capability specification is `docs/specs/13652/SPECIFICATION.md`.
 
+### 3.7 Customer reschedule confirmation — [Confidence: recorded by ADR-024, ADR-028, ADR-029, ADR-030]
+
+Every hop below is recorded by a decision, not observed in code. The flow is drawn in the gateway's
+synchronous mode; `ASM-18` makes the asynchronous mode the existing `202 Accepted` plus
+operation-status pattern already drawn in §3.2, with the same service-side hops.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CUS as "Customer"
+    participant GW as "api-gateway"
+    participant FAB as "Fabio 9999"
+    participant DEL as "deliveries-service"
+    participant AV as "availability-service"
+    participant XAV as "availability exchange"
+    participant ORD as "orders-service"
+    participant XOR as "orders exchange"
+    CUS->>GW: reschedule_delivery (M1) with DeliveryId, NewDate, RequestId
+    GW->>GW: validate the token and bind customerId from the token
+    GW->>FAB: forward the confirmation
+    FAB->>DEL: route to deliveries-service
+    DEL->>DEL: fail closed unless the caller owns this delivery
+    DEL->>DEL: return the recorded outcome if this RequestId was already decided
+    DEL->>DEL: check eligibility against the replicated order and delivery state
+    DEL->>AV: reschedule_resource_reservation (M2) with ResourceId, OrderId, CustomerId, CurrentDate, NewDate, RequestId
+    AV->>AV: return the recorded outcome if this RequestId was already decided
+    AV->>AV: refuse unless the current day reservation is held by this order
+    AV->>AV: one aggregate mutation - take the new day and release the old one
+    AV->>AV: version conditioned write with the result inspected
+    alt the move committed
+        AV-->>DEL: moved
+        DEL->>DEL: apply the new date and append a history entry in one transaction
+        DEL-->>CUS: confirmed
+        AV->>XAV: resource_reservation_rescheduled (M3) from the outbox
+        XAV->>ORD: orders-service selects the order by OrderId
+        ORD->>ORD: write date, resource id, version increment and outbox in one transaction
+        ORD->>XOR: order_delivery_date_changed (M4) carrying ScheduleRevision
+        XOR->>DEL: deliveries-service settles on the authoritative revision
+    else the day is gone or held above this priority or held by another order or the write conflicted
+        AV-->>DEL: resource_reservation_reschedule_rejected with the reason class
+        DEL-->>CUS: rejected with one of the five classes
+    end
+```
+
+**What each hop rests on.** The edge binding of `customerId` from the validated token is observed
+`[confirmed]` and is the control `ADR-029` Rule 5 asserts with a test, because a misspelled bind name
+silently restores the client's value. The fail-closed ownership check is `ADR-029` Rules 1 and 2, and
+is a deliberate departure from the guard shape in `orders-service`, which admits an unauthenticated
+caller. The ownership check **inside CAP-04** — refuse unless the current day's reservation is held
+by this order — is `ADR-029` Rule 4 clause 2 and `ADR-024` Rule 4, and it is only possible because
+`ADR-024` Rule 8 adds `OrderId` and `CustomerId` to `Reservation`, which records neither today
+`[confirmed]`. The single-aggregate take-and-release is `ADR-024` Rules 1 to 4 — it is what keeps a
+failed reschedule from leaving the customer with no day at all, and it issues neither `ReserveResource`
+nor `ReleaseResourceReservation`. The inspected version check is `ADR-028` Rule 2, and is the hop that
+does not exist today: `availability-service` already writes with a version predicate and **discards
+the result**, so a lost update currently publishes its events anyway. The two `RequestId` hops are
+`ADR-028` Rule 8, which is what makes `NFR-7` hold on an HTTP edge the inbox decorator does not cover.
+The five rejection classes are `ADR-030` Rule 1.
+
+**The four messages are named, and they are contracts.** `ADR-030` §5.2 fixes `M1` through `M4` —
+name, routing key, publication point and payload — and `ADR-030` Rule 9 requires each to be registered
+in `messages.json` in the same change, because §6 `GAP-15` records that file as the exact binding set
+and `GAP-25` shows it is already missing a message that is published today. The chain is only complete
+because `M4` exists: without `order_delivery_date_changed`, nothing tells CAP-09 that the authoritative
+date moved, and `ADR-025` Rule 3 records that the first revision of these records wrongly claimed no
+new message was needed.
+
+**Where "confirmed" sits.** The customer's answer is returned when CAP-04 commits, before `M3` and
+`M4` propagate — `ADR-026` §5.2 defines `accepted`, `confirmed` and `settled` and makes `confirmed`
+the completion point for every surface. The two event legs are drawn after the customer reply
+deliberately. A read taken between `confirmed` and `settled` may still show the old date, which is
+why `ADR-027` Rule 5 has a pending-change branch rather than reporting a schedule as lost.
+
+**Unknowns.** Whether the reschedule enters through the `deliveries` or the `availability` route at
+the edge is an `ADR-030` `FA2` decision and is drawn here as a `deliveries-service` entry because the
+ownership and eligibility checks need the delivery's replica. The standard priority a reschedule
+carries is undefined — `Reservation.Priority` exists but no record fixes the value a customer-initiated
+move uses — and is open as `G-12`. Whether `ADR-028` `FA3`'s multi-collection transaction support
+exists in each environment is unverified, and the transaction drawn at `deliveries-service` cannot be
+performed without it.
+
+### 3.8 Delivery read with reservation revalidation — [Confidence: recorded by ADR-026, ADR-027, ADR-029]
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CUS as "Customer"
+    participant GW as "api-gateway"
+    participant FAB as "Fabio 9999"
+    participant DEL as "deliveries-service"
+    participant DB as "deliveries database"
+    participant AV as "availability-service"
+    CUS->>GW: request my eligible deliveries
+    GW->>GW: validate the token and bind customerId from the token
+    GW->>FAB: forward the read
+    FAB->>DEL: route to deliveries-service
+    DEL->>DB: read deliveries whose replicated customer matches the caller, one page
+    DB-->>DEL: deliveries with a replicated date, resource and schedule revision
+    DEL->>AV: authenticated verdict read - is this resource and day held by this order
+    alt held by this order
+        AV-->>DEL: held
+        DEL-->>CUS: delivery with the schedule confirmed
+    else held by a different order
+        AV-->>DEL: held_by_another
+        DEL-->>CUS: delivery marked schedule lost - needs rescheduling
+    else no reservation on that day
+        AV-->>DEL: not_held
+        DEL-->>CUS: delivery marked schedule lost - needs rescheduling
+    else a reschedule is confirmed but not yet settled
+        DEL-->>CUS: delivery marked pending - the new day, not a lost schedule
+    else the call fails or exceeds the timeout
+        DEL-->>CUS: delivery marked revalidation unavailable
+    end
+```
+
+**What each hop rests on.** The customer-scoped read is possible only because of the replica — the
+`Delivery` aggregate holds no customer and no date today, so this read cannot be written against the
+current model at all. Scoping by the replicated customer is `ADR-029` Rule 6, and it is the first
+authorization `deliveries-service` has ever performed: `GET /deliveries/{deliveryId}` currently
+returns whatever document it finds to whoever asks `[confirmed]`. The revalidation is `ADR-027`
+Rule 1 and is performed once per **distinct resource and day**, not once per delivery, which is what
+keeps it inside the point-read constraint. The `revalidation_unavailable` branch is `ADR-027` Rule 4:
+a customer-facing read degrades to a labelled answer rather than failing, and an unverified answer is
+never presented as a confirmed one.
+
+**Why three verdicts and not two.** `ADR-027` Rule 1 requires the endpoint to distinguish *held by
+this order* from *held by somebody else*, because day occupancy cannot. "Some reservation exists on
+that day" is equally true when the customer still holds it and when another order expropriated the
+day and booked it — the second case is precisely a lost schedule, and a day-occupancy check reports
+it as confirmed. The verdict is therefore a **new narrow authenticated endpoint** on CAP-04, not
+`GET /resources/{resourceId}`: that read returns the resource's whole reservation collection, which
+grows without bound and which constraint C10 and `NFR-1` both rule out for a per-delivery
+customer-facing path. It depends on `ADR-024` Rule 8's owner fields, exactly as §3.7 does.
+
+**Schedule-lost is computed, never stored.** `ADR-027` Rule 5 is its only home. The `Delivery`
+replica holds no indicator and no outcome enumeration; what it holds is the last applied
+`ScheduleRevision` (`ADR-026` Rule 1). The pending branch exists because a read taken between
+`confirmed` and `settled` would otherwise report a just-rescheduled delivery as lost — the worst
+possible moment to be wrong.
+
+**Unknowns.** The revalidation timeout is unset — `ADR-027` `FA2` fixes it, and the quality
+requirement it serves cannot be assessed until it is; `ADR-027` Rule 3 makes the budget the per-call
+timeout multiplied by the page bound, and the page size itself is `ADR-027` `FA6`. `deliveries-service`
+has no service-identity client certificate, and CAP-04 does not today refuse a caller presenting none
+— `ADR-027` Rule 6 requires **both**, because a caller-side-only control is not a control, and an
+unauthenticated verdict endpoint is an enumeration oracle over every order id. `ADR-027` `B1` and
+`FA4` carry it. The verdict endpoint itself is unspecified beyond `ADR-027` Rule 1's contract table;
+`ADR-027` `FA7` commissions the specification.
+
 ---
 
 ## 4. Deployment Topology
@@ -1166,19 +1368,39 @@ erDiagram
     RESOURCE ||--o{ RESERVATION : "embeds"
     RESOURCE {
         Guid Id PK
+        int Version
         stringset Tags
     }
     RESERVATION {
-        DateTime DateTime
-        Guid CustomerId
+        int TimeStamp "the reservation day, persisted as an integer"
         int Priority
+        Guid OrderId "additive and nullable - recorded by ADR-024 Rule 8, does not exist today"
+        Guid CustomerId "additive and nullable - recorded by ADR-024 Rule 8, does not exist today"
     }
 ```
 
 `AddMongoRepository<ResourceDocument, Guid>("resources")`. `ReservationDocument` is an **embedded
 document inside `ResourceDocument`**, not a collection of its own `[confirmed]` — reservations have
-no independent lifetime and cannot be queried without their resource. `CustomerId` is stored as a
-plain value.
+no independent lifetime and cannot be queried without their resource. This is the fact behind
+`ADR-027` Rule 1's refusal to revalidate through `GET /resources/{resourceId}`: there is no way to
+ask about one reservation without retrieving every reservation the resource has ever held.
+
+**Corrected 2026-10-04.** An earlier revision of this diagram showed `RESERVATION` carrying
+`DateTime DateTime` and `Guid CustomerId`. Neither is in the persisted document. The source is
+`ReservationDocument.cs`, which declares exactly `int TimeStamp` and `int Priority` `[confirmed]`,
+and the `Reservation` value object in `.Core/ValueObjects` declares exactly `DateTime DateTime` and
+`int Priority` `[confirmed]`. **A reservation records nothing about who holds it.** The error
+mattered: `ADR-029`'s first revision inferred that CAP-04 could identify a reservation's owner once
+the identity was carried on the message, and a diagram showing `CustomerId` on the reservation is
+exactly what makes that inference look safe. It is not — there is nothing to compare against.
+`ADR-024` Rule 8 is the decision that adds the two owner fields, additive and nullable so an absent
+owner reads as *not mine* and fails closed, with collision equality deliberately left on the calendar
+day alone. `Reservation.Equals` compares `Priority` and `DateTime.Date`, and `GetHashCode` uses
+`DateTime.Date` only `[confirmed]`; `ADR-024` `N11` asserts the owner fields never enter either.
+
+`ResourceDocument.Version` is persisted and is the one version predicate the platform already writes
+`[confirmed]` — `ADR-028` Rule 2 is about the fact that its **result is discarded**, not about the
+field being absent.
 
 ### 5.2 customers-service — [Confidence: confirmed]
 
@@ -1210,6 +1432,8 @@ erDiagram
         DateTime CreatedAt
         DateTime DeliveryDate
         decimal TotalPrice
+        Guid ReservedResourceId "recorded by ADR-025 - does not exist today"
+        int Version "persisted and incremented, published as ScheduleRevision - recorded by ADR-025 Rule 6 and ADR-028"
     }
     ORDER_PARCEL {
         Guid Id
@@ -1241,6 +1465,16 @@ whereas the owning `ParcelDocument` in §5.4 declares them as enums. The snapsho
 *stringified projection* of the source record, which is part of why the two copies can diverge.
 `Status` is the `OrderStatus` enum, and `DeliveryDate` is a nullable `DateTime?` set when a delivery
 is scheduled.
+
+**Two fields are recorded and do not exist today.** `ReservedResourceId` is `ADR-025`: CAP-07
+currently correlates a reservation back to an order through the `(VehicleId, DeliveryDate)` pair,
+which is not unique and is not an identity — `ADR-025` Rule 6 replaces it with correlation by
+`OrderId` alone, and the order's `ResourceReserved` handler is what records the resource id. `Version`
+is `ADR-028` Rules 1 to 4: `OrderDocument` updates are whole-document replaces keyed on id alone with
+no version predicate `[confirmed]`, which is the case that silently loses writes. `ADR-025` Rule 6
+additionally makes the incremented version the **`ScheduleRevision`** published on
+`order_delivery_date_changed`, so it is no longer only a private concurrency guard — a version that
+stalls now causes `ADR-026` Rule 5 to discard legitimate events downstream.
 
 ### 5.4 parcels-service — [Confidence: confirmed]
 
@@ -1282,16 +1516,33 @@ agreement — a row with `AddedToOrder == true` and a null `OrderId` is represen
 ```mermaid
 erDiagram
     DELIVERY ||--o{ DELIVERY_REGISTRATION : "embeds"
+    DELIVERY ||--o{ RESCHEDULING_HISTORY_ENTRY : "separate collection keyed by DeliveryId - recorded by ADR-026 Rule 7"
     DELIVERY {
         Guid Id PK
-        Guid OrderId
+        Guid OrderId UK "unique - one active delivery per order, recorded by ADR-026 Rule 8"
         string Status
         DateTime StartedAt
+        Guid CustomerId "replica - recorded by ADR-026"
+        DateTime DeliveryDate "replica - recorded by ADR-026"
+        Guid ReservedResourceId "replica - recorded by ADR-026"
+        string DeliveryInstructions "bounded - recorded by ADR-026"
+        int ScheduleRevision "last applied - the ordering key, recorded by ADR-026 Rule 5"
+        int Version "persisted - recorded by ADR-028"
     }
     DELIVERY_REGISTRATION {
         DateTime DateTime
         string Description
         string Location
+    }
+    RESCHEDULING_HISTORY_ENTRY {
+        Guid DeliveryId FK "recorded by ADR-026 Rule 7"
+        Guid OrderId "recorded by ADR-026 Rule 7"
+        Guid RequestId "recorded by ADR-026 Rule 9 and ADR-030"
+        DateTime RequestedAt "recorded by ADR-026"
+        DateTime PreviousDate "recorded by ADR-026"
+        DateTime NewDate "recorded by ADR-026"
+        string Outcome "recorded by ADR-026 and ADR-030"
+        int ScheduleRevision "recorded by ADR-026 Rule 7"
     }
 ```
 
@@ -1299,6 +1550,39 @@ erDiagram
 embedded `[confirmed]`. `OrderId` is stored **without any validating call** — this service holds no
 HTTP client for `orders-service` and subscribes to no external event `[confirmed]`, so a delivery can
 be created against an order identifier that does not exist.
+
+**The four original fields are observed; everything else in this diagram is recorded.** The replica
+fields, the instructions, the schedule revision, the history collection and the persisted `Version`
+are decided by `ADR-026`, `ADR-027` and `ADR-028` and do not exist in the code today. Every added
+field is nullable or empty-by-default, because the platform has no migration tooling and nothing will
+backfill the deliveries already written — which is exactly why `ADR-026` Rule 10 commissions an
+explicit backfill rather than leaving pre-existing deliveries permanently unrescheduleable.
+`Version` is the one field the entity already declares — `Delivery.Version` and `IncrementVersion`
+exist in `.Core` and are absent from `DeliveryDocument`, so the aggregate reads as concurrency-safe
+in source and is last-writer-wins in production; `ADR-028` is what makes the declaration true.
+
+**Revised 2026-10-04 — three changes to this diagram.** First, `enum ScheduleOutcome` is **gone**.
+`ADR-027` Rule 5 now settles that schedule-lost is computed at read time and persisted nowhere: the
+record is its only home, and if a cache is ever introduced a fresh read always wins while a cached
+result degrades to `revalidation_unavailable`. A persisted outcome would have been a second home for
+the same fact, and the two would drift the moment a reservation moved without the delivery being
+read. Second, the rescheduling history is a **separate append-only collection keyed by `DeliveryId`**,
+not an embedded array — `ADR-026` Rule 7. Embedding it inside a document with a hard size ceiling and
+`ASM-13`'s full-retention assumption meant unbounded growth inside a bounded container, and the entry
+is written in the same transaction as the delivery change, which `ADR-028` Rule 5 now names explicitly
+and `ADR-028` `FA3` must confirm each environment can perform. Third, `ScheduleRevision` is added and
+is the **ordering key**: `ADR-026` Rule 5 orders applied schedule changes by it and never by the
+delivery date, because a customer moving from the 20th to the 15th produces a legitimate event
+carrying an *earlier* date, which any date-based staleness rule silently discards.
+
+**`OrderId` is drawn as unique, and today it is not.** `ADR-026` Rule 8 requires one active delivery
+per order and places a unique index on `OrderId`; `StartDelivery` updates the existing aggregate
+rather than creating a second one, which follows the `Restart()` design option already recorded for
+`Delivery`. This is a data change, not only a schema annotation: existing duplicates must be
+reconciled **before** the index can be created, and `ADR-026` Rule 10 fixes the rollout order as
+reconcile, then index, then backfill, then publish the readiness metric, then enable the feature.
+`G-07` — `OrderId` stored without any validating call — is unchanged by this and remains open; the
+index constrains cardinality, not existence.
 
 ### 5.6 identity-service — [Confidence: confirmed]
 
