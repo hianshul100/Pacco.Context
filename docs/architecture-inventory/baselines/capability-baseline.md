@@ -993,10 +993,18 @@ is, not what should change.
   the alternative-day query to fourteen ascending calendar days. `ADR-028` requires the version
   predicate this capability already writes to have **its result inspected**: today the result is
   discarded, so a lost update publishes its reservation events anyway, and it requires the outbox to
-  become transactional for this service. `ADR-029` carries the owning customer's identity into the
-  release leg, which currently carries none, so a release that does not belong to the caller is
-  refused rather than returning silently. The capability gains one new caller — CAP-09 point-reads a
-  resource by id under `ADR-027` — and its boundary is otherwise unchanged.
+  become transactional for this service. **Revised 2026-10-04.** `ADR-024` Rule 8 adds `OrderId` and
+  `CustomerId` to `Reservation`, which records nothing about who holds it today — the capability's
+  most consequential data change this wave, and the precondition for `ADR-029` Rule 4's ownership
+  check and `ADR-027`'s identity revalidation. Collision equality stays on the calendar day; the
+  owner fields are additive, nullable and never part of the key. `ADR-029` carries the customer
+  identity on every message of the reschedule chain and has CAP-04 compare it to those recorded
+  fields, refusing a move whose current-day reservation is held by another order; the unguarded
+  standalone `ReleaseResourceReservation` route is a separate defect carried as `ADR-029` `FA4` and
+  is **not** on the reschedule path. The capability gains two new callers — CAP-09 point-reads a
+  resource by id under `ADR-027`, and CAP-09 sends the move command under `ADR-030` §5.2 `M2` — plus
+  one new published event pair (`resource_reservation_rescheduled` and its rejection) and one new
+  authenticated verdict endpoint required by `ADR-027` Rule 1. Its boundary is otherwise unchanged.
 
 ### CAP-05 — Vehicle Fleet Catalogue
 

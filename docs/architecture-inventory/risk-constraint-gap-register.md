@@ -5,9 +5,9 @@
 | Project | Pacco |
 | Document role | The platform's single living queue of open architecture risks, binding constraints and evidenced gaps. Items are opened here, resolved here, and pruned from here |
 | First authored | 2026-09-22, `architecture_evolution_generation`, work item 13652 |
-| Last revised | 2026-10-03, `architecture_evolution_generation`, work item 14830 |
-| Base ref of all cited source | `feature/13652/aidlc` for `R-01`…`R-14`, `C-01`…`C-09` and `G-01`…`G-06`; `feature/14830/aidlc` for `R-15`…`R-30`, `C-10`…`C-17` and `G-07`…`G-11` |
-| Scope of the current FMEA | The architecture authored for work item 14830 — `ADR-024`…`ADR-030` and the design they record — scored as `R-15`…`R-30` and merged into the single queue below. The 13652 items `R-01`…`R-14` are carried forward unchanged: none was closed by this run, and nothing in `ADR-024`…`ADR-030` changes their exposure. Pre-existing platform constraints are carried in §3 and are not re-scored unless this run changes their exposure |
+| Last revised | 2026-10-04, `architecture_evolution_generation`, work item 14830 — review fixes applied to `ADR-024`…`ADR-030` |
+| Base ref of all cited source | `feature/13652/aidlc` for `R-01`…`R-14`, `C-01`…`C-09` and `G-01`…`G-06`; `feature/14830/aidlc` for `R-15`…`R-34`, `C-10`…`C-17` and `G-07`…`G-14` |
+| Scope of the current FMEA | The architecture authored for work item 14830 — `ADR-024`…`ADR-030` and the design they record — scored as `R-15`…`R-34` and merged into the single queue below. `R-31`…`R-34` and `G-12`…`G-14` were opened on 2026-10-04 when review feedback on the open architecture pull request was applied; `R-15`, `R-21`, `R-26`, `R-27`, `R-28` and `R-29` were re-dispositioned in the same pass, and the preamble to §1 records which and why. The 13652 items `R-01`…`R-14` are carried forward unchanged: none was closed by this run, and nothing in `ADR-024`…`ADR-030` changes their exposure. Pre-existing platform constraints are carried in §3 and are not re-scored unless this run changes their exposure |
 | Open questions promoted from 14830 | **None.** All five open questions raised by work item 14830 (`OQ-1`…`OQ-5`) arrived resolved — `OQ-3` by `ASM-18` and `OQ-5` by `ASM-20`, with the remaining three resolved with Product and Architecture before this stage. Nothing was left unresolved to promote into this register |
 
 ## How this register works
@@ -55,13 +55,23 @@ value before the dash is always one of these seven, and every row in the table b
 
 | Value | What it means | Rows that use it |
 |-------|---------------|------------------|
-| `adr` | A decision record governs the exposure. Where the owner is a later stage, the record was authored **on this patch** — `ADR-024`…`ADR-030` exist in `docs/adr/` — and the owner column names the stage carrying the remaining exposure, because a decision is not an implementation | `R-15`, `R-16`, `R-18`, `R-19`, `R-20`, `R-21`, `R-22`, `R-24`, `R-26` |
+| `adr` | A decision record governs the exposure. Where the owner is a later stage, the record was authored **on this patch** — `ADR-024`…`ADR-030` exist in `docs/adr/` — and the owner column names the stage carrying the remaining exposure, because a decision is not an implementation | `R-15`, `R-16`, `R-18`, `R-19`, `R-20`, `R-21`, `R-22`, `R-24`, `R-26`, `R-27`, `R-28`, `R-29`, `R-31`, `R-32`, `R-33` |
 | `mitigate` | A concrete change reduces the exposure, and the change is named in the row. It is not a decision record and not an infrastructure item | `R-01`, `R-02`, `R-05`, `R-06`, `R-07`, `R-08`, `R-09`, `R-11`, `R-12`, `R-14` |
-| `infra` | A platform or pipeline change owned by DevOps, carried as an `INF-*` item | `R-23`, `R-25` |
-| `process` | A human decision or working practice closes it; no code or configuration changes | `R-17`, `R-27`, `R-29` |
-| `accept` | The exposure is knowingly retained. The residual column says so explicitly and names who accepted it | `R-03`, `R-10`, `R-28`, `R-30` |
+| `infra` | A platform or pipeline change owned by DevOps, carried as an `INF-*` item | `R-23`, `R-25`, `R-34` |
+| `process` | A human decision or working practice closes it; no code or configuration changes | `R-17` |
+| `accept` | The exposure is knowingly retained. The residual column says so explicitly and names who accepted it | `R-03`, `R-10`, `R-30` |
 | `transfer` | The exposure moves to a party outside this architecture's control | `R-13` |
 | `defer` | No treatment is chosen yet and the decision itself is scheduled | `R-04` |
+
+**Revised 2026-10-04.** Four rows were reclassified and four were opened. `R-27`, `R-28` and `R-29`
+moved from `process`/`accept` to `adr`: each had been carried as a decision somebody would make later,
+and in each case the revised architecture makes the decision now — one active delivery per order
+(`ADR-026` Rule 8), history in its own collection (`ADR-026` Rule 7), and a commissioned backfill with
+a readiness gate (`ADR-025` `FA1`, `ADR-026` Rule 10). `R-28` in particular had been *accepted*, which
+is the disposition this register reserves for an exposure somebody has knowingly chosen to keep; it
+was not that, it was an unsolved problem wearing an acceptance. `R-31`…`R-34` are new and follow from
+the message set `ADR-030` §5.2 now fixes — a chain of four messages across three services has failure
+modes a single undefined hop did not.
 
 This preamble was first written on 2026-10-03 against the `R-15`…`R-30` rows alone, so it omitted
 `mitigate`, `transfer` and `defer` — the three values the carried-forward `R-01`…`R-14` rows use, and
@@ -75,10 +85,13 @@ platform an architecture change is made by writing a decision record.
 | `R-03` | Client-side logout leaves the issued token valid at the edge | security | 7 | 10 | 8 | **560** | accept | Platform owner — reopen only as a separate edge decision | **High — accepted** |
 | `R-18` | The ownership guard admits an unauthenticated or empty caller context | security | 9 | 6 | 8 | **432** | adr — `ADR-029`, authored this patch | lld — converge the six existing copies | Medium until `FA1` has an owner |
 | `R-19` | A lost update on `Resource` is silent **and still publishes its events** | correctness | 8 | 6 | 9 | **432** | adr — `ADR-028`, authored this patch | hls | Low once the result is inspected |
+| `R-31` | A new reschedule message is never registered in `messages.json`, so `operations-service` is blind to the whole flow | observability | 6 | 7 | 8 | **336** | adr — `ADR-030` Rule 9, authored this patch | hls | Medium until the manifest entries exist |
 | `R-15` | Inbox de-duplication does not cover the HTTP reschedule command, so redelivery is not de-duplicated for it | reliability | 7 | 6 | 8 | **336** | adr — `ADR-028`, authored this patch | hls | Medium — handler idempotence is the only control |
 | `R-22` | A misspelled gateway `bind:` name silently restores the client-supplied `customerId` | security | 9 | 4 | 9 | **324** | adr — `ADR-029` Rule 5, authored this patch | devops — add the assertion to the gateway pipeline | Low once asserted |
 | `R-13` | The JWT signing key is committed in the repository, and the browser client makes the edge it protects end-user facing | security | 9 | 5 | 7 | **315** | transfer | Platform owner | High |
+| `R-32` | The `Order` version stalls, and `ScheduleRevision` silently discards legitimate schedule changes | correctness | 8 | 4 | 9 | **288** | adr — `ADR-028` Rule 4 and `ADR-026` Rule 5, authored this patch | hls | Low once `N6` and `N12` pass |
 | `R-20` | A submitted slot's intra-day precision is silently truncated on both sides | correctness | 6 | 7 | 7 | **294** | adr — `ADR-024` Rule 5, authored this patch | hls | Low once rejection replaces truncation |
+| `R-33` | The new reservation verdict endpoint is reachable without service identity, making it an enumeration oracle over order ids | security | 8 | 5 | 7 | **280** | adr — `ADR-027` Rule 6, authored this patch | hls | High until CAP-04 refuses an unauthenticated caller |
 | `R-24` | Routing key and queue binding diverge, and the only symptom is messages that never arrive | maintainability | 8 | 5 | 7 | **280** | adr — `ADR-030` Rules 4 and 5, authored this patch | devops — run the cross-boundary assertion | Medium — existing divergences stay open |
 | `R-02` | The gateway returns downstream exception messages to the browser | security | 6 | 7 | 6 | **252** | mitigate — client-side | `DO1` implementation | Low once mitigated |
 | `R-09` | No frontend standard exists, so the first client sets platform conventions by accident | governance | 4 | 9 | 7 | **252** | mitigate — write the minimum set | Platform architect | Medium |
@@ -88,6 +101,7 @@ platform an architecture change is made by writing a decision record.
 | `R-17` | The accessibility bar is asserted against a client that does not exist | usability | 5 | 8 | 6 | **240** | process — fix the bar before the first screen | Platform architect with the product owner | Medium |
 | `R-26` | The delivery-side replica is never reconciled, so a dropped message is permanently invisible | correctness | 6 | 5 | 8 | **240** | adr — `ADR-026` §6.2, authored this patch | hls — the minimum staleness detector | **Medium — accepted in part** |
 | `R-27` | One order can have two delivery documents, which becomes a duplicate row in a customer-facing list | correctness | 7 | 4 | 8 | **224** | process — decide the list behaviour | hls | Medium |
+| `R-34` | A reschedule is confirmed to the customer and never settles, because an outbox between three services stops draining | reliability | 7 | 4 | 8 | **224** | infra — `INF-4`, with `ADR-026` §5.2 defining the window | devops | Medium until outbox depth and age are visible |
 | `R-08` | Credentials or tokens leak into browser storage, logs or URLs | security | 9 | 4 | 6 | **216** | mitigate — client-side | `DO1` implementation | Low once mitigated |
 | `R-30` | Three aggregates get write integrity and eight do not, with nothing marking the boundary | maintainability | 6 | 6 | 6 | **216** | accept — scoped by `AD-4`, chosen by human | Platform architect | **Medium — accepted** |
 | `R-10` | The refresh token cannot be redeemed at the edge, so sessions end abruptly at expiry | usability | 5 | 9 | 4 | **180** | accept — for now, with the decision revisited separately | Platform owner | Medium |
@@ -199,11 +213,17 @@ and what must be verified before the risk can be called closed.
   gateway runs in asynchronous mode the decorator does apply, which makes the exposure
   environment-dependent and therefore easy to miss in testing.
 - **Affected.** CAP-02 (the edge write mode), CAP-04, CAP-09.
-- **Mitigation · type `adr`.** `ADR-028` Rules 5 to 7 and `ADR-026` Rule 5, authored on this patch:
-  handler-level idempotence is the control, not the decorator. The same request applied twice must be
-  indistinguishable from applying it once, and a conflict is retried at most once before an explicit
-  rejection.
-- **ADR.** `ADR-028`; the rejection vocabulary is `ADR-030`.
+- **Mitigation · type `adr`. Strengthened 2026-10-04.** The first revision named handler-level
+  idempotence as the control but did not say what makes a request *the same request* — and nothing on
+  the platform carries a client-supplied identifier, so there was no key to be idempotent on.
+  `ADR-030` §5.2 now puts a required `RequestId` on all four reschedule messages, and it travels
+  unchanged from `M1` through `M4`. `ADR-028` Rule 8 makes the control concrete: the outcome of each
+  `RequestId` is recorded **in the same transaction as the domain write**, a repeat returns the
+  recorded outcome and performs no second mutation, and a recorded rejection stays a rejection even
+  if the guards would now pass — a retry must not be able to launder a refusal into an acceptance.
+  `ADR-026` Rule 9 is CAP-09's half, `ADR-024` Rule 4 is CAP-04's.
+- **ADR.** `ADR-028` Rule 8 and `FA7`; `ADR-026` Rule 9; `ADR-030` §5.2. The rejection vocabulary is
+  `ADR-030` Rule 1.
 - **Who must act.** The `DO2` implementer during high-level design. `ADR-026` `FA3` separately
   confirms whether the decorator is active at all for CAP-09's configuration, so the answer is
   recorded rather than assumed.
@@ -211,8 +231,130 @@ and what must be verified before the risk can be called closed.
   [`../specs/14830/solution-design.md`](../specs/14830/solution-design.md) §5, so this does not rest
   on the register alone. `ADR-028` `N7`: replay the same reschedule request and assert one reservation
   and one history entry. Run it in **both** gateway write modes, because only one of them has the
-  decorator.
-- **Residual: Medium.** Handler idempotence is a discipline enforced by tests, not by infrastructure.
+  decorator. `ADR-028` `N11` is the test that matters most: reject a request on a guard, change the
+  world so the guard would now pass, replay the same `RequestId`, and assert the original rejection
+  comes back.
+- **Residual: Low** once Rule 8 is implemented — a recorded outcome inside the write transaction is a
+  mechanism, not a discipline. **Medium** until `ADR-028` `FA7` decides where CAP-04's recorded
+  outcome lives, because Rule 8 cannot be implemented there without it (`ADR-028` `B2`).
+
+### `R-31` — A new reschedule message is never registered in `messages.json` · **[ACTION NOW]**
+
+- **What it is.** `operations-service` subscribes to messages by reading a hand-maintained
+  `messages.json` manifest, and `Subscriptions.cs` binds **exactly** what that file lists — 8
+  exchanges, 24 commands, 29 events and 27 rejected types, 80 in total `[confirmed]`,
+  `architecture-views.md` §6 `GAP-15`. A message that is published but not listed is simply not
+  observed. The platform already has a worked instance: `complete_order_rejected` is published by
+  `orders-service` and is absent from the manifest (`GAP-25`).
+- **Failure mode.** One or more of `ADR-030` §5.2's four new messages ships without a manifest entry.
+- **Effects.** The reschedule flow executes and `operations-service` sees nothing of it. Nothing
+  fails, nothing logs, and nothing is missing from any response — the only symptom is an absence in a
+  place nobody is looking. Combined with `R-23` (no outbox depth signal), a reschedule chain that
+  stops halfway has no observable trace at all.
+- **Causes.** A hand-maintained manifest with no generation step, no schema and no test that compares
+  it to what the services actually publish. Adding a message requires remembering a file in a
+  different repository.
+- **Affected.** CAP-11, and the operability of CAP-04, CAP-07 and CAP-09's new flow.
+- **Mitigation · type `adr`.** `ADR-030` Rule 9, authored on this patch: a message is registered in
+  `messages.json` and in `operations-service`'s subscriptions **in the same change** that introduces
+  it. The rule exists because the alternative — a follow-up ticket — is exactly how
+  `complete_order_rejected` ended up missing.
+- **ADR.** `ADR-030` Rule 9, `FA5` and `N11`; the evidence is `architecture-views.md` §6 `GAP-15` and
+  `GAP-25`.
+- **Who must act.** The `DO2` implementer during high-level design, with the manifest change in the
+  same pull request as the publisher.
+- **Must verify.** `ADR-030` `N11`: assert every message named in §5.2 has a manifest entry whose
+  routing key matches the published routing key exactly. Run it as a test, not as a review checklist,
+  because `R-24` is the same class of failure and a review did not catch that one either.
+- **Residual: Medium** until the manifest entries exist and `N11` runs in a pipeline. The pre-existing
+  `GAP-25` omission stays open; this rule prevents new ones rather than closing old ones.
+
+### `R-32` — The `Order` version stalls, and `ScheduleRevision` silently discards legitimate changes · **[ACTION NOW]**
+
+- **What it is.** `ADR-026` Rule 5 orders applied schedule changes by `ScheduleRevision`, discarding
+  any event carrying a revision lower than the one already applied. `ADR-025` Rule 6 makes that
+  revision the `Order` aggregate's version, incremented on every mutation. The two together are only
+  sound if the version actually advances — and the platform has a worked counter-example:
+  `Delivery.IncrementVersion` exists and is never called `[confirmed]`.
+- **Failure mode.** A mutation path forgets to increment, so two different schedule states carry the
+  same revision.
+- **Effects.** The consumer treats the second as a duplicate and discards it. The customer's delivery
+  date stops updating, and **nothing reports an error** — discarding a stale event is the designed
+  behaviour, so the log line, if there is one, says the system working correctly. This is strictly
+  worse than the lost-update case `R-19` describes, because the discard is deliberate.
+- **Causes.** An ordering key that is maintained by hand in one service and trusted absolutely in
+  another, with no cross-service check that it advances.
+- **Affected.** CAP-07, CAP-09.
+- **Mitigation · type `adr`.** `ADR-028` Rule 4 — every mutating method increments the version — with
+  `ADR-028` `N6` calling each mutator and asserting the advance. `ADR-026` Rule 5 clause 2 makes an
+  equal revision an idempotent no-op that writes no history entry, so a genuine redelivery is
+  harmless; it is the *stalled* version, not the repeated one, that this row is about.
+- **ADR.** `ADR-025` Rule 6; `ADR-026` Rule 5; `ADR-028` Rule 4 and §6.1.
+- **Who must act.** The `DO2` implementer during high-level design. The decision that needs recording
+  is that the version is now a **published contract**, not a private guard, so adding a mutation path
+  without an increment is a cross-service defect rather than a local one.
+- **Must verify.** `ADR-028` `N6` on every mutator, and `ADR-030` `N12`: `ScheduleRevision` strictly
+  increases across a sequence of moves **including one where the delivery date moves earlier**. The
+  earlier-date case is the one that distinguishes a correct revision from an incidental one.
+- **Residual: Low** once `N6` and `N12` pass. The structural exposure — one service's counter is
+  another service's correctness — remains and is why this row stays open rather than closing.
+
+### `R-33` — The reservation verdict endpoint is an enumeration oracle if it is not authenticated · **[ACTION NOW]**
+
+- **What it is.** `ADR-027` Rule 1 adds a narrow endpoint on CAP-04 that answers, for a given
+  resource, day and order, whether the reservation is `held`, `not_held` or `held_by_another`.
+  `deliveries-service` carries no service-identity certificate today and does not reference
+  `Convey.WebApi.Security` `[confirmed]`, and nothing establishes that CAP-04 refuses a caller
+  presenting none.
+- **Failure mode.** The endpoint ships reachable without proven service identity.
+- **Effects.** Anyone who can reach CAP-04 can ask whether an arbitrary order id holds a reservation
+  on an arbitrary day, and get a truthful yes or no. That is an enumeration oracle over the order
+  space, and it leaks the shape of the delivery schedule to an unauthenticated caller. It is a worse
+  exposure than the endpoint it replaces precisely because it is narrow and fast.
+- **Causes.** Two halves of one control, where only one half has an owner. Issuing the caller a
+  certificate is an infrastructure task (`G-09`, `INF-3`); refusing a caller without one is a
+  provider-side change in CAP-04 that nothing previously required.
+- **Affected.** CAP-04, CAP-09.
+- **Mitigation · type `adr`.** `ADR-027` Rule 6's three preconditions, authored on this patch: CAP-09
+  holds a certificate, **CAP-04 refuses a caller presenting none**, and the timeout is configured with
+  the degraded state renderable. The second is the one this row exists for — a caller-side-only
+  control is not a control.
+- **ADR.** `ADR-027` Rule 6, `B1`, `FA4` and `FA7`; `ADR-010` for the call shape; `C-15`.
+- **Who must act.** The platform owner for the certificate (`INF-3`), and the `DO2` implementer for
+  CAP-04's refusal. Neither half alone closes this.
+- **Must verify.** Call the verdict endpoint with **no** client certificate and assert CAP-04 refuses
+  before performing any lookup — in particular that the refusal is indistinguishable for an order
+  that exists and one that does not, so the refusal itself is not an oracle.
+- **Residual: High** until CAP-04 refuses. The endpoint must not be enabled in any shared environment
+  before then; this is the one item in this group that is a release gate rather than a quality target.
+
+### `R-34` — A reschedule is confirmed to the customer and never settles · **[ACTION NOW]**
+
+- **What it is.** `ADR-026` §5.2 defines `confirmed` as CAP-04's commit, which is the point the
+  customer is told their reschedule succeeded, and `settled` as the point CAP-07 and CAP-09 have both
+  applied it. Between them sit two outbox-dispatched hops: `M3` from CAP-04 to CAP-07 and `M4` from
+  CAP-07 to CAP-09. The outbox is a background dispatcher with **no depth and no oldest-age signal**
+  `[confirmed]`.
+- **Failure mode.** An outbox stops draining after the customer has been told the reschedule worked.
+- **Effects.** The customer sees the new day and the order keeps the old one. Deliveries may be
+  planned against a date the customer no longer believes in. `R-23` describes this exposure
+  generically; what changed is that the consequence is now customer-visible and crosses three
+  services, so "an outbox that stops draining looks like a quiet day" is no longer an internal
+  operability concern.
+- **Causes.** A commit-then-dispatch design with no instrumentation on the dispatch half, combined
+  with a completion point deliberately placed before propagation so the customer gets a fast answer.
+- **Affected.** CAP-04, CAP-07, CAP-09, and every customer who reschedules during the stall.
+- **Mitigation · type `infra`.** `INF-4`, carried by `ADR-028` `FA5` — outbox depth and
+  oldest-unpublished age for the three services in scope, before `DO2` reaches a shared environment.
+  The architectural half is already done: `ADR-026` §5.2 names the window explicitly, and `ADR-027`
+  Rule 5's pending-change branch stops a read inside that window from reporting the schedule as lost.
+- **ADR.** `ADR-026` §5.2; `ADR-027` Rule 5; `ADR-028` Rule 5 and `FA5`; `ADR-012` for the outbox.
+- **Who must act.** The platform owner, as part of `INF-4`. The product decision that goes with it —
+  how long a stall may last before the customer is told something — has no owner and should get one.
+- **Must verify.** Stop the dispatcher in a test environment, perform a reschedule, and assert the
+  customer response is still `confirmed`, that the depth signal rises, and that a delivery read taken
+  during the stall reports pending rather than schedule-lost (`ADR-027` `N12`).
+- **Residual: Medium** until the signal exists. The window itself is by design and does not close.
 
 ### `R-22` — A misspelled gateway `bind:` name silently restores the client-supplied `customerId` · **[ACTION NOW]**
 
@@ -457,16 +599,25 @@ and what must be verified before the risk can be called closed.
   create one.
 - **Causes.** At-least-once delivery with no reconciliation, no scheduler, and no job host.
 - **Affected.** CAP-09, and the customer-facing reads in `DO1` and `DO3`.
-- **Mitigation · type `adr`.** `ADR-026` §6.2 and `FA1`, authored on this patch: the gap is recorded
-  rather than discovered later, Rule 5 makes handlers idempotent and ordering-tolerant so that
-  re-delivery repairs rather than corrupts, and `FA1` asks for the **minimum viable detector** — a
-  count comparison or an age alarm on the replicated date — not full reconciliation.
-- **ADR.** `ADR-026`, with `FA1`; the precedent and its gap are `ADR-009`.
+- **Mitigation · type `adr`. Strengthened 2026-10-04.** `ADR-026` §6.2 and `FA1` record the gap
+  rather than leaving it to be discovered later, and Rule 5 makes handlers idempotent and
+  ordering-tolerant so that re-delivery repairs rather than corrupts. Two things changed on this
+  revision. Rule 5 now orders by **`ScheduleRevision`**, never by the delivery date: the first
+  revision discarded any event carrying a date older than the one recorded, which silently drops
+  every legitimate move backwards in the calendar — a customer rescheduling from the 20th to the 15th
+  produces exactly that event. Calendar order and event order are unrelated, and conflating them
+  turned at-least-once delivery from a tolerable property into a correctness bug. And `ADR-026`
+  Rule 10 now requires a **published readiness metric with a threshold that must be crossed before
+  the feature is enabled**, so the replica's completeness is a gate rather than a hope; `FA6` owns
+  the metric.
+- **ADR.** `ADR-026` Rule 5, Rule 10, `FA1` and `FA6`; the precedent and its gap are `ADR-009`.
 - **Who must act.** The platform architect with the platform owner must decide the minimum acceptable
   detection before `DO1` ships. Shipping a customer-facing list fed by an undetectable stale replica
   is a product risk that needs a named acceptance.
 - **Must verify.** Drop a message in a test environment and confirm the detector notices within the
-  agreed window. Without a detector there is nothing to verify, which is the point.
+  agreed window. Without a detector there is nothing to verify, which is the point. `ADR-026` `N6`
+  case (b) separately proves the ordering fix: apply revision 7 for the 20th, then deliver revision 8
+  for the 15th, and assert the earlier **date** is applied because it carries the higher **revision**.
 - **Residual: Medium — accepted in part.** The reconciliation gap is platform-wide and out of this
   increment's scope. The detection gap is not.
 
@@ -483,15 +634,26 @@ and what must be verified before the risk can be called closed.
 - **Causes.** No uniqueness constraint, no index, and a restart path that inserts rather than
   transitions.
 - **Affected.** CAP-09, and `DO1`'s list.
-- **Mitigation · type `process`.** `ADR-026` `FA2`: decide what the customer-facing list does when an
-  order has two delivery documents — show one, show both, or refuse. Today the answer is "whichever
-  the store returns first", which is not a decision anyone made.
-- **ADR.** `ADR-026` §6.2. Adding a uniqueness constraint is **not** proposed here: existing data may
-  already violate it, and there is no migration tooling to find out safely.
-- **Who must act.** The product owner with the `DO1` implementer, before `DO1` ships.
-- **Must verify.** `ADR-026` `N11`: insert two documents with one `OrderId` and assert the list
-  behaviour is the decided one, not the incidental one.
-- **Residual: Medium.** The underlying duplication is not closed by this run.
+- **Mitigation · type `adr`. Revised 2026-10-04 — the disposition changed.** This was carried as a
+  `process` item: decide what the customer-facing list *does* when an order has two deliveries. That
+  was the wrong instrument. Choosing a display rule for a duplicate leaves the duplicate, and a
+  reschedule still moves whichever document the query returned, silently leaving the other on the old
+  date — a display decision cannot fix a write that targets the wrong row. `ADR-026` Rule 8 now
+  requires **one active delivery per order**: a unique index on `OrderId`, with `StartDelivery`
+  updating the existing aggregate rather than inserting a second, which follows the `Restart()`
+  design option already recorded for `Delivery` rather than inventing a new lifecycle.
+- **ADR.** `ADR-026` Rule 8 and Rule 10. The uniqueness constraint **is** now proposed, and the
+  objection that existing data may already violate it is answered rather than used as a reason to
+  stop: `ADR-026` Rule 10 fixes the rollout order as reconcile duplicates, then create the index,
+  then backfill, then publish the readiness metric, then enable the feature. Reconciliation before
+  indexing is the step that makes this safe without migration tooling.
+- **Who must act.** The `DO2` implementer with the product owner — the product decision that remains
+  is what reconciliation does with a duplicate, not what the list displays. Before `DO1` ships.
+- **Must verify.** `ADR-026` `N12`: a second `StartDelivery` for an order that already has an active
+  delivery updates the existing aggregate and creates no second document; and the index creation
+  fails loudly against unreconciled data rather than being skipped.
+- **Residual: Low** once the index exists. **Medium** until reconciliation has run, because the index
+  cannot be created before it and nothing today counts how many duplicates exist (`ADR-026` `B3`).
 
 ### `R-08` — Credentials or tokens leak into browser storage, logs or URLs · **[handled later by `DO1` implementation]**
 
@@ -594,24 +756,34 @@ and what must be verified before the risk can be called closed.
 ### `R-28` — The append-only rescheduling history grows without bound · **[handled later by the platform architect]**
 
 - **What it is.** `ASM-13` makes the rescheduling history an audit record with full retention —
-  entries are added, never edited, never deleted. `ADR-026` Rule 7 embeds it in the delivery
-  document, which has a hard size ceiling.
+  entries are added, never edited, never deleted. `ADR-026` Rule 7 originally embedded it in the
+  delivery document, which has a hard size ceiling.
 - **Failure mode.** A delivery rescheduled pathologically often eventually fails to save.
 - **Effects.** The failure arrives on a write, at the worst moment, for the one customer whose record
   is largest. `ASM-17` sets no cap and no cool-off on how often a customer may reschedule, so nothing
   bounds the entry count from the product side either.
 - **Causes.** Full retention plus document embedding plus no rate limit, each individually reasonable.
 - **Affected.** CAP-09.
-- **Mitigation · type `accept`.** Accepted for this increment. `ASM-13` forbids pruning, so the only
-  other lever is *where* the history is stored, and moving it out of the document is a change this
-  feature does not need. It is recorded here rather than mitigated by a silent cap, which would
-  violate `ASM-13` quietly.
-- **ADR.** `ADR-026` Rule 7 and `Q1`.
-- **Who must act.** The platform architect, after the first release, if the entry distribution turns
-  out to have a long tail. **No action is required to ship `DO3`.**
-- **Must verify.** Measure the entry count distribution once real usage exists. There is nothing
-  useful to verify before that.
-- **Residual: Medium, accepted.**
+- **Mitigation · type `adr`. Revised 2026-10-04 — the acceptance is withdrawn.** This was accepted on
+  the reasoning that `ASM-13` forbids pruning, so the only other lever was *where* the history is
+  stored, and moving it was "a change this feature does not need." That reasoning inverted the
+  trade-off: it accepted an unbounded write failure in order to avoid a schema choice that costs
+  nothing. `ADR-026` Rule 7 now writes history to a **separate append-only collection keyed by
+  `DeliveryId`**, written in the same transaction as the delivery change, carrying `DeliveryId`,
+  `OrderId`, `RequestId`, `RequestedAt`, `PreviousDate`, `NewDate`, `Outcome` and `ScheduleRevision`.
+  Full retention is preserved exactly as `ASM-13` requires — nothing is pruned and no silent cap is
+  introduced — and the size ceiling simply no longer applies.
+- **ADR.** `ADR-026` Rule 7; `ADR-028` Rule 5, which names the companion document as inside the same
+  transaction, and `ADR-028` `FA3`, which must confirm each environment can perform it.
+- **Who must act.** The `DO2` implementer. The sizing question `ADR-026` `FA8` carries is now about
+  collection growth and index strategy, which is an ordinary operational concern rather than a write
+  that fails at the worst possible moment.
+- **Must verify.** `ADR-028` `N13`: a history entry is not visible when its delivery write is rolled
+  back. And measure the entry count distribution once real usage exists, for sizing rather than for
+  safety.
+- **Residual: Low.** The failure mode this row described — a save that fails on a pathologically
+  rescheduled delivery — is closed by construction. What remains is the multi-collection transaction
+  dependency, which is tracked as `ADR-028` `FA3` and `R-31`, not here.
 
 ### `R-29` — Nothing backfills the orders and deliveries written before this change · **[ACTION NOW]**
 
@@ -628,12 +800,21 @@ and what must be verified before the risk can be called closed.
 - **Causes.** Additive-only persistence, which is itself required because there is no migration
   tooling.
 - **Affected.** CAP-07, CAP-09, and every customer with an open delivery at release time.
-- **Mitigation · type `process`.** Decide between two honest options: accept that pre-existing
-  deliveries are not reschedulable until their order is reserved again, or commission a hand-written
-  backfill and give it an owner. Both are legitimate; neither is the default.
-- **ADR.** `ADR-025` §6.2 and `FA1`; `ADR-026` §6.2.
+- **Mitigation · type `adr`. Revised 2026-10-04 — the choice is made, not left open.** This was
+  carried as a decision between two options: accept that pre-existing deliveries are unreschedulable,
+  or commission a backfill. The first option is not actually available. "Every order placed before
+  this ships is permanently unreschedulable until it happens to be reserved again" is not a steady
+  state a customer-facing feature can launch into, and `ADR-025` §6.2 now says so explicitly rather
+  than listing it as a legitimate alternative. The backfill is commissioned: `ADR-025` `FA1` with a
+  cut-off date and a count of affected orders, and `ADR-026` Rule 10 with the replica backfill and a
+  **published readiness metric that must cross a threshold before the feature is enabled**. The
+  metric is what turns "we think the backfill worked" into a gate.
+- **ADR.** `ADR-025` §6.2 and `FA1`; `ADR-026` Rule 10, `FA6` and `FA7`. The third affected field is
+  new on this revision: `ADR-024` Rule 8's owner fields on `Reservation` have the same problem, and
+  `ADR-024` `FA5` decides whether they are backfilled or left null — null fails closed, so an
+  un-backfilled reservation refuses a move rather than permitting a wrong one.
 - **Who must act.** The product owner with the platform architect, before `DO2` ships. The decision
-  changes what the launch communication has to say.
+  that remains is the cut-off and the launch communication, not whether a backfill happens.
 - **Must verify.** `ADR-025` `N3`: a reschedule against an order with no recorded resource id is
   rejected with its own distinct reason and makes no reservation call — so the limitation is
   explainable to a customer rather than arriving as a generic failure.
@@ -721,18 +902,25 @@ and what must be verified before the risk can be called closed.
   correctness — the alternative relies on a release path that returns silently when nothing matches,
   so the event that would keep a replica honest is exactly the one that may not fire.
 - **Affected.** CAP-09, CAP-04, and `DO1`'s customer-facing reads.
-- **Mitigation · type `adr`.** `ADR-027` Rules 2, 3 and 4, authored on this patch: revalidate once
-  per **distinct resource** rather than per delivery, declare an explicit timeout in configuration,
-  and degrade to a labelled `revalidation unavailable` answer that is distinguishable from both a
-  confirmed schedule and a lost one.
-- **ADR.** `ADR-027`, with `FA2` and `FA5`.
-- **Who must act.** The platform owner with the `DO1` implementer must **fix the timeout as a number,
-  in configuration, before this path is enabled**. The requirement it serves cannot be assessed
-  against an unspecified timeout.
+- **Mitigation · type `adr`. Bounded 2026-10-04.** `ADR-027` Rules 2, 3 and 4: revalidate once per
+  **distinct resource and day** rather than per delivery, declare an explicit timeout in
+  configuration, and degrade to a labelled `revalidation_unavailable` answer that is distinguishable
+  from both a confirmed schedule and a lost one. The first revision left the fan-out unbounded in
+  principle — "once per distinct resource" has no ceiling if a customer has many deliveries. Rule 2
+  now carries an explicit **page bound**, `FA6` fixes the number, and Rule 3 makes the worst-case
+  budget the per-call timeout multiplied by that bound, which is a figure that can actually be
+  assessed against a requirement.
+- **ADR.** `ADR-027`, with `FA2`, `FA5` and `FA6`. The endpoint being called is new and unspecified —
+  `FA7` commissions its specification, and `B2` records that it cannot be built before `ADR-024`
+  Rule 8 gives `Reservation` an owner to report on.
+- **Who must act.** The platform owner with the `DO1` implementer must **fix the timeout and the page
+  size as numbers, in configuration, before this path is enabled**. The requirement this serves
+  cannot be assessed against an unspecified timeout or an unbounded fan-out.
 - **Must verify.** `ADR-027` `N4` and `N5`: with the client stubbed to time out, the read still
   returns successfully, marked unavailable, and that response is distinguishable from a confirmed
-  one. `N3` asserts one outbound call for five deliveries on one resource.
-- **Residual: Low** once the timeout is fixed and `N4` passes.
+  one. `N3` asserts one outbound call for five deliveries on one resource and day, and that a
+  customer with more deliveries than the page bound issues no more calls than the bound allows.
+- **Residual: Low** once the timeout and the page bound are fixed and `N4` passes.
 
 ### `R-14` — The gateway library's actual CORS behaviour is unverified · **[ACTION NOW]**
 
@@ -813,7 +1001,12 @@ They are listed here so a designer does not have to rediscover them.
 | `C-12` | The alternative-day query returns at most the next 14 eligible calendar days, ascending, days only | `ASM-19`, `ADR-024` Rule 6, `NFR-19` | An unbounded or open-ended availability scan, and intra-day slot granularity |
 | `C-13` | The order's delivery date is the authoritative schedule. Any delivery-side copy is a replica and never overrides it | `ASM-10`, `ADR-026` Rule 2 | A delivery-side write that changes the schedule without an order event |
 | `C-14` | Persistence changes are additive and nullable: fields added, never renamed or removed, enum ordinals append-only, and nothing backfills | `ADR-008`, `NFR-17`, `C-08` of the baseline | A required new field, a renamed field, and any design that assumes historical records carry it |
-| `C-15` | A cross-service read is a point read by id and carries service identity. `deliveries-service` has no service-identity certificate today | `ADR-010`, `ADR-027` Rules 1 and 6 | A collection scan, a per-delivery fan-out, and enabling the revalidation path before the certificate exists |
+| `C-15` | A cross-service read is a point read by id and carries service identity, and the **provider** refuses a caller that presents none. `deliveries-service` has no service-identity certificate today | `ADR-010`, `ADR-027` Rules 1 and 6 | A collection scan, a per-delivery fan-out, an unbounded fan-out with no page ceiling, reading a resource's whole reservation collection to answer a question about one reservation, and enabling the revalidation path before **both** the certificate exists and CAP-04 refuses without one |
+| `C-18` | Ownership of a reservation is decided by CAP-04 against fields it has recorded, and an absent owner reads as *not mine* | `ADR-024` Rule 8, `ADR-029` Rule 4 | Trusting an identity carried on a message as proof of ownership, and treating a reservation with no recorded owner as the caller's |
+| `C-19` | Applied schedule changes are ordered by `ScheduleRevision` — the `Order` aggregate's version — and never by the delivery date | `ADR-025` Rule 6, `ADR-026` Rule 5 | Any staleness check based on comparing dates, which discards every legitimate move backwards in the calendar |
+| `C-20` | A reschedule is complete at `confirmed` — CAP-04's commit — for every surface, with `settled` following asynchronously | `ADR-026` §5.2 | Acceptance tests that assert on settlement, a synchronous response that waits for propagation, and a read inside the window reporting a just-rescheduled delivery as schedule-lost |
+| `C-21` | Every reschedule message carries a client-supplied `RequestId`, and the outcome of each is recorded in the same transaction as the write it caused | `ADR-030` §5.2, `ADR-028` Rule 8 | Relying on the inbox decorator for the HTTP edge, and re-evaluating guards on a replay of an already-decided request |
+| `C-22` | A message is registered in `messages.json` and in `operations-service`'s subscriptions in the same change that introduces it | `ADR-030` Rule 9, `GAP-15`, `GAP-25` | Shipping a publisher and leaving the manifest entry to a follow-up ticket |
 | `C-16` | Write integrity is scoped to `Resource`, `Order` and `Delivery` for this increment, replicated per repository | `AD-4` option B, `ADR-028` Rules 1-7, `ADR-002` | A platform-wide sweep in this increment, and a shared library to carry the pattern |
 | `C-17` | A rejected reschedule returns one of exactly five classes, keyed on a stable code, with no internal detail | `ADR-030` Rules 1-3, `NFR-14`, `ADR-023` | A generic failure, a client that parses prose, and an exception message reaching a caller |
 
@@ -836,6 +1029,9 @@ A gap is a missing input, not a risk to score. Each one blocks a decision somebo
 | `G-09` | **[handled later by DevOps]** No service-identity client certificate exists for `deliveries-service`, and no record states where service certificates are issued or stored | `ADR-027`'s revalidation path fails closed without one, so `DO1`'s schedule-lost behaviour cannot be enabled. This is `ADR-027` `B1` | Platform owner, carried by `INF-3` | Before `DO1` reaches a shared environment |
 | `G-10` | **[ACTION NOW]** No revalidation timeout value exists, and the platform has no availability or latency target to justify one against | Without a number, the client default is effectively unbounded and `NFR-20` cannot be assessed. This is the same absence `G-03` records, now with a specific decision waiting on it | Platform owner with the `DO1` implementer | Now — before the revalidation path is enabled |
 | `G-11` | **[ACTION NOW]** No instruction-length bound and no redaction entry exist for the new free-text delivery-instructions field | `NFR-11` requires both. The existing unbounded `Notes` field written verbatim to console, file and Seq is the precedent being avoided, and avoiding it requires two concrete values nobody has chosen | Product owner with the `DO3` implementer | Now — before `DO3` persists any customer text |
+| `G-12` | **[ACTION NOW]** The standard priority a customer reschedule carries is undefined. `Reservation.Priority` is an `int` with no named values anywhere in the source, and no record fixes the number a customer-initiated move uses | `C-11` and `ASM-14` require one fixed standard priority that never expropriates an existing hold — but "standard" is not a value. `ADR-024` Rule 3 refuses a day held **above** this priority, which cannot be implemented against an unchosen number, and `ADR-030` §5.2 `M2` carries `Priority` as a required field on the wire. Picking it wrong in either direction is a correctness failure: too high and a customer reschedule expropriates an operational hold, too low and every reschedule is refused. **Opened on 2026-10-04.** An earlier revision of `ADR-024` cited `G-07` for this; `G-07` is a different gap entirely — `deliveries-service` accepting an `OrderId` with no validating call — and the two were conflated | Product owner with the platform architect | Now — before `DO2` high-level design closes, because `ADR-024` Rule 3 and `ADR-030` `M2` both depend on the number |
+| `G-13` | **[ACTION NOW]** It is unverified whether any deployed environment supports multi-collection transactional writes | `ADR-028` Rule 5, `ADR-028` Rule 8 and `ADR-026` Rule 7 all commit more than one document together, and a standalone node cannot begin a transaction at all — it fails at the first write, not at startup. An environment that cannot support it cannot host `DO2` in any form, including a degraded one. `docker-compose` describes the local topology, not the deployed one, so this cannot be answered from the workspace. This is `ADR-028` `FA3` and `B1`, and `ADR-026` `B2` | Platform owner — the only role that can observe a deployed environment | Now — before `DO1` reaches a shared environment, so the answer is known before `DO2` design closes |
+| `G-14` | **[handled later by HLS]** No count exists of how many orders have more than one delivery document, so the scale of the reconciliation `ADR-026` Rule 10 requires is unknown | The unique index on `OrderId` (`ADR-026` Rule 8) cannot be created until duplicates are reconciled, and nothing today counts them. A reconciliation whose scale is unknown cannot be scheduled, and an index creation that fails against live data at rollout is the failure this gap prevents. This is `ADR-026` `B3` | `DO2` implementer — a read-only count against each environment | Before `DO2` reaches a shared environment |
 
 ---
 
@@ -844,6 +1040,17 @@ A gap is a missing input, not a risk to score. Each one blocks a decision somebo
 **None.** This register was first authored on 2026-09-22 and no item has yet been resolved. The
 first revision that closes an item records it here with its closing date and the stage or person that
 closed it, and the row is deleted at the revision after that.
+
+**What the 2026-10-04 revision did and did not close.** It opened `R-31`…`R-34` and `G-12`…`G-14`,
+re-dispositioned `R-27`, `R-28` and `R-29` from `process`/`accept` to `adr`, and strengthened `R-15`,
+`R-21` and `R-26`. **It closed nothing**, and that is deliberate even where a row's residual dropped.
+`R-28`'s failure mode is closed by construction — the history no longer lives inside a size-capped
+document — but the row stays visible for one revision with its disposition rewritten in place, per
+the lifecycle above, so a reader can see that an acceptance was withdrawn rather than finding the row
+simply gone. Three of the rows whose residual improved are now gated on actions nobody has completed:
+`R-27` on a reconciliation that needs `G-14`'s count, `R-15` on `ADR-028` `FA7`, and `R-29` on a
+backfill with a cut-off date. A residual that assumes a follow-up action has happened is not a closed
+item.
 
 **What the 2026-10-03 revision did and did not close.** It opened `R-15`…`R-30`, `C-10`…`C-17` and
 `G-07`…`G-11`. It closed nothing. Two things are worth stating plainly rather than leaving to

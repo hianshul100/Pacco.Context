@@ -143,7 +143,7 @@ across resources, which is precisely the unbounded collection read `ADR-010` C10
 
 **The CAP-04 resource against which an order's delivery day is reserved is recorded on the `Order`
 aggregate as an additive, nullable field, written at the moment CAP-07 already consumes
-`resource_reserved`.** Five rules follow.
+`resource_reserved`.** Six rules follow.
 
 **Rule 1 — one additive nullable field.** `Order` gains a nullable resource-id property with a
 private setter, written only through a method on the aggregate. Nullable is deliberate: every order
@@ -156,9 +156,18 @@ and omitting `AsEntity` drops it on every read, both silently — `CancellationR
 proof that this failure mode is real on this exact aggregate ✅. Whether it is also exposed on
 `OrderDto` is decided by `FA2`, not assumed.
 
-**Rule 3 — it is written where the fact arrives.** The handler that already consumes
-`resource_reserved` records the resource id on the order it correlates. No new subscription and no
-new message are introduced by this record.
+**Rule 3 — it is written wherever the fact arrives, on both inbound paths.** The handler that already
+consumes `resource_reserved` records the resource id on the order it correlates. That is the initial
+reservation path and it is unchanged by this record.
+
+The **reschedule** path is a second arrival of the same fact, and it is not optional. CAP-07 also
+consumes `resource_reservation_rescheduled` (`ADR-030` §5.2 `M3`) and, on that event, sets the
+authoritative delivery date and re-records the resource id. The first revision of this record stated
+that "no new subscription and no new message are introduced", and that was wrong in a way that broke
+the chain: without a new subscription, nothing ever tells CAP-07 that a day moved, so the
+authoritative date in `ASM-10` silently diverges from the day CAP-04 holds, and `ADR-026`'s replica
+inherits the divergence. One new subscription and one new consumed event are introduced here, and one
+new published event — `order_delivery_date_changed`, `ADR-030` §5.2 `M4` — leaves on the other side.
 
 **Rule 4 — the reschedule reads the recorded field, and refuses when it is absent.** A reschedule
 for an order with no recorded resource id is **rejected with a distinct reason**, not silently
@@ -168,6 +177,20 @@ assumption this record exists to remove, and would do so on the one path where i
 **Rule 5 — the vehicle id is untouched.** `VehicleId` keeps its current meaning, its current
 population path and its role in the existing `(vehicleId, deliveryDate)` correlation. This record
 adds a fact; it removes nothing and renames nothing, which is what `NFR-17` and `ADR-008` require.
+
+**Rule 6 — CAP-07 correlates a move by `OrderId`, never by `(VehicleId, DeliveryDate)`.** `M3`
+carries the `OrderId` of the moved reservation, and the handler selects the order by that field
+alone. The existing `(vehicleId, deliveryDate)` match stays where it is for the paths that already
+use it (Rule 5) and is never extended to the reschedule path: it is a correlation by two mutable
+values on a path whose entire purpose is to change one of them, which makes it wrong in exactly the
+case it would be used — and `orders-service` records the failing case as undiagnosable ✅. Today's
+`resource_reserved` carries no `OrderId` at all ✅, which is why `M3` is a new event rather than a
+reused one, and why `ADR-024` Rule 8 has to put the `OrderId` on the reservation for CAP-04 to be
+able to publish it.
+
+The write CAP-07 performs on `M3` is one transaction: set the delivery date, re-record the resource
+id, increment the aggregate version, and insert `M4` into the outbox (`ADR-028` Rule 5). The
+incremented version **is** the `ScheduleRevision` `M4` carries and `ADR-026` Rule 5 orders by.
 
 ## 6. Consequences
 
@@ -182,12 +205,18 @@ adds a fact; it removes nothing and renames nothing, which is what `NFR-17` and 
 
 ### 6.2 Negative
 
-- **Every order created before this change has a null resource id, and there is no backfill.**
-  `ADR-008` records that no migration tooling exists anywhere in the platform ✅, so the only way to
-  populate historical orders is a hand-written script with no home in any repository. Rule 4 turns
-  that into a visible rejection rather than a wrong answer, but it does mean **pre-existing deliveries
-  cannot be rescheduled until their order is reserved again**. This is a real functional limitation of
-  the first release and is recorded as `R-29` rather than hidden.
+- **Every order created before this change has a null resource id, and a backfill is now required
+  rather than noted as absent.** `ADR-008` records that no migration tooling exists anywhere in the
+  platform ✅, so the backfill is a hand-written one-off with no home in any repository. Rule 4 turns a
+  missing value into a visible rejection rather than a wrong answer — that part is correct and stays —
+  but **"every pre-existing order is unreschedulable until it is reserved again" is not an acceptable
+  steady state for a customer-facing feature**, and the first revision of this record treated it as
+  one. `FA1` is now a required rollout step with an exit condition, paired with `ADR-026` Rule 10's
+  readiness metric so the remaining population is counted rather than assumed small. `R-29` carries it.
+- **Rule 3's second inbound path is new CAP-07 work.** A new subscription on the platform's
+  most-coupled aggregate means `ADR-013`'s eight registration points, of which one is automatic ✅, on
+  the service with the widest blast radius. The first revision of this record avoided that cost by
+  not making the connection at all, which avoided the work and also the feature.
 - **It adds a field to the platform's most-coupled aggregate.** CAP-07 is the heaviest caller and the
   busiest consumer on the platform; every change there has the widest blast radius.
 - **The silent-mapping failure mode is real here.** Rule 2 exists because this aggregate has already
@@ -209,9 +238,11 @@ adds a fact; it removes nothing and renames nothing, which is what `NFR-17` and 
 | Fields are added, never renamed or removed; enum ordinals append-only | `ADR-008`, `NFR-17` | Rule 1 adds one nullable field. Rule 5 leaves `VehicleId` untouched |
 | One logical database per service; no cross-service database access | `ADR-008` C5 | The field lives in `orders-service`'s own database and is read by CAP-07 alone |
 | The order's delivery date remains the authoritative schedule | `ASM-10` | Unchanged. This record adds a resource reference, not a schedule |
-| A service publishes only to its own exchange | `ADR-001` C1 | This record introduces no message at all |
+| A service publishes only to its own exchange | `ADR-001` C1 | Rule 3's new publication is `order_delivery_date_changed` on the `orders` exchange, which CAP-07 owns. It consumes `resource_reservation_rescheduled` from CAP-04's exchange |
 | No vehicle or driver reassignment behaviour is introduced | `DO2` scope, `ASM-15` | Rule 5 |
-| Message compatibility rests on naming convention, with no build-time signal | `ADR-003`, C2 | No contract changes, so no compatibility surface is touched |
+| Message compatibility rests on naming convention, with no build-time signal | `ADR-003`, C2 | Rule 3 introduces two message contracts; both are fixed by `ADR-030` §5.2 and asserted name-and-payload by `ADR-030` `N10` |
+| Subscriptions and handlers are wired at every registration point | `ADR-013` | Rule 3's new subscription on CAP-07, with the same eight-point obligation `ADR-026` Rule 3 carries for CAP-09 |
+| The domain write and its outbox row commit together | `ADR-028` Rule 5 | Rule 6's single transaction |
 
 ## 8. Non-Functional Requirements & Testing
 
@@ -223,6 +254,10 @@ adds a fact; it removes nothing and renames nothing, which is what `NFR-17` and 
 | `N4` | The recorded resource id is never silently replaced by the vehicle id | Rule 4 | Set a resource id different from the vehicle id. Assert the reschedule targets the recorded resource |
 | `N5` | Recording the resource id does not change the existing `resource_reserved` correlation behaviour | `NFR-5` | Replay the existing reservation-approves-order flow. Assert the order still advances exactly as before |
 | `N6` | A concurrent parcel addition is not erased by the write that records the resource id | `NFR-4` | Covered by `ADR-028` `N2`. Listed here because this record widens the exposure |
+| `N7` | On `resource_reservation_rescheduled`, CAP-07 selects the order by `OrderId` and by nothing else | Rule 6 | Seed two orders sharing a `(VehicleId, DeliveryDate)` pair. Move one. Assert the right order changed and the other is untouched — a `(VehicleId, DeliveryDate)` correlation picks arbitrarily here |
+| `N8` | The move write sets the date, re-records the resource id, increments the version and enqueues `order_delivery_date_changed`, all in one transaction | Rule 6, `ADR-028` Rule 5 | Fail the outbox insert. Assert the order's date and version are unchanged |
+| `N9` | The `ScheduleRevision` on the published event equals the order's version after the write, and strictly increases across successive moves | Rule 6, `ADR-026` Rule 5 | Move twice. Assert both revisions against the stored versions |
+| `N10` | A redelivered `resource_reservation_rescheduled` with a `RequestId` already applied changes nothing and publishes nothing | `NFR-7` | Deliver twice. Assert one date change, one outbox row |
 
 ## 9. Relationship to the implementation pattern catalog
 
@@ -244,10 +279,16 @@ next person adding a field to `Order` meets the evidence before the defect.
 | E6 | `Order` has no optimistic concurrency; updates are whole-document replaces keyed on id | `Mongo/Repositories/OrderMongoRepository.cs:45`; `orders-service.md` §3.17 |
 | E7 | CAP-09 subscribes to no external event, so it cannot be the first receiver of this fact | Catalog KnownGap *deliveries-service subscribes to nothing and no service publishes a deliveries*; `deliveries-service.md` §3.34 |
 | E8 | No migration framework exists in any repository | `ADR-008`; `orders-service.md` §5; `architecture-baseline.md` C8 |
+| E9 | `ResourceReserved` carries `ResourceId`, `CustomerId` and `DateTime`, and carries no `OrderId` | `availability-service.md`; `architecture-views.md` §5.1 |
+| E10 | Adding a handler requires eight registration points, only one of which is automatic | `ADR-013`; `orders-service.md` §3.24 |
 
 ### 10.1 Documentation-versus-code conflicts
 
-None found for this record.
+None found for this record. One conflict **internal to this patch** was found and resolved on this
+revision: Rule 3 previously asserted that no new subscription and no new message were introduced,
+while `ADR-026` described CAP-09 consuming a schedule-change event that only CAP-07 could publish.
+The two could not both be true. Rule 3 now carries the subscription and the publication, and
+`ADR-030` §5.2 fixes both contracts.
 
 ## 11. Follow-Up Actions
 
@@ -259,7 +300,7 @@ section is the single place to change and these dates move with it; the mileston
 
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Decide what happens to orders already in flight when this ships — accept that they cannot be rescheduled until reserved again, or commission a hand-written backfill. There is no migration tooling, so the second option is a script somebody has to own (`R-29`) | Product owner with the platform architect | **2027-01-30** — before `DO2` ships |
+| `FA1` | **[ACTION NOW]** Commission and own the backfill that populates `ReservedResourceId` for orders already in flight, with a cut-off defining which orders are in scope and an explicit count of those whose mapping cannot be established. There is no migration tooling ✅, so this is a script with a named owner. Accepting Rule 4's rejection as the permanent answer for the whole existing population is **not** one of the options; it is the answer for the residue the backfill cannot map (`R-29`, `ADR-026` Rule 10) | Product owner with the platform architect | **2026-12-08** — before `DO2` high-level design completes, so the work is scoped into the wave rather than discovered at its end |
 | `FA2` | **[handled later by HLS]** Decide whether the recorded resource id is exposed on `OrderDto`. It is an internal correlation today; exposing it changes a public read contract | `DO2` implementer with the platform architect | **2026-12-08** — during `DO2` high-level design |
 | `FA3` | **[ACTION NOW]** Record, from a running environment, whether `resourceId` and `vehicleId` actually hold the same value (`G-08`). This record no longer depends on the answer, but `ADR-026`'s replica and the existing correlation both still do | Platform owner — the only role that can observe a running environment | **2027-01-30** — before `DO2` ships |
 

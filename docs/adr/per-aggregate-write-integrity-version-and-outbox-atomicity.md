@@ -15,7 +15,7 @@
 | **Infrastructure recommendation applied** | `INF-2` — per-aggregate write integrity, governed by `ADR-012`, delegated to **HLS**; and `INF-4` — outbox depth and age observability, governed by `ADR-012`, delegated to **HLS** |
 | **Resolved decision applied** | `AD-4` option **B**, chosen by human, confidence high. Binding and settled — not re-opened here: *"Scope per-aggregate optimistic concurrency and domain-write/outbox atomicity to Resource, Order and Delivery for this increment, implemented as a reusable pattern that can later be adopted platform-wide."* |
 | **Fit verdict applied** | Verdict 8 — per-aggregate write integrity realized against `ADR-012` in preference to `ADR-008`, `evolution_type: component_extension`, `can_extend_existing_component: true` |
-| **Related** | `ADR-012` (the outbox and write-integrity decision this applies), `ADR-008` (hand-mapped documents, no migration tooling), `ADR-002` (no shared library), `ADR-024` (the atomic day move that depends on this), `ADR-025` (the new field on `Order` this protects) |
+| **Related** | `ADR-012` (the outbox and write-integrity decision this applies), `ADR-008` (hand-mapped documents, no migration tooling), `ADR-002` (no shared library), `ADR-024` (the atomic day move that depends on this), `ADR-025` (the new field on `Order` this protects, and the version this record maintains which `ADR-025` Rule 6 publishes as `ScheduleRevision`), `ADR-026` (the consumer that orders by that revision, and whose history write shares Rule 5's transaction), `ADR-030` (the message contracts whose `RequestId` Rule 8 records) |
 
 ## Notation
 
@@ -142,8 +142,9 @@ the job with no new infrastructure.
 ## 5. Decision
 
 **For `Resource`, `Order` and `Delivery`, every aggregate write is a version-conditioned update whose
-result is inspected, and the domain write and the outbox record commit together or not at all. The
-implementation is a per-repository pattern, replicated, not a shared library.** Seven rules follow.
+result is inspected, the outcome of the request that caused it is recorded with it, and the domain
+write and the outbox record commit together or not at all. The implementation is a per-repository
+pattern, replicated, not a shared library.** Eight rules follow.
 
 **Rule 1 — every write carries a version predicate.** The update matches on the aggregate id **and**
 the version the writer loaded. This already exists in CAP-04 ✅ and must be added to CAP-07 and
@@ -162,10 +163,16 @@ document, therefore always zero on reload, therefore a predicate built on it wou
 **Rule 4 — the version is incremented on every mutation.** `IncrementVersion` exists on `Delivery`
 and is never called ✅. A version that never changes is a predicate that never fails.
 
-**Rule 5 — the domain write and the outbox record are one transaction.** `disableTransactions` must
-be **false** for the three services in scope, and the setting is asserted in configuration rather
-than assumed. Where a service's deployment cannot support transactional writes, that is a blocker to
-raise, not a setting to flip back.
+**Rule 5 — the domain write, the outbox record and any companion document written by the same
+handler are one transaction.** `disableTransactions` must be **false** for the three services in
+scope, and the setting is asserted in configuration rather than assumed. Where a service's
+deployment cannot support transactional writes, that is a blocker to raise, not a setting to flip
+back — `FA3` is that check, and it is a **precondition of `DO2`**, not a late verification. The
+transaction is explicitly not limited to two documents: `ADR-026` Rule 7 writes a history entry into
+a separate collection alongside the delivery change, and `ADR-026` Rule 9 and Rule 8 below write a
+recorded outcome. All of them are inside this one commit. A standalone datastore node cannot start a
+transaction at all, so an environment that fails `FA3` cannot host `DO2` until it changes
+(`ADR-026` `B2`).
 
 **Rule 6 — a conflict is retried at most once, by reloading, and then surfaced.** The reschedule is a
 customer-initiated action with a `DO2` rejection vocabulary (`ADR-030`). Blind retry loops on a path
@@ -176,6 +183,33 @@ rejection, is the bound.
 no shared library and rejects introducing one. The pattern is therefore written three times, and
 `patterns/data/` carries the canonical description so the three copies are the same shape. The cost —
 three places to fix a bug in — is accepted and recorded.
+
+**Rule 8 — the outcome of an idempotent request is recorded in the same write.** Where a handler acts
+on a client-supplied `RequestId` (`ADR-030` §5.2 — every reschedule message carries one), the
+handler records that `RequestId` together with the outcome it produced — applied, or the specific
+rejection — as part of the same transaction as the domain write. A later arrival of a `RequestId`
+already recorded returns the recorded outcome and performs **no second mutation**. Three constraints
+bind this:
+
+1. **It is recorded with the aggregate being written, not in a side table written separately.** A
+   separate write is a second transaction and reintroduces exactly the gap this rule closes. Whether
+   the aggregate document is the right home for CAP-04 specifically — a `Resource` would accumulate
+   one entry per reschedule against it, which grows without bound — is `FA7`.
+2. **It is not the inbox de-duplication decorator.** The decorator de-duplicates *messages*; the
+   customer's reschedule enters over HTTP ✅, so the decorator is not on that path (`R-15`, Option C
+   above). This rule is what makes `NFR-7` hold for the HTTP edge.
+3. **A recorded outcome is terminal.** Replaying a `RequestId` that was rejected returns the same
+   rejection; it does not re-evaluate the guards against current state. A retry must not be able to
+   turn a refusal into an acceptance, or an acceptance into a refusal, because the world moved
+   between the two attempts.
+
+The two consumers of this rule are `ADR-026` Rule 9 (CAP-09, keyed on the delivery write) and
+`ADR-024` Rule 4 (CAP-04, keyed on the reservation move); `ADR-030` §5.3's `SEEN` branch is the
+decision point both of them implement. Rule 8 and Rule 1 answer different questions and neither
+replaces the other: the version predicate decides which of two *concurrent* writers wins, and the
+recorded outcome decides what a *repeat of the same request* is told. A delivery retried after a
+timeout is not a concurrent writer; it is the same writer asking again, and a version check lets it
+through.
 
 ## 6. Consequences
 
@@ -188,6 +222,14 @@ three places to fix a bug in — is accepted and recorded.
 - `Delivery.Version` stops being decorative. The source stops claiming a safety property the runtime
   does not have.
 - A pattern exists for the other eight services, with a worked implementation in three.
+- **`NFR-7` acquires a mechanism it did not have.** Before Rule 8, "applied once and only once" rested
+  on the inbox decorator, which is not on the HTTP path the customer actually uses (`R-15`). Rule 8
+  places the guarantee where the request arrives, and `ADR-030`'s `RequestId` is what keys it.
+- **The version becomes a published fact, not only a private guard.** `ADR-025` Rule 6 publishes the
+  `Order` version as `ScheduleRevision` on `order_delivery_date_changed`, and `ADR-026` Rule 5 orders
+  on it. Rule 4 — increment on every mutation — is therefore what makes the consumer's ordering sound,
+  not only what makes the predicate fail. A version that stalls now produces silently discarded events
+  downstream, which is a stronger reason to keep `N6` green than this record originally had.
 
 ### 6.2 Negative
 
@@ -197,9 +239,20 @@ three places to fix a bug in — is accepted and recorded.
 - **Callers see conflicts they have never seen before.** This is the correct behaviour and it is
   still a behaviour change on existing write paths for `Order` and `Delivery`, including paths this
   feature does not touch. `FA2` scopes that blast radius.
-- **Transactional writes have a deployment precondition.** Turning `disableTransactions` to false
-  requires the datastore deployment to support transactions. `FA3` confirms it per environment before
-  the setting changes; discovering this in production is the failure this action prevents.
+- **Transactional writes are a deployment *blocker*, not a precondition to check late.** Turning
+  `disableTransactions` to false requires the datastore deployment to support transactions; a
+  standalone node cannot, and it fails when the first transaction is attempted rather than at
+  startup. Three separate rules now depend on it — Rule 5, `ADR-026` Rule 7's history write and
+  Rule 8's recorded outcome — so an environment that cannot support it cannot host `DO2` in a
+  degraded form either. `FA3` is accordingly a blocker (see **Blockers** below), and its date has
+  been pulled forward to the shared-environment milestone rather than the ship milestone, because
+  the shared environment is where it will first be exercised.
+- **Rule 8 adds a write that grows.** Each recorded outcome is retained, and nothing in this record
+  prunes them. For `Order` and `Delivery` the volume is bounded by reschedules per order, which is
+  small; for `Resource` it is not. `FA7` decides the retention and the home.
+- **The transaction is now multi-collection.** `ADR-026` Rule 7 writes a history entry in a separate
+  collection inside this commit. That is a larger transaction than the two-document domain-plus-outbox
+  write this record originally scoped, and it widens what `FA3` must confirm.
 - **The outbox is still a background dispatcher with no depth or age signal.** `INF-4` carries that
   to HLS. Until it lands, an outbox that stops draining looks like a quiet day. `R-23`.
 
@@ -223,6 +276,9 @@ three places to fix a bug in — is accepted and recorded.
 | One service, one database; no cross-service writes | `ADR-008` C5 | Each repository changes only its own store |
 | A service publishes only to its own exchange | `ADR-001` C1 | No new exchange or routing change |
 | Pipelines must actually execute the tests that prove this | `ADR-018`, `INF-6` | `FA4`, because CAP-04's pipeline does not ✅ |
+| A reschedule is applied once and only once under re-delivery | `NFR-7` | Rule 8, on the HTTP path the decorator does not cover (`R-15`); `N7` and `N11` |
+| An ordering key published to other contexts advances monotonically | `ADR-025` Rule 6, `ADR-026` Rule 5 | Rule 4; `N6` is the test that keeps `ScheduleRevision` sound downstream |
+| A history entry is never visible without the change it records | `ADR-026` Rule 7 | Rule 5, which names the companion document as inside the same transaction |
 
 ## 8. Non-Functional Requirements & Testing
 
@@ -234,10 +290,14 @@ three places to fix a bug in — is accepted and recorded.
 | `N4` | **A conflicted write publishes no event** | `NFR-21`, Rule 2 | Force the non-match. Assert the outbox is empty and no message was dispatched. This is the regression test for the current CAP-04 defect |
 | `N5` | A `Delivery` reloaded from the store carries the version it was saved with | Rule 3 | Save, reload, assert non-zero. Guards the `Delivery.Version` counter-example |
 | `N6` | Every mutating method increments the version | Rule 4 | Call each mutator. Assert the version advances each time |
-| `N7` | The same reschedule request applied twice results in one move | `NFR-7` | Replay the request. Assert one reservation and one history entry |
+| `N7` | The same reschedule request applied twice results in one move | `NFR-7`, Rule 8 | Replay the same `RequestId`. Assert one reservation, one history entry, and that the second call returns the **recorded** outcome rather than re-evaluating |
 | `N8` | The domain write and the outbox record fail together | `ADR-012`, Rule 5 | Fault-inject between them. Assert neither is visible |
 | `N9` | `disableTransactions` is false for the three services in scope | Rule 5 | Assert the effective configuration value in a test, not by reading the file |
 | `N10` | A conflict is retried at most once before a rejection is returned | Rule 6 | Force a persistent conflict. Assert exactly two attempts and a `DO2` rejection code |
+| `N11` | **A replayed `RequestId` that was rejected returns the same rejection** | Rule 8 clause 3 | Reject a request on a guard, change the world so the guard would now pass, replay the same `RequestId`. Assert the original rejection is returned and nothing is written. A retry must not be able to launder a refusal into an acceptance |
+| `N12` | The recorded outcome and the domain write are visible together or not at all | Rule 8 clause 1, Rule 5 | Fault-inject between the domain update and the outcome record. Assert neither is visible, and that a replay therefore re-executes rather than returning a half-recorded result |
+| `N13` | A history entry written by `ADR-026` Rule 7 is not visible when its delivery write is rolled back | Rule 5 | Fault-inject after the history insert and before commit. Assert the history collection is empty |
+| `N14` | A conflicted write leaves no recorded outcome behind | Rule 2, Rule 8 | Force the version non-match. Assert no `RequestId` entry was persisted, so the caller's retry is still able to succeed |
 
 ## 9. Relationship to the implementation pattern catalog
 
@@ -247,7 +307,8 @@ three in-scope aggregates so the eight out-of-scope ones are not mistaken for co
 
 Applies `patterns/integration/transactional-outbox-and-inbox-by-handler-decorator.md`, and records
 Option C's finding against it: the inbox decorator does not cover HTTP-initiated commands, so it is
-not an exactly-once mechanism for `DO2`'s edge write.
+not an exactly-once mechanism for `DO2`'s edge write. Rule 8 is the replacement for the edge, and the
+catalog entry is amended to say so rather than leaving the decorator looking sufficient.
 
 ## 10. Evidence
 
@@ -262,12 +323,19 @@ not an exactly-once mechanism for `DO2`'s edge write.
 | E7 | No migration framework exists in any repository | `ADR-008`; `architecture-baseline.md` C8 |
 | E8 | CAP-04's pipeline does not execute its tests | `ADR-018`; `availability-service.md` §5 |
 | E9 | The gateway edge is HTTP, so inbox de-duplication is not on the reschedule command path | `ADR-005`, `ADR-013`; `ntrada.yml` |
+| E10 | No message on the platform carries a client-supplied request identifier today; `RequestId` is new in `ADR-030` §5.2 | `architecture-views.md` §6 `GAP-13`, `GAP-17`; `ADR-030` §5.2 |
+| E11 | The outbox implementation is a background dispatcher with no depth or age signal | `ADR-012`; `architecture-baseline.md`; `R-23` |
 
 ### 10.1 Documentation-versus-code conflicts
 
 - **`Delivery` source versus `Delivery` runtime.** The entity's `Version` and `IncrementVersion`
   state a concurrency property the persistence layer does not implement ✅. Anyone reading the entity
   alone would conclude the aggregate is protected. Rules 3 and 4 close this, and `N5` keeps it closed.
+- **`NFR-7` versus the inbox decorator.** The requirement is written as though message-level
+  de-duplication satisfies it, and the catalog entry for the decorator does not say what it does not
+  cover. The customer's reschedule arrives over HTTP ✅, where the decorator never runs. This was
+  already recorded as `R-15`; this revision resolves it in the architecture rather than leaving it
+  as a noted risk, by making Rule 8 the mechanism and `N7`/`N11` the proof.
 
 ## 11. Follow-Up Actions
 
@@ -281,30 +349,51 @@ section is the single place to change and these dates move with it; the mileston
 |---|--------|-------|-----|
 | `FA1` | **[handled later by HLS]** Fix one predicate form — strict equality or the existing less-than — and apply it identically in all three repositories, so Rule 7's three copies do not drift on day one | `DO2` implementer with the platform architect | **2026-12-08** — during `DO2` high-level design |
 | `FA2` | **[ACTION NOW]** Enumerate the existing `Order` and `Delivery` write paths that will begin returning conflicts, and confirm each caller handles one. This changes behaviour on paths `DO2` does not otherwise touch | `DO2` implementer with the platform owner | **2027-01-30** — before `DO2` ships |
-| `FA3` | **[ACTION NOW]** Confirm, per environment, that the datastore deployment supports transactional writes before `disableTransactions` is set to false. A single-node deployment does not, and the setting will fail at runtime rather than at startup | Platform owner | **2027-01-30** — before `DO2` ships |
+| `FA3` | **[ACTION NOW — blocker]** Confirm, per environment, that the datastore deployment supports transactional writes spanning **multiple collections**, before `disableTransactions` is set to false. A single-node deployment does not, and the setting fails at the first transaction rather than at startup. This is no longer a pre-ship check: Rule 5, Rule 8 and `ADR-026` Rule 7 all require it, so an environment that fails it cannot host `DO2` at all. Record the answer per environment in the deployment notes, not in a ticket comment | Platform owner | **2026-11-21** — before `DO1` reaches a shared environment, so the answer is known before `DO2` design closes |
 | `FA4` | **[handled later by DevOps]** Make CAP-04's pipeline execute its tests (`INF-6`, `ADR-018`). Every test in §8 that runs in CAP-04 is otherwise written and never run (`R-25`) | Platform owner | **2027-01-30** — before `DO2` ships |
-| `FA5` | **[handled later by DevOps]** Add outbox depth and oldest-unpublished-age signal for the three services in scope (`INF-4`, `NFR-21`). An outbox that stops draining is currently indistinguishable from an idle one (`R-23`) | Platform owner | **2027-01-16** — before `DO2` reaches a shared environment |
+| `FA5` | **[ACTION NOW]** Add outbox depth and oldest-unpublished-age signal for the three services in scope (`INF-4`, `NFR-21`). An outbox that stops draining is currently indistinguishable from an idle one (`R-23`). The reschedule chain is four messages across three services (`ADR-030` §5.2), so a stalled outbox now presents to the customer as a confirmed reschedule that never settles — the failure is no longer internal | Platform owner | **2027-01-16** — before `DO2` reaches a shared environment |
 | `FA6` | **[handled later by LLD]** Write the canonical pattern entry for scoped write integrity, and record in it which aggregates are covered and which are not, so the inconsistency in §6.2 is discoverable from the catalog (`R-30`) | `DO2` implementer | **2026-12-22** — during `DO2` low-level design |
+| `FA7` | **[handled later by HLS]** Fix where CAP-04's recorded outcome lives and how long it is kept. Rule 8 clause 1 requires it inside the aggregate's transaction; a `Resource` accumulates one entry per reschedule against that resource and has no natural bound, unlike `Order` and `Delivery`. Decide the retention window and whether the entries are capped, pruned or moved, and state the chosen form so all three repositories implement the same shape | `DO2` implementer with the platform architect | **2026-12-08** — during `DO2` high-level design, because Rule 8 cannot be implemented without it |
+| `FA8` | **[handled later by LLD]** Amend the outbox-and-inbox catalog entry to state explicitly that the inbox decorator does not cover HTTP-initiated commands, and to point at Rule 8 for that path. Leaving the entry as it stands is how `R-15` happened in the first place | `DO2` implementer | **2026-12-22** — during `DO2` low-level design |
 
 ## Assumptions, Blockers & Open Questions
 
 ### Assumptions
 
-- **A1 ❓** The three services' datastore deployments can support transactional writes. This is the
-  precondition for Rule 5 and is unverified from the workspace — `docker-compose` describes the local
-  topology, not the deployed one. `FA3` verifies it per environment; if the answer is no anywhere,
-  that environment cannot host `DO2` until it changes.
+- **A1 ❓ — now carried as `B1`.** The three services' datastore deployments can support transactional
+  writes **across more than one collection**. This is the precondition for Rule 5, Rule 8 and
+  `ADR-026` Rule 7, and it is unverified from the workspace — `docker-compose` describes the local
+  topology, not the deployed one. It was recorded here as an assumption on the first revision; with
+  three rules now resting on it and `ADR-026` `B2` raising it independently, an unverified assumption
+  is the wrong instrument. It is restated as a blocker below. `FA3` is the action.
 - **A2 `[INFERRED]`** An absent version element reads as zero on load, so existing documents need no
   backfill. This follows from the hand-mapped document model ✅ and the absence of a required-element
   contract, not from an observed migration.
+- **A3 `[INFERRED]`** A recorded outcome is small — a request identifier, a result and a timestamp —
+  so Rule 8 does not materially change document size for `Order` or `Delivery`. This does not hold
+  for `Resource`, which is why `FA7` exists.
 
 ### Blockers
 
-- None that block this decision. `FA3` can block a specific environment, and `FA4` blocks meaningful
-  verification in CAP-04.
+- **B1 — the environments must support multi-collection transactional writes, and this is unverified.**
+  Rule 5, Rule 8 and `ADR-026` Rule 7 all commit more than one document together. A standalone node
+  cannot begin a transaction, and the failure surfaces at the first write, not at startup. Until
+  `FA3` returns an answer per environment, `DO2` has no confirmed home. This blocker is owned by the
+  platform owner and is raised identically in `ADR-026` `B2`; the two are the same blocker seen from
+  the consumer and the mechanism.
+- `FA4` blocks meaningful verification in CAP-04: every gate in §8 that runs there is otherwise
+  written and never executed (`R-25`).
+- **B2 — Rule 8 cannot be implemented in CAP-04 until `FA7` fixes where the outcome lives.** The rule
+  requires the outcome inside the aggregate's transaction; for `Resource` the obvious home has no
+  bound. This is a design decision owed before high-level design closes, not during implementation.
 
 ### Open Questions
 
 - **Q1** When are the remaining eight aggregates brought in? `AD-4` deliberately scopes this
   increment, and nothing currently schedules the rest. Platform architect, after `DO2` ships
   (`R-30`).
+- **Q2** Does the recorded outcome of Rule 8 need to survive beyond the retry window it exists to
+  serve? Nothing in `DO2` reads it except a replay, and a replay arriving a month later is not a
+  retry. If the answer is no, `FA7`'s retention window can be short and the `Resource` growth problem
+  largely disappears; if a reschedule's outcome is wanted for audit, that belongs in `ADR-026`
+  Rule 7's history, not here. Platform architect, with `FA7`.

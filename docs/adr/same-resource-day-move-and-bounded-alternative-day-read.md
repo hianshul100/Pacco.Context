@@ -13,7 +13,7 @@
 | **Source** | `DO2` — *Customer Delivery Reschedule Confirmation & Slot Safe-Move*, and `DO1` — *Eligible Delivery Schedule & Alternative-Day View*, work item **14830**, `intents/14830.md`. Catalog surfaces no delivery-scheduling or reschedule capability of any kind; the nearest named capabilities are CAP-04's *Reserve a resource for a date* and *Release a reservation* |
 | **Non-functional requirements** | `NFR-3` (no double-booked slot), `NFR-5` (previous slot released only after the new one is reserved), `NFR-6` (no silent truncation of a submitted slot value), `NFR-19` (bounded alternative-day read), `NFR-14` (distinct rejection reasons), `NFR-17` (additive persistence) |
 | **Resolved decision applied** | `AD-1` option **A**, chosen by human, confidence high. Binding and settled — not re-opened here |
-| **Related** | `ADR-011` (the one orchestrated process, which this record deliberately does not join), `ADR-010` (the bounded synchronous read rule this query is designed to), `ADR-008` (hand-mapped documents with no migration tooling), `ADR-028` (the version-conditioned write this operation depends on), `ADR-029` (the identity the reserve and release legs carry), `ADR-030` (the message and rejection-code contracts) |
+| **Related** | `ADR-011` (the one orchestrated process, which this record deliberately does not join), `ADR-010` (the bounded synchronous read rule this query is designed to), `ADR-008` (hand-mapped documents with no migration tooling), `ADR-028` (the version-conditioned write this operation depends on), `ADR-029` (the identity every message of this chain carries, and the ownership check Rule 8's fields make possible), `ADR-030` (the message and rejection-code contracts) |
 
 ## Notation
 
@@ -154,13 +154,21 @@ named resource, ascending.
 
 **A customer-initiated delivery reschedule is expressed as one atomic same-resource day move on the
 `Resource` aggregate, and alternative days are served by a new bounded, ascending, days-only read on
-the same capability.** Seven rules follow and all of them are binding.
+the same capability.** Eight rules follow and all of them are binding.
 
-**Rule 1 — one command, one aggregate, one write.** The move is a single command carrying the
-resource id, the currently held day, the target day, the owning customer id and the standard
-reschedule priority. Its handler loads the `Resource` once, mutates it once and writes it once under
-the version-conditioned update of `ADR-028`. There is no second command, no second write and no
-coordinator.
+**Rule 1 — one command, one aggregate, one write.** The move is the single command
+`RescheduleResourceReservation` (`ADR-030` §5.2 `M2`), carrying the resource id, the currently held
+day, the target day, the owning customer id, the **order id** and the **request id**, together with
+the standard reschedule priority. Its handler loads the `Resource` once, mutates it once and writes
+it once under the version-conditioned update of `ADR-028`. There is no second command, no second
+write and no coordinator.
+
+This is the **whole** mechanism. The reschedule does not issue `ReserveResource`, does not issue
+`ReleaseResourceReservation`, and does not depend on either of those commands being changed.
+Hardening the standalone `ReleaseResourceReservation` route — which accepts a release today without
+proving the caller holds the reservation ✅ — is a real and separate platform defect; it is recorded
+as such in `ADR-029` `FA4` and **is not** part of this flow. Nothing in `DO2` should be blocked on
+it, and nothing in `DO2` should be built on it.
 
 **Rule 2 — take before release, inside the same mutation.** The aggregate takes the target day
 first. If the target day is held at an equal or higher priority, the aggregate raises
@@ -172,12 +180,23 @@ success path, in the same mutation as the take.
 the single standard customer-reschedule priority, identical for every customer. It therefore cannot
 evict an incumbent, and an ordinary customer booking cannot evict it. First-come wins on collision.
 
-**Rule 4 — release only what is actually held on this delivery's behalf.** The prior day is released
-only when a reservation for the expected resource and the expected day exists. `ReleaseReservation`
-returns silently today when no match is found ✅ (`Resource.cs:82-90`), so the handler must establish
-the precondition itself rather than relying on the release call to report it. An absent prior
-reservation is not a failure of the move — the move still succeeds — but it must be recorded as
-such rather than being indistinguishable from a successful release.
+**Rule 4 — release only the reservation this order is recorded as holding.** The prior day is
+released only when a reservation exists on the expected resource, on the expected day, **and
+recorded as held by the order named in the command**. `ReleaseReservation` returns silently today
+when no match is found ✅ (`Resource.cs:82-90`), so the handler must establish the precondition
+itself rather than relying on the release call to report it.
+
+The ownership term is what makes this rule mean anything. Day occupancy alone cannot distinguish the
+three states that matter:
+
+| Prior day state | What it means | Outcome |
+|-----------------|---------------|---------|
+| A reservation held by this order | The normal case | Take the new day, release this one, both in the same mutation |
+| No reservation at all | The hold lapsed or was cancelled out of band | The move still succeeds and records that nothing was released — `ASM-4`, verified by `N4` |
+| A reservation held by **another** party | This delivery's schedule was already lost to someone else | **Refuse.** `ADR-030`'s `not eligible` class, with the schedule-lost state reported by `ADR-027` Rule 5. Releasing it would cancel a stranger's booking on this caller's say-so |
+
+The third row is unreachable without Rule 8's ownership field; before it exists the second and third
+rows are the same observation. That is why Rule 8 is binding rather than advisory.
 
 **Rule 5 — reject intra-day precision, never truncate it.** A submitted day whose time component is
 not midnight is **refused** with a distinct rejection code. The reservation store cannot hold a time
@@ -198,6 +217,27 @@ immutable for a resource's life — changing them requires deleting and recreati
 changes its id and cancels every reservation it holds ✅ (`Resource.cs:92-100`, which raises a
 `ReservationCanceled` for every reservation then `ResourceDeleted`).
 
+**Rule 8 — a reservation records who holds it, and collision stays a calendar-day question.** The
+`Reservation` value object gains `OrderId` and `CustomerId`, carried through `ReserveResource`, the
+move command, the move outcome event and the Mongo document. Today it is a `(DateTime, Priority)`
+pair ✅ and `ReservationDto` exposes only those two ✅, so no reservation on this platform records who
+it belongs to and no caller can ask. Three things in this patch depend on the answer — Rule 4's
+refusal, `ADR-027`'s revalidation, and `ADR-030` `M3`'s `OrderId` — and none of them can be built on
+day occupancy.
+
+Two constraints on how the field is added, and they are not optional:
+
+1. **Collision equality does not change.** Two reservations collide when they fall on the same
+   calendar day on the same resource, exactly as today. `OrderId` and `CustomerId` are carried data,
+   never part of the key, the hash or the collision test. Adding them to equality would let the same
+   day be held twice by two different orders — the one invariant this whole record exists to protect.
+   Today's equality is date **plus priority** ✅, which already has this shape of hazard; Rule 8 must
+   not widen it. `N11` asserts it directly.
+2. **The field is additive and nullable.** `ADR-008` records hand-mapped documents with no migration
+   tooling, so every reservation written before this change has no owner. A null owner is read as
+   *unknown*, never as *mine*: Rule 4's third row applies to it, which fails closed. `ADR-026` §6.3
+   carries the backfill that removes the unknowns, and `FA5` carries the CAP-04 half of it.
+
 ### 5.1 The move, as a flow
 
 ```mermaid
@@ -209,24 +249,35 @@ sequenceDiagram
     participant OR as "orders-service CAP-07"
 
     C->>GW: confirm reschedule, target calendar day
-    GW->>DEL: customerId bound from user id claim
+    GW->>DEL: reschedule_delivery, customerId bound from the user id claim, RequestId attached
     DEL->>DEL: ownership and eligibility guard, fail closed
-    DEL->>AV: reschedule reservation, one command
+    DEL->>AV: reschedule_resource_reservation, one command, carrying OrderId and RequestId
     AV->>AV: load Resource once
+    AV->>AV: replay check on RequestId, return the recorded outcome if already decided
     AV->>AV: take target day at standard priority
-    AV->>AV: release prior day in the same mutation
+    AV->>AV: release prior day only if this order holds it, same mutation
     AV->>AV: version conditioned write plus outbox insert
-    AV-->>DEL: accepted or cannot expropriate reservation
-    AV->>OR: reservation moved event on the availability exchange
-    OR->>OR: set the order delivery date to the new day
-    OR->>DEL: order schedule changed event on the orders exchange
-    DEL->>DEL: update the replica and append history
-    DEL-->>C: confirmation or a distinct customer readable reason
+    AV-->>DEL: accepted with the new day, or a distinct rejection class
+    DEL-->>C: confirmed - the move is committed and cannot be lost
+    AV->>OR: resource_reservation_rescheduled on the availability exchange, carrying OrderId
+    OR->>OR: select the order by OrderId, set the delivery date, increment the version
+    OR->>DEL: order_delivery_date_changed on the orders exchange, carrying ScheduleRevision
+    DEL->>DEL: apply the replica by ScheduleRevision and append one history entry per RequestId
 ```
+
+**Where the customer's answer comes from, and what it promises.** The confirmation is returned at the
+point CAP-04 commits — step 10, before the two event legs run. `ADR-026` §5.2 defines the three
+states this flow passes through and fixes *confirmed* as the completion point for the customer, the
+UI and the acceptance tests. What the customer is told at that moment is true and durable: the day is
+held, the outbox holds the event, and no later step can take the day away. What has **not** happened
+yet is the Order's authoritative date and the delivery replica catching up, and the read path
+(`ADR-027`) reports that lag rather than hiding it.
 
 The two legs after the aggregate write are choreographed, not orchestrated — each consumer acts on an
 event from the exchange its publisher owns. That is the default `ADR-001` records, and it is why no
-second saga appears in this flow.
+second saga appears in this flow. Both legs carry `OrderId`, so CAP-07 selects the order it must
+update rather than inferring it from `(VehicleId, DeliveryDate)`; today's `ResourceReserved` carries
+no `OrderId` at all ✅, which is why `ADR-030` `M3` is a new event rather than a reused one.
 
 ## 6. Consequences
 
@@ -259,13 +310,28 @@ second saga appears in this flow.
 - **Days-since-`0001-01-01` encoding stays.** The stored integer, the in-memory `DateTime` and the
   value published on the bus can be three different representations of the same reservation ✅. This
   record does not fix that; it avoids depending on it by comparing whole days everywhere.
+- **Rule 8 changes the reservation document, which the first revision of this record said it would
+  not.** Two nullable fields are added to an embedded document in a store with no migration tooling ✅
+  (`ADR-008`). Every reservation written before the change reads as owner-unknown, and Rule 4 refuses
+  to move those — which is correct and is also a live customer impact until the `FA5` backfill runs.
+  The alternative was leaving `ADR-027`'s revalidation unable to tell *held by me* from *held by
+  someone else*, which is not an alternative at all.
+- **CAP-04 now stores a correlation to an aggregate it does not own.** `OrderId` on a reservation is
+  a cross-context identifier with no referential integrity, the same trade `ADR-009` already made for
+  the reference replica. CAP-04 must never read or interpret it beyond equality — it is a tag, not a
+  relationship — and nothing in CAP-04 may call CAP-07 to resolve it.
 
 ### 6.3 Neutral and follow-on
 
 - The standard reschedule priority is an integer whose value nobody has recorded. There is no enum,
-  no constant and no documented scale anywhere in the repository ✅. That is `G-07`, and it blocks
-  implementation rather than this decision.
-- The move command's name, routing key and exchange are decided by `ADR-030`, not here.
+  no constant and no documented scale anywhere in the repository ✅. That is **`G-12`**, and it blocks
+  implementation rather than this decision. The first revision of this record cited `G-07` for it;
+  `G-07` is a different gap entirely — `deliveries-service` accepting an `OrderId` with no validating
+  call — and the two were conflated. `G-12` is opened in
+  [`../architecture-inventory/risk-constraint-gap-register.md`](../architecture-inventory/risk-constraint-gap-register.md)
+  §4 for the priority alone, and `FA1` is its action.
+- The move command's name, routing key, exchange and full payload are fixed by `ADR-030` §5.2 `M2`,
+  not here. Rule 1 lists the fields it must carry; `ADR-030` is the contract.
 
 ## 7. Compliance Considerations
 
@@ -274,7 +340,8 @@ second saga appears in this flow.
 | A synchronous call must not return an unbounded collection | `ADR-010` C10 | Rule 6 — at most 14 days, days-only |
 | Exactly one process on the platform is orchestrated | `ADR-011` | Option B rejected; the move is a single-aggregate operation and adds no process manager |
 | A service publishes only to its own exchange | `ADR-001` C1 | The move publishes on the `availability` exchange, which CAP-04 owns |
-| Persistence changes are additive, enum ordinals append-only | `ADR-008`, `NFR-17` | The move adds no field to `ResourceDocument`. The reservation document shape is unchanged |
+| Persistence changes are additive, enum ordinals append-only | `ADR-008`, `NFR-17` | Rule 8 adds two **nullable** fields to the embedded reservation document and changes no existing field, type or ordinal. No migration runs; absent values are read as unknown and fail closed |
+| A caller may not learn another customer's holdings | `NFR-1` | Rule 8's owner fields are never returned by the alternative-day read (`N7`) and are returned by the revalidation read only to a caller proving that order (`ADR-027` Rule 1) |
 | The runtime and toolkit baseline is not changed | `ADR-020`, `ADR-002`, `NFR-16` | No new package, no runtime change; the operation is ordinary aggregate code |
 | Every rejection carries a distinct customer-readable reason | `NFR-14`, `ADR-023` | Rules 2 and 5 each raise their own code; the full five-class contract is `ADR-030` |
 | No cancellation, payment, notification, or vehicle reassignment is introduced | `DO2` scope | Rule 7, and nothing in this record touches those paths |
@@ -294,6 +361,11 @@ Every row is a pass/fail gate. `N4` is the exception noted in its own row.
 | `N7` | The alternative-day read discloses no other customer's holdings | `NFR-1` | Reserve days for another customer. Assert those days are absent from the list and that no customer id appears in the response |
 | `N8` | The reschedule reserves at the standard priority and never expropriates | `ASM-14` | Hold the target day at the standard priority as another customer, then move onto it. Assert refusal, not eviction |
 | `N9` | Every one of these tests actually executes in the pipeline and fails the build | `NFR-18` | See `R-25` — CAP-04's suite is recorded as compiled and never run. This gate is not satisfied by writing the tests |
+| `N10` | A move whose prior day is held by a **different** order is refused, and that reservation is left intact | Rule 4, `NFR-1` | Seed the prior day held by another order. Move. Assert `not eligible`, assert the other order's reservation is still present and unchanged, and assert the target day was not taken |
+| `N11` | Two reservations for the same calendar day on the same resource remain impossible after `OrderId` and `CustomerId` are added | Rule 8.1, `NFR-3` | Attempt to reserve the same day for two different orders at the standard priority. Assert the second is refused. Assert the equality and hash of `Reservation` are unchanged by the new fields |
+| `N12` | A reservation written before Rule 8 — with no recorded owner — is treated as not-mine, not as mine | Rule 8.2, `ADR-008` | Insert a reservation document with the owner fields absent. Move against it. Assert refusal, not a silent release |
+| `N13` | A redelivered move command with a `RequestId` already decided returns the first outcome and mutates nothing | `NFR-7`, `ADR-028` Rule 8 | Deliver the same `M2` twice. Assert one reservation moved, one outcome, identical both times |
+| `N14` | The move publishes `resource_reservation_rescheduled` carrying the `OrderId` from the command | `ADR-030` §5.2 `M3` | Assert the outbox row's payload, not only its routing key |
 
 ## 9. Relationship to the implementation pattern catalog
 
@@ -321,6 +393,10 @@ This record extends two existing catalog entries and proposes no new one.
 | E7 | Nothing bounds how many reservations a resource may hold | `availability-service.md` §3.1, *Failure modes* |
 | E8 | Deleting a resource cancels every reservation it holds and changes its id | `Core/Entities/Resource.cs:92-100` |
 | E9 | No reservation-priority scale is defined anywhere in the repository | `availability-service.md` §3.5, *Invariants*: "no enum, no constant, no documented scale" |
+| E10 | `ReservationDto` exposes the reservation's date and priority and nothing else, so no API can report who holds a day | `availability-service.md` §4.5; `architecture-views.md` §5.1 |
+| E11 | `ResourceReserved` carries `ResourceId`, `CustomerId` and `DateTime` and no `OrderId` | `availability-service.md`; `architecture-views.md` §5.1 |
+| E12 | A reservation has no independent lifetime and cannot be addressed without its resource | `availability-service.md` §3.5; `architecture-views.md` §5.1 |
+| E13 | `ReleaseResourceReservation` is accepted without the caller proving the reservation is theirs | `availability-service.md` §3.1 invariant table; `ADR-029` §1 |
 
 ### 10.1 Documentation-versus-code conflicts
 
@@ -337,10 +413,12 @@ section is the single place to change and these dates move with it; the mileston
 
 | # | Action | Owner | By |
 |---|--------|-------|-----|
-| `FA1` | **[ACTION NOW]** Fix the integer value of the standard customer-reschedule priority and record it as a named constant with its scale. Nothing in the repository defines the scale, so implementation cannot start without it | Product owner with the platform architect | **2026-11-24** — before `DO2` high-level design starts |
+| `FA1` | **[ACTION NOW]** Fix the integer value of the standard customer-reschedule priority and record it as a named constant with its scale. Nothing in the repository defines the scale, so implementation cannot start without it. Tracked as **`G-12`**, not `G-07` | Product owner with the platform architect | **2026-11-24** — before `DO2` high-level design starts |
 | `FA2` | **[ACTION NOW]** Decide and record the behaviour when the alternative-day read is asked for a resource that does not exist. The existing point read returns 404 on null; the new read must not return an empty list that reads as "no days available" | Platform architect | **2026-10-24** — with `DO1` high-level design |
 | `FA3` | **[handled later by HLS]** Size the alternative-day computation against a resource carrying several years of reservations, and record whether an index or a stored projection is needed | `DO1` implementer | **2026-11-07** — during `DO1` low-level design |
-| `FA4` | **[handled later by devops]** Make CAP-04's test suite execute in its pipeline and block image publication on failure, so `N1`–`N8` are gates rather than files (`R-25`, `NFR-18`) | Owner of `Pacco.Services.Availability` — unassigned, see `G-01` | **2027-01-16** — before the first `DO2` image is published |
+| `FA4` | **[ACTION NOW]** Make CAP-04's test suite execute in its pipeline and block image publication on failure, so `N1`–`N14` are gates rather than files (`R-25`, `INF-6`, `NFR-18`). Every gate in this record and in `ADR-027`, `ADR-028` and `ADR-030` that runs in CAP-04 is unenforced until this is done, so it is a **precondition for `DO2` implementation**, not a task timed against the first image | Owner of `Pacco.Services.Availability` — unassigned, see `G-01` | **2026-12-22** — with `DO2` low-level design, ahead of the **2027-01-16** first-image milestone |
+| `FA5` | **[ACTION NOW]** Decide and record how existing reservations acquire Rule 8's owner fields: a backfill joining active orders to their held days, the fail-closed null reading for everything older than a cut-off date, or both. Until this is decided, every reservation predating `DO2` is unmovable by its own customer (`N12`, `R-29`). Pair it with the readiness metric in `ADR-026` `FA6` so the exposure is counted rather than assumed small | Platform owner with the product owner | **2026-12-08** — before `DO2` high-level design completes |
+| `FA6` | **[handled later by HLS]** Record whether `ReserveResource` and the order-making saga populate Rule 8's owner fields from day one. The saga publishes `ReserveResource` with an **empty** `CorrelationContext.UserContext` ✅ (`GAP-13`), so the saga path may be unable to supply a customer id even where it can supply an order id | `DO2` implementer | **2026-12-22** — during `DO2` low-level design |
 
 ## Assumptions, Blockers & Open Questions
 
@@ -356,8 +434,10 @@ section is the single place to change and these dates move with it; the mileston
 
 ### Blockers
 
-- **B1 [ACTION NOW]** The standard reschedule priority has no recorded value (`FA1`, `G-07`). The
-  decision in this record is complete without it; the implementation is not.
+- **B1 [ACTION NOW]** The standard reschedule priority has no recorded value (`FA1`, **`G-12`**). The
+  decision in this record is complete without it; the implementation is not. The priority integer must
+  be recorded **before** `DO2` implementation starts, not discovered during it — every rejection in
+  `ADR-030` Rule 1's `held at equal or higher priority` class depends on which number this is.
 
 ### Open Questions
 

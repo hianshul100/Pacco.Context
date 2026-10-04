@@ -141,12 +141,22 @@ is a boundary nobody asked for.
 
 **CAP-09 keeps a local, event-carried replica of the owning customer, the order's delivery date and
 the reserved resource id on its delivery record, fed by its first inbound subscription. CAP-07
-remains the system of record for the delivery date.** Seven rules follow.
+remains the system of record for the delivery date.** Ten rules follow.
 
 **Rule 1 — the replica is additive and nullable.** The delivery record gains the owning customer id,
-the replicated delivery date, the reserved resource id, the delivery instructions, a schedule-lost
-indicator and an append-only rescheduling history. Every one is nullable or empty-by-default, because
-no migration tooling exists ✅ and every delivery already written has none of them.
+the replicated delivery date, the reserved resource id, the last applied `ScheduleRevision`, and the
+delivery instructions. Every one is nullable or empty-by-default, because no migration tooling exists
+✅ and every delivery already written has none of them.
+
+Two things the delivery record deliberately does **not** gain:
+
+- **No schedule-lost indicator.** Whether the reservation is still held is read-time state produced by
+  `ADR-027` Rule 1 against CAP-04, and `ADR-027` Rule 5 is its single home. A persisted copy would be
+  a second answer to the same question with no mechanism keeping it true — the replica has no
+  reconciliation (§6.2) — so the stored value would go stale silently and the customer would be told
+  a day is lost that is held, or held that is lost. The first revision of this record listed the
+  indicator here, and that was a duplicate home.
+- **No embedded history array.** Rule 7 moves the rescheduling history to its own collection.
 
 **Rule 2 — the replica is a copy, and is labelled as one.** `ASM-10` is binding: the order's delivery
 date is the authoritative schedule. The delivery-side date exists to answer a read; it never
@@ -157,26 +167,106 @@ DI registration, and the rest of the eight registration points `ADR-013` enumera
 one is automatic ✅. A partially wired subscription does not fail the build — it simply never
 receives anything, silently.
 
-**Rule 4 — a delivery whose replica has not arrived is not eligible.** If the customer id or the date
-is absent, the delivery is excluded from the customer-facing list. It is never defaulted, never
-guessed from `OrderId`, and never shown "just in case". `ASM-11`'s eligibility test is evaluated over
-recorded values only.
+**Rule 4 — a delivery whose replica has not arrived is not eligible, and that state is counted, not
+assumed rare.** If the customer id or the date is absent, the delivery is excluded from the
+customer-facing list. It is never defaulted, never guessed from `OrderId`, and never shown "just in
+case". `ASM-11`'s eligibility test is evaluated over recorded values only.
 
-**Rule 5 — handlers are idempotent and ordering-tolerant.** The same order event may be delivered
-more than once; the platform's outbox runs with `disableTransactions: true` in at least one service
-✅, and re-delivery is a normal RabbitMQ outcome. Applying the same replica value twice must be
-indistinguishable from applying it once. An event carrying a delivery date older than the one already
-recorded is discarded rather than applied, so that out-of-order delivery cannot roll the schedule
-backwards.
+Exclusion is the right *answer* and the wrong *steady state*. A customer whose delivery predates this
+change sees an empty list and has no way to tell it from having no deliveries. Rule 10 makes that a
+rollout step with an exit condition rather than permanent accepted behaviour.
+
+**Rule 5 — ordering is decided by `ScheduleRevision`, never by the delivery date.** The same order
+event may be delivered more than once; the platform's outbox runs with `disableTransactions: true` in
+at least one service ✅, and re-delivery is a normal RabbitMQ outcome. So:
+
+1. Every `order_delivery_date_changed` carries `ScheduleRevision` — the `Order` aggregate's version
+   after the write that produced it (`ADR-030` §5.2 `M4`, `ADR-028` Rule 4). It increases by one on
+   every schedule change and never repeats.
+2. CAP-09 persists the last applied `ScheduleRevision` on the delivery record (Rule 1).
+3. An event whose revision is **lower** than the recorded one is discarded — it is a late copy of an
+   already-superseded change.
+4. An event whose revision is **equal** to the recorded one is applied idempotently: the result is
+   byte-identical to not applying it, and no history entry is appended.
+5. An event whose revision is **higher** is applied, and the recorded revision advances to it.
+
+**The delivery date is not an ordering key and must not be used as one.** The first revision of this
+record discarded any event carrying a date older than the one recorded. That rule silently drops
+every legitimate move backwards in the calendar — a customer rescheduling from the 20th to the 15th
+is the ordinary case this feature exists to serve, and under the old rule the replica would keep
+showing the 20th forever while CAP-07 held the 15th, with nothing logged and nothing to detect it.
+Calendar order and event order are unrelated. `N6` and `N12` exist to keep that rule from coming
+back.
 
 **Rule 6 — instruction text is bounded at the edge and excluded from logs.** `NFR-11` is explicit.
 The bound is enforced on the write path before persistence, and the instruction field is added to the
 property-redaction set rather than relying on nobody ever logging the request body.
 
-**Rule 7 — the rescheduling history is append-only and retained in full.** `ASM-13` makes it an audit
-record: entries are added, never edited, never deleted, and nothing prunes them. The consequence —
-unbounded growth on a document-embedded collection — is recorded in §6.2 rather than mitigated by a
-silent cap.
+**Rule 7 — the rescheduling history is append-only, retained in full, and stored in its own
+collection.** `ASM-13` makes it an audit record: entries are added, never edited, never deleted, and
+nothing prunes them. It is written to a separate CAP-09 collection keyed by `DeliveryId`, **in the
+same transaction as the delivery change that produced it** — `ADR-028` Rule 5 makes a multi-document
+transaction available, and it is the same instrument that keeps the domain write and the outbox row
+atomic. An entry carries `DeliveryId`, `OrderId`, `RequestId`, `RequestedAt`, `PreviousDate`,
+`NewDate`, `Outcome` and the `ScheduleRevision` it was applied at.
+
+Embedding the history in the delivery document was the first revision's choice and it is withdrawn.
+`ASM-13` forbids pruning and Mongo caps a document at 16 MB, so an embedded append-only array has a
+hard failure at an unknown row count: the delivery eventually stops saving, which takes the *delivery*
+down, not the history. A separate collection has no such ceiling, keeps the hot document small on
+every read of the customer-facing list, and costs one extra write in a transaction that already
+exists. `R-28`'s accepted unbounded growth is accepted in a place where growth is survivable.
+
+`RequestId` is unique per entry: one customer attempt produces exactly one history row however many
+times its message is redelivered (Rule 5 clause 4).
+
+**Rule 8 — one active delivery per order, enforced by a unique index.** `OrderId` is unindexed and
+not unique on `DeliveryDocument` today ✅, a `StartDelivery` on a failed delivery inserts a *second*
+document for the same order ✅, and `GetForOrderAsync` then returns a non-deterministic one of them ✅.
+Today that is an internal oddity; once deliveries are listed to customers it is a duplicate row in a
+customer-facing list, and once a reschedule writes to "the" delivery it is a write that may land on
+either document.
+
+The invariant is decided here rather than deferred: **an order has at most one delivery document.**
+Three things follow and all three are required, because any one alone leaves the defect reachable.
+
+1. A **unique index** on `OrderId` in the deliveries collection, which also removes the collection
+   scan every `StartDelivery` performs today ✅.
+2. `StartDelivery` against an order that already has a delivery **updates that aggregate** instead of
+   inserting a second one. A failed delivery is restarted by a state transition on the existing
+   document — guarded, and emitting the ordinary state-changed event — which is the shape the
+   platform's own design catalogue already records for this defect.
+3. Existing duplicate documents are reconciled before the index is created, since the index cannot be
+   built over them. That is part of Rule 10's rollout, not a later cleanup.
+
+The customer-facing list, the event handler in Rule 3 and the reschedule write path all resolve "the
+delivery for this order" through the same single-result lookup. There is no selection rule to choose
+between duplicates, because after this rule there are no duplicates.
+
+**Rule 9 — one reschedule attempt has one outcome, keyed by `RequestId`.** `NFR-7` is satisfied by an
+explicit idempotency key carried end to end (`ADR-030` §5.2), not by the inbox decorator. The decorator
+de-duplicates *message* redelivery and `R-15` records that it does not cover the HTTP command path at
+all, so it cannot be the mechanism for a customer pressing confirm twice. CAP-09 records the outcome
+of each `RequestId` with the delivery write; a repeat of a `RequestId` already decided returns the
+recorded outcome and performs no second move. CAP-04 does the same for its half (`ADR-028` Rule 8).
+
+**Rule 10 — the replica is populated before the feature is enabled, and readiness is measured.**
+Rules 4 and 8 both have a population precondition, and neither is satisfied by deploying and waiting.
+Before the customer-facing list and the reschedule path are enabled in an environment:
+
+1. **Backfill or replay** the replica for every active order and delivery whose mapping can be
+   established — CAP-07 republishes the current schedule per active order, or a one-off job writes the
+   values directly. `ADR-025` `FA1` carries the CAP-07 half and `ADR-024` `FA5` the CAP-04 half.
+2. **Reconcile duplicate delivery documents** so Rule 8's unique index can be created.
+3. **Publish a readiness metric**: the count of active deliveries still missing a replicated customer
+   id, date or resource id, and the count of orders holding more than one delivery document. Both
+   must be at their agreed threshold before the feature is switched on, and both stay published
+   afterwards — a number that starts rising again is the staleness signal `FA1` asks for, arriving
+   from the same instrument.
+
+Orders whose mapping genuinely cannot be established are excluded by Rule 4 and are **counted** by
+the readiness metric. Fail-closed exclusion is the correct behaviour for an unmappable record; it is
+not the plan for the general population.
 
 ### 5.1 The inbound path
 
@@ -188,16 +278,52 @@ sequenceDiagram
     participant MQ as RabbitMQ orders exchange
     participant DEL as CAP-09 Deliveries handler
     participant DB as Deliveries store
-    ORD->>OBX: record the order event in the same write
+    ORD->>OBX: record order_delivery_date_changed in the same write, carrying ScheduleRevision
     OBX->>MQ: publish after commit
     MQ->>DEL: deliver the order event
-    DEL->>DB: load the delivery for this order id
-    alt delivery exists and the event is not stale
-        DEL->>DB: record customer, delivery date and resource id
-    else no delivery yet or a newer value is already recorded
+    DEL->>DB: load the single delivery for this order id - unique index, Rule 8
+    alt no delivery for this order yet
         DEL->>DEL: discard without error
+    else incoming ScheduleRevision is lower than the recorded one
+        DEL->>DEL: discard - a late copy of a superseded change
+    else incoming ScheduleRevision equals the recorded one
+        DEL->>DEL: no-op - already applied, no history entry
+    else incoming ScheduleRevision is higher
+        DEL->>DB: record customer, delivery date, resource id and the new revision
+        DEL->>DB: append one history row for this RequestId, same transaction
     end
 ```
+
+### 5.2 What "confirmed" means, and when
+
+The flow is eventually consistent across three services, so "the reschedule succeeded" has to name a
+moment. It names this one.
+
+| State | True when | Who sees it | Can it still be lost |
+|-------|-----------|-------------|----------------------|
+| `accepted` | CAP-09 has proved ownership and eligibility and has dispatched the move | Only CAP-09, internally. **Never reported to the customer as success** | Yes — CAP-04 can still refuse |
+| `confirmed` | CAP-04 has committed the day move and its outbox row is in the same transaction (`ADR-028` Rule 5) | **The customer.** This is the completion point | No. The day is held and the event cannot be lost |
+| `settled` | CAP-07 holds the new authoritative date and CAP-09's replica has applied the matching `ScheduleRevision` | The delivery read, and operations | No — already durable at `confirmed`; this is convergence, not commitment |
+
+**The completion point is `confirmed`, for every surface.** In the gateway's synchronous mode the
+reschedule response returns at that moment, carrying the new day and the `ScheduleRevision` the move
+will settle at. In the asynchronous mode `ASM-18` prescribes, the `202 Accepted` plus operation-status
+pattern already drawn in `architecture-views.md` §3.2 reports the operation complete at the same
+moment, which is why `ADR-030` Rule 9 putting the new messages in `messages.json` is load-bearing
+rather than tidy — `operations-service` cannot report an operation it does not bind.
+
+Three consequences, and they are binding on `DO2`, on the UI and on the acceptance tests alike:
+
+- **The UI shows the new day as soon as `confirmed` arrives.** It does not wait for `settled` and it
+  does not show a spinner until convergence. The day is held; showing otherwise understates a fact.
+- **A delivery read taken between `confirmed` and `settled` may return the old date.** That is the
+  one visible artefact of the lag. `ADR-027`'s revalidation detects it — the recorded resource and day
+  no longer match the reservation CAP-04 holds — and the read reports it as a pending change rather
+  than as a confirmed old date or as a lost schedule. Comparing the replica's `ScheduleRevision` with
+  the one returned at `confirmed` is how a client that has both can tell precisely.
+- **Acceptance tests assert on `confirmed`.** A test that waits for `settled` before asserting
+  success is testing convergence latency, not the feature, and will be flaky for reasons that have
+  nothing to do with the reschedule.
 
 ## 6. Consequences
 
@@ -219,19 +345,31 @@ sequenceDiagram
   its own customer, with no detection, no alert and no repair path. There is no reconciliation job on
   this platform and this record does not create one. Recorded as `R-26`, and `FA1` asks for the
   minimum viable detector rather than the full repair.
-- **Deliveries created before this ships have no replica and are invisible to the new list.**
-  Rule 4 makes that a correct answer rather than a wrong one, but it is a functional limitation of
-  the first release and the same no-backfill problem `ADR-025` §6.2 records.
-- **The rescheduling history grows without bound.** `ASM-13` requires full retention, the history is
-  embedded in the delivery document, and Mongo documents have a hard ceiling. A delivery rescheduled
-  pathologically often will eventually fail to save. Recorded as `R-28`.
+- **Deliveries created before this ships have no replica, and Rule 10's backfill is now on the
+  critical path.** Rule 4 makes exclusion a correct answer for a record that cannot be mapped; it is
+  not a release plan for the whole existing population. Backfilling is extra work in `DO1` that the
+  first revision of this record did not carry, and a backfill over CAP-07's data has to be written
+  by hand because no migration tooling exists ✅. `R-29` and `ADR-025` `FA1` carry it.
+- **The rescheduling history still grows without bound, in a place where that is survivable.**
+  `ASM-13` requires full retention and Rule 7 does not cap it. Moving it to its own collection removes
+  the 16 MB document ceiling and the risk of an audit row taking the delivery down with it; it does
+  not make the growth finite. `R-28` stays open as accepted, with the exposure reduced from *delivery
+  write failure* to *collection size*.
+- **Rule 7 makes the delivery write a multi-document transaction.** The delivery, the outbox row and
+  the history row now commit together, which raises `ADR-028` `FA3` — whether every environment's
+  MongoDB is actually a replica set or `mongos` — from a follow-up to a precondition. A standalone
+  `mongod` cannot start a transaction, and the failure arrives at runtime on the write path.
 - **Eight registration points, one of them automatic.** `ADR-013` records the cost; a missed point
   produces a subscription that silently receives nothing, and the build stays green.
-- **Duplicate delivery documents for one order are now visible.** A failed-then-restarted delivery
-  inserts a second document with the same `OrderId` — `OrderId` is unindexed and not unique ✅, so
-  `GetForOrderAsync` returns a non-deterministic one of them. Today that is an internal oddity. Once
-  deliveries are listed to customers, it becomes a duplicate row in a customer-facing list. Recorded
-  as `R-27`.
+- **Rule 8 is a data change before it is a code change.** The unique index cannot be created while
+  duplicate `OrderId` documents exist, so existing duplicates must be reconciled first, by hand, with
+  a human deciding which document survives where both carry registrations. That work is unscoped until
+  the duplicates are counted — which is what Rule 10's readiness metric exists to do. `R-27` carries
+  it, now as a decided invariant with a migration rather than an open list-behaviour question.
+- **Rule 8 changes existing `StartDelivery` behaviour.** A `StartDelivery` against an order that
+  already has a delivery updates it instead of inserting; any caller relying on the second insert gets
+  a different outcome. Nothing in the workspace relies on it and the current behaviour is recorded as
+  a defect, but it is a behaviour change on a live path and is recorded here rather than discovered.
 
 ### 6.3 Neutral and follow-on
 
@@ -240,7 +378,15 @@ sequenceDiagram
   applies to it too.
 - The `OrderId`-is-unvalidated gap is not closed by this record. It becomes less dangerous, because a
   delivery against a non-existent order never receives a replica and is therefore never listed, but
-  the underlying gap stays open as `G-07`.
+  the underlying gap stays open as `G-07`. (`G-07` is this gap and only this gap. The undefined
+  standard reschedule priority is `G-12` — `ADR-024` §6.3 records the correction.)
+- Schedule-lost has exactly one home: `ADR-027` Rule 5, computed at read time. Nothing in CAP-09
+  persists it, so there is no cached copy that can disagree with a fresh revalidation. Should a cache
+  ever be introduced for latency, a fresh revalidation result always wins over a cached one and a
+  cached one is never presented as confirmed — `ADR-027` `FA3` is where that decision belongs.
+- The backfill in Rule 10 and the duplicate reconciliation in Rule 8 are one rollout, run once per
+  environment in that order: reconcile duplicates, create the index, backfill the replica, read the
+  readiness metric, enable the feature. Running them in a different order fails at step two.
 
 ## 7. Compliance Considerations
 
@@ -263,23 +409,32 @@ sequenceDiagram
 | `N2` | A delivery with no replicated customer id is excluded from every customer's list | `NFR-1`, Rule 4 | Insert a pre-replica delivery. Assert it appears for nobody |
 | `N3` | A delivery with no replicated date is excluded, and is not defaulted to today | `ASM-11`, Rule 4 | Insert a delivery with a null date. Assert exclusion and assert no date was written |
 | `N4` | The eligible-delivery read issues no cross-service call | `NFR-13` | Run the read with every outbound client stubbed to throw. Assert success |
-| `N5` | Applying the same order event twice leaves the replica identical | Rule 5 | Deliver the event twice. Assert a single, unchanged record and no duplicate history entry |
-| `N6` | An out-of-order event carrying an older delivery date does not roll the replica backwards | Rule 5 | Deliver newer then older. Assert the newer value survives |
-| `N7` | The routing key CAP-07 publishes and the key CAP-09 binds are the same string | `NFR-15`, `GAP-6` | Assert the bound key against the published key in one test, not two |
+| `N5` | Applying the same event twice — same `ScheduleRevision` — leaves the replica byte-identical and appends no second history row | Rule 5.4 | Deliver the event twice. Assert a single unchanged record and exactly one history row |
+| `N6` | An event carrying a **lower** `ScheduleRevision` is discarded, and an event carrying a **higher** one is applied **even when its delivery date is earlier in the calendar** | Rule 5.3, 5.5 | Two cases. (a) Apply revision 7, then deliver revision 5. Assert revision 7's values survive. (b) Apply revision 7 for the 20th, then deliver revision 8 for the 15th. Assert the 15th is recorded. Case (b) fails under any date-based staleness rule, which is the point of the test |
+| `N7` | For `order_delivery_date_changed`, the routing key CAP-07 publishes and the key CAP-09 binds are the same string, **and** every required `ADR-030` §5.2 `M4` payload field arrives with its value intact | `NFR-15`, `GAP-6`, `GAP-17`, `ADR-030` Rule 8 | One cross-boundary test asserting the key and the deserialised payload together. Remove `ScheduleRevision` from the publisher and assert the test fails |
 | `N8` | Instruction text above the bound is rejected at the edge with a named reason | `NFR-11` | Submit over-length text. Assert rejection and assert nothing was persisted |
 | `N9` | Instruction text never appears in a log line | `NFR-11` | Capture the log sink across a write. Assert the text is absent |
-| `N10` | A rescheduling history entry is never modified or removed by a later reschedule | `ASM-13`, Rule 7 | Reschedule three times. Assert three entries in order, all original values intact |
-| `N11` | A delivery whose order has two delivery documents does not produce two list rows | `R-27` | Insert two documents with one `OrderId`. Assert the list behaviour is defined, not incidental |
+| `N10` | A rescheduling history entry is never modified or removed by a later reschedule, and lives in its own collection | `ASM-13`, Rule 7 | Reschedule three times. Assert three rows in the history collection in order, all original values intact, and assert the delivery document carries no history array |
+| `N11` | An order cannot acquire a second delivery document, and `StartDelivery` on a failed delivery updates the existing aggregate | Rule 8, `R-27` | Attempt a second insert for one `OrderId`. Assert the unique index refuses it. Then `StartDelivery` a failed delivery and assert one document, transitioned, with its state-changed event emitted |
+| `N12` | A reschedule from the 20th to the 15th settles at the 15th everywhere | Rule 5.5, `DO2` target | End to end: confirm the move, let both events flow, assert CAP-07's authoritative date, CAP-09's replica and the customer-facing list all read the 15th. **This is the end-to-end form of `N6`(b)** |
+| `N13` | The history row and the delivery change commit together or not at all | Rule 7, `ADR-028` Rule 5 | Fail the history write. Assert the delivery change is not visible either |
+| `N14` | A repeated `RequestId` produces one outcome, one move and one history row | Rule 9, `NFR-7` | Submit the same reschedule request twice. Assert the second returns the first outcome, and assert one reservation move and one history row |
+| `N15` | The readiness metric counts active deliveries missing replica fields and orders holding more than one delivery document, and both are observable before the feature is enabled | Rule 10.3 | Seed known-bad records. Assert the published counts match. Assert the feature gate reads them |
+| `N16` | No persisted schedule-lost field exists on the delivery record | Rule 1 | Assert the document shape. A stored indicator is a defect, not an optimisation |
 
 ## 9. Relationship to the implementation pattern catalog
 
 Applies two existing patterns and extends one.
 
 - `patterns/integration/event-carried-reference-replica.md` — applied as recorded. The entry should
-  gain the staleness rule from Rule 5, which it does not currently state.
+  gain Rule 5's ordering rule, which it does not currently state, in the form it is stated here:
+  ordering is a publisher-supplied monotonic revision, never a domain value that happens to look
+  ordered. A replica keyed on a date is the generalisable version of the defect this revision fixed.
 - `patterns/integration/transactional-outbox-and-inbox-by-handler-decorator.md` — applied on the
-  consuming side. **The inbox decorator's de-duplication is the mechanism Rule 5 depends on; whether
-  it is active for CAP-09's configuration is `FA3`, not an assumption.**
+  consuming side, and **its limits are now recorded rather than relied on.** The decorator
+  de-duplicates message redelivery; Rule 9's `RequestId` is what covers the HTTP command path the
+  decorator does not reach (`R-15`). Whether the decorator is active for CAP-09's configuration is
+  `FA3` and still worth knowing — it is a second layer, not the mechanism.
 - `patterns/messaging/contract-blind-universal-message-subscription.md` — the pattern this record
   deliberately does not follow for the new path. The subscription is explicit and typed.
 
@@ -297,10 +452,18 @@ Applies two existing patterns and extends one.
 | E8 | At least one service runs its outbox with `disableTransactions: true` | `Availability/.../Api/appsettings.json:129`; `availability-service.md` §3.14 |
 | E9 | Routing-key and queue naming diverge in at least one existing binding | Catalog `GAP-6`; `ADR-003` |
 | E10 | No migration framework exists in any repository | `ADR-008`; `architecture-baseline.md` C8 |
+| E11 | Restarting a failed delivery by transitioning the existing aggregate — rather than inserting a second document — is the recorded remedy for `E5`, emitting the ordinary state-changed event under its own guard | Platform design catalogue, *Restart for Delivery*; `deliveries-service.md` §3.19 |
+| E12 | `Version` is not persisted on `DeliveryDocument`, so the replica has no ordering field today | `deliveries-service.md` §3.6; `ADR-028` §1 |
+| E13 | The inbox decorator does not cover the HTTP command path | `R-15`; `patterns/integration/transactional-outbox-and-inbox-by-handler-decorator.md` |
 
 ### 10.1 Documentation-versus-code conflicts
 
 None found for this record. `ADR-009` describes the replica pattern accurately, including its gap.
+
+One conflict **internal to this patch** was found and resolved on this revision: the first version of
+Rule 1 placed a schedule-lost indicator on the delivery record while `ADR-027` Rule 5 made
+schedule-lost read-time state that is reported and never mutated. Two homes, no rule saying which
+wins. Rule 1 now records no indicator and `ADR-027` Rule 5 is the single home.
 
 ## 11. Follow-Up Actions
 
@@ -313,32 +476,50 @@ section is the single place to change and these dates move with it; the mileston
 | # | Action | Owner | By |
 |---|--------|-------|-----|
 | `FA1` | **[ACTION NOW]** Decide the minimum acceptable detection for a stale replica before this ships. Full reconciliation is out of scope; a count-comparison check or an age alarm on the replicated date is not. Without one, a dropped message is permanently invisible (`R-26`) | Platform architect with the platform owner | **2026-12-05** — before `DO1` ships |
-| `FA2` | **[ACTION NOW]** Decide what the customer-facing list does when one order has two delivery documents — show one, show both, or refuse. Today the answer is "whichever Mongo returns first" (`R-27`) | Product owner with the `DO1` implementer | **2026-12-05** — before `DO1` ships |
+| `FA2` | **[ACTION NOW]** Count the orders that currently hold more than one delivery document, and decide per duplicate which document survives, so Rule 8's unique index can be created. The invariant is **decided** — one active delivery per order — so this is a data-reconciliation task with a known target, not an open design question (`R-27`) | `DO1` implementer with the product owner | **2026-11-21** — before `DO1` reaches a shared environment, since the index must exist before the list is enabled |
 | `FA3` | **[handled later by HLS]** Confirm, from CAP-09's configuration, whether the inbox decorator's de-duplication is actually active, and record the answer. Rule 5's idempotence is a handler obligation either way; this decides whether the decorator helps or is decorative | `DO1` implementer | **2026-10-24** — during `DO1` high-level design |
 | `FA4` | **[handled later by HLS]** Fix the instruction length bound as a number, and add the instruction field to the redaction set. `NFR-11` requires both; neither value exists yet | `DO3` implementer with the product owner | **2026-10-24** — during `DO3` high-level design |
-| `FA5` | **[handled later by DevOps]** Add consumer-lag and queue-depth signal for CAP-09's new queue. `ADR-021` records that the platform has none today, and this record gives CAP-09 its first queue | Platform owner | **2026-11-21** — before `DO1` reaches a shared environment |
+| `FA5` | **[ACTION NOW]** Add consumer-lag and queue-depth signal for CAP-09's new queue, and outbox depth-and-age signal for CAP-04 and CAP-07 (`R-23`, `INF-4`). `ADR-021` records the platform has none today. Without them the gap between `confirmed` and `settled` (§5.2) is unmeasurable, so nobody can tell a two-second convergence from a stuck queue — and `Rule 10`'s readiness metric has no delivery mechanism either. **Precondition for the shared environment**, not a task timed against it | Platform owner with DevOps | **2026-11-21** — before `DO1` reaches a shared environment |
+| `FA6` | **[ACTION NOW]** Build and publish Rule 10's readiness metric — active deliveries missing a replica field, and orders holding more than one delivery document — and agree the threshold each must reach before the feature is enabled per environment. The same instrument doubles as `FA1`'s staleness detector once the feature is live, so it is one piece of work serving two blockers | `DO1` implementer with the platform architect | **2026-11-21** — before `DO1` reaches a shared environment |
+| `FA7` | **[handled later by HLS]** Specify the backfill or replay that populates the replica for active orders and deliveries, including the cut-off that decides which records are in scope and how an unmappable record is counted. `ADR-025` `FA1` is the CAP-07 half of the same decision and the two must agree | `DO1` implementer with the platform owner | **2026-11-07** — during `DO1` low-level design |
+| `FA8` | **[handled later by HLS]** Size the history collection's growth per `ASM-13`'s full-retention requirement and record the collection-size threshold that triggers a retention conversation. Rule 7 removed the document ceiling, not the growth (`R-28`) | `DO3` implementer | **2026-11-07** — during `DO3` low-level design |
 
 ## Assumptions, Blockers & Open Questions
 
 ### Assumptions
 
-- **A1 ❓** CAP-07 publishes an order event carrying the customer id, the delivery date and the
-  reserved resource id at the point those values become true. The orders exchange and its published
-  events are observed ✅, but that a single event carries all three is a contract shape this record
-  requires and `ADR-030` fixes. If it turns out to need two events, Rule 5's staleness rule applies
-  per field rather than per message.
+- **A1 — resolved on this revision.** The event this record consumes is `order_delivery_date_changed`,
+  fixed by `ADR-030` §5.2 `M4`: one event carrying `OrderId`, `CustomerId`, the authoritative
+  `DeliveryDate`, `ReservedResourceId` and `ScheduleRevision`, published from CAP-07's handler to the
+  outbox in the same transaction as the `Order` write. It is no longer an assumption about a contract
+  shape; it is a contract, asserted by `N7`.
 - **A2 `[INFERRED]`** A delivery exists for an order by the time the customer can see it in the
   eligible list, because `StartDelivery` is what creates the delivery record ✅. A reschedule for an
   order with no delivery record yet is therefore not in `DO1`'s scope.
 
 ### Blockers
 
-- **B1 — `FA1` is a release blocker, not a record blocker.** The decision stands; shipping a
+- **B1 — `FA1` and `FA6` are release blockers, not record blockers.** The decision stands; shipping a
   customer-facing list fed by a replica with no staleness signal is a product risk that needs a named
-  owner's acceptance.
+  owner's acceptance. `FA6`'s readiness metric is the instrument that answers both.
+- **B2 — Rule 7's multi-document transaction requires `ADR-028` `FA3` to have been confirmed for the
+  environment.** A standalone `mongod` cannot start a transaction, and the delivery write plus history
+  row plus outbox row now commit together. The failure is at runtime, on the write path, in whichever
+  environment was not checked. Owner: DevOps with the `DO1` implementer, **2026-11-21** — before `DO1`
+  reaches a shared environment. `ADR-028` `FA3` is the action.
+- **B3 — Rule 8's unique index cannot be created until `FA2`'s duplicates are reconciled.** Index
+  creation fails on existing duplicate keys, so the ordering in §6.3 is not advisory. Owner: `DO1`
+  implementer, **2026-11-21** — before `DO1` reaches a shared environment.
 
 ### Open Questions
 
-- **Q1** Should the embedded rescheduling history move out of the delivery document once a retention
-  horizon is agreed? `ASM-13` forbids pruning, so the only other lever is where it is stored.
-  Platform architect, after the first release (`R-28`).
+- **Q1 — closed on this revision.** The rescheduling history moves out of the delivery document now,
+  not after a retention horizon is agreed (Rule 7). `ASM-13` forbids pruning, so the document ceiling
+  was a hard failure with an unknown trigger point; the storage decision did not depend on the
+  retention decision and did not need to wait for it. `R-28`'s accepted growth now applies to a
+  collection. `FA8` sizes it.
+- **Q2** Should a delivery read taken between `confirmed` and `settled` (§5.2) show the pending new
+  day alongside the old one, or only a pending-change marker? The data is available — `ADR-027`'s
+  revalidation knows the reservation's day — and it is a UI decision with a privacy dimension, since
+  the pending day is the customer's own. Product owner with the `DO2` implementer, during `DO2`
+  high-level design.
