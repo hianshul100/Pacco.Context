@@ -1,123 +1,521 @@
 # Repository: `Pacco.Web`
 
-`Pacco.Web` (also known as: Pacco Web) is an **empty repository**. It is in scope for this
-discovery because the product backlog lists it among the Pacco repositories, but it contains no
-source code, no manifest and no configuration.
+`Pacco.Web` is the Pacco platform's **standalone browser client**. It owns the browser presentation and browser-session experience currently implemented for sign-in and the role-aware Welcome/Landing screen.
 
-- **Repository:** `Pacco.Web`, path: `/` (repository root — no subdirectories exist)
-- **Base ref analysed:** `feature/12998/aidlc`
-- **Status: Unverifiable — Missing Source Evidence**
-
-> **Recorded purpose.** The repository's purpose is no longer unknown, even though its contents are
-> unchanged. `ADR-021` ([`../../adr/standalone-browser-client-and-browser-caller-edge-contract.md`](../../adr/standalone-browser-client-and-browser-caller-edge-contract.md))
-> names `Pacco.Web` the platform's **standalone browser client** and the sole owner of **CAP-17 Web
-> Presentation & Browser Session**: the Login page, the Welcome/Landing page, browser session
-> handling, role-aware UI behaviour, and every future Pacco browser surface. It runs as its own local
-> process beside the Docker Compose backend — never inside a backend image, never served by
-> Ntrada — and reaches the platform only through the local API Gateway at `http://localhost:5000`.
-> The `Unverifiable — Missing Source Evidence` status above still stands for the code, because no
-> code exists yet.
-
----
-
-## Contents of the repository, in full
-
-| Path | Content |
-|---|---|
-| `README.md` | A single line: `# Pacco.Web` |
-| `.git/` | Version control metadata |
-
-`git log` shows exactly one commit: `b3bf026 Initial commit`.
-
-There is no `src/`, no `tests/`, no `Dockerfile`, no `.travis.yml`, no `scripts/`, no `*.csproj`,
-no `*.sln`, no `package.json`, no configuration file of any kind, and no `LICENSE`.
+- **Repository:** `Pacco.Web`, path: `/`
+- **Base ref analysed:** `master`
+- **Commit analysed:** `697750256b7c211ce31943bab2a4192184c4f0ec`
+- **Local browser origin:** `http://localhost:5173`
+- **Gateway:** `http://localhost:5000`
 
 ---
 
 ## README vs repository
 
-`README.md` contains the text `# Pacco.Web` and nothing else. It makes **no claim** about purpose,
-technology, structure, endpoints or dependencies.
+`README.md` correctly identifies `Pacco.Web` as a standalone browser application that runs as its own local process alongside the Docker Compose backend. It states that the browser reaches the platform through one API Gateway URL and does not address backend services directly.
 
-- **Claimed in README, present on disk:** nothing — the README asserts nothing to confirm.
-- **Present on disk, absent from README:** nothing — the tree is empty apart from the README.
-- **Stale doc:** not applicable. A README with no claims cannot be stale or contradicted.
-- **Conflict between documentation and code:** none possible. There is no code.
+**Claimed in README, present on disk (confirmed):**
 
-**A related omission at platform level:** `Pacco/README.md` lists twelve repositories to clone and
-**`Pacco.Web` is not among them**. Nothing in `Pacco/services.yml`, `Pacco/prod-services.yml`,
-`Pacco/compose/*.yml`, or any `ntrada*.yml` gateway configuration references it either. The only
-document in the workspace that mentions this repository is the product backlog
-(issue **12998**, "Pacco - Discovery - Attempt-2"), which includes it in the discovery scope.
-**Scope mismatch — needs validation.** Recorded also in `repo-inventory.md` §5.
+- `Pacco.Web` is a standalone browser application.
+- Local frontend origin is `http://localhost:5173`.
+- Local API Gateway is `http://localhost:5000`.
+- Sign-in uses `POST /identity/sign-in`.
+- Runtime configuration is injected through `public/pacco-config.js`.
+- Browser session state is stored in `sessionStorage`.
+- Access-token expiry is derived from the JWT `exp` claim.
+- The refresh token is deliberately not retained.
+- User-facing sign-in failures come from a closed client-owned message set.
+- Current environment guidance is local-development only.
+
+**Present on disk, absent or incompletely described in README:**
+
+- `src/Router.tsx` now contains a protected `/welcome` route.
+- `src/features/welcome/` contains a complete role-aware Welcome/Landing implementation.
+- `RequireSession.tsx` protects authenticated routes.
+- `roleDecision.ts` centralises the Admin versus standard-user presentation decision.
+- `LogoutAction.tsx` implements client-side Logout.
+- Typed Login and Landing telemetry events exist in `src/platform/telemetry.ts`.
+- A substantial security negative-test suite exists under `tests/security/`.
+- A separate work-item 13652 TypeScript/Playwright automation suite exists under `tests/automation/13652/typescript-playwright/`.
+- Browser CORS, visual-fidelity and edge-conformance verification scripts are included.
+- Jest coverage has targeted 100% gates for selected security-sensitive modules.
+
+**Stale doc:** parts of `README.md` still describe the Welcome/Landing screen and Logout as future wave-2 work. The current repository now contains `WelcomeRoute.tsx`, `WelcomeCard.tsx`, `TopBar.tsx`, `LogoutAction.tsx`, and `RequireSession.tsx`. The README also says `/welcome` renders nothing, which no longer matches the current repository.
+
+**Unknown:** the non-local deployment model for this browser application. No Dev, QA, Staging or Production frontend hosting configuration exists in the repository.
 
 ---
 
-## Dimensions 1–14
+## 1. Primary purpose
 
-No conclusion below is inferred from the repository name. The name `Pacco.Web` suggests a web
-client, but a name is not evidence, and nothing in the tree, in any sibling repository, or in any
-platform configuration corroborates it. Every dimension is therefore recorded as
-**Unverifiable — Missing Source Evidence**.
+Provide Pacco's browser presentation layer and own browser-session behaviour.
 
-| # | Dimension | Finding |
+The current implementation covers:
+
+- one common Login screen;
+- credential submission through the API Gateway;
+- browser-session creation;
+- authenticated route protection;
+- session-expiry handling;
+- role-aware Welcome/Landing presentation;
+- client-side Logout.
+
+The repository does not currently provide the broader Pacco operational UI for Orders, Deliveries, Parcels, Vehicles, Customers, Pricing or Availability.
+
+## 2. Main runtime / service type
+
+React 19 single-page browser application written in TypeScript and built with Vite.
+
+It runs as a **standalone browser process**, not as an ASP.NET service, backend container, static content hosted inside another Pacco service, or content served by Ntrada/API Gateway.
+
+Primary runtime dependencies from `package.json`:
+
+- `react ^19.1.1`
+- `react-dom ^19.1.1`
+- `react-router-dom ^7.8.2`
+- TypeScript `~5.8.3`
+- Vite `^7.1.3`
+- Tailwind CSS `^3.4.17`
+- Node.js `>=20.19.0`
+
+Tooling includes Jest, React Testing Library, jest-axe, ESLint and Prettier.
+
+## 3. Key entrypoints
+
+- `src/main.tsx` — browser bootstrap; mounts `AppShell` into `#root`.
+- `src/AppShell.tsx` — application composition root; reads runtime configuration once, constructs the single `GatewayClient`, and installs `BrowserRouter`.
+- `src/Router.tsx` — route table and authenticated-route grouping.
+- `src/routes.ts` — central path constants.
+- `src/gateway/gatewayClient.ts` — the browser's only platform network client.
+- `public/pacco-config.js` — runtime-injected browser configuration.
+- `vite.config.ts` — local runtime/build configuration.
+
+Current route vocabulary:
+
+| Route | Behaviour |
+|---|---|
+| `/` | Shows Login when anonymous; redirects a live session to `/welcome` |
+| `/login` | Login screen |
+| `/welcome` | Protected role-aware Landing screen |
+| other | No application content |
+
+## 4. Important modules / packages
+
+| Area | Role |
+|---|---|
+| `src/features/login/` | Login form, validation, submit lock, sign-in orchestration and Login messages |
+| `src/features/welcome/` | Protected Landing page, role presentation, session guard and Logout |
+| `src/session/` | Browser-session model, persistence, JWT expiry parsing and error-message mapping |
+| `src/gateway/` | API Gateway client |
+| `src/platform/` | Local correlation, telemetry abstraction and redacted diagnostics |
+| `src/components/` | Shared Pacco presentation frame, logo/lockup and icons |
+| `src/config/` | Runtime application config and local dev-server origin |
+| `tests/` | Jest, integration, accessibility, security and cross-repository checks |
+| `tests/automation/13652/typescript-playwright/` | Separate browser/API/static/live-platform automation suite |
+
+Important files:
+
+| File | Responsibility |
+|---|---|
+| `features/login/LoginRoute.tsx` | Owns Login field values and page-level flow |
+| `features/login/useSignIn.ts` | Sole sign-in orchestrator and sole application call site of `SessionStore.write()` |
+| `features/welcome/RequireSession.tsx` | Authenticated route guard |
+| `features/welcome/roleDecision.ts` | Sole role interpretation point |
+| `features/welcome/LogoutAction.tsx` | Client-side Logout |
+| `session/sessionStore.ts` | `sessionStorage` persistence and liveness |
+| `session/jwt.ts` | Reads `exp` from the access token |
+| `session/errorMapper.ts` | Closed error classification |
+| `session/messageRegistry.ts` | Client-owned user-facing failure strings |
+| `gateway/gatewayClient.ts` | Browser → Gateway HTTP boundary |
+
+## 5. External integrations
+
+The Pacco API Gateway is the application's only runtime platform integration.
+
+Runtime configuration declares:
+
+```javascript
+window.__PACCO_CONFIG__ = {
+  gatewayBaseUrl: 'http://localhost:5000',
+  signInTimeoutMs: 15000,
+}
+```
+
+The browser currently calls only:
+
+```http
+POST /identity/sign-in
+```
+
+through the Gateway.
+
+No browser source directly addresses `identity-service`, `customers-service`, `orders-service`, `deliveries-service` or any other Pacco backend service.
+
+There is currently no call to `/identity/me`, refresh-token endpoints, access-token revocation, a Logout endpoint, or any protected Pacco business API.
+
+The user's role comes from the successful sign-in response, not from a subsequent identity lookup.
+
+### Browser / Gateway CORS
+
+The local browser origin is `http://localhost:5173`. The Gateway is expected to permit that exact origin. Repository tests and scripts cross-check the Gateway's `ntrada*.yml` CORS configuration when a Pacco.APIGateway checkout is available.
+
+### External browser analytics
+
+None currently wired. A typed telemetry abstraction exists, but no application bootstrap installs an external telemetry sink.
+
+## 6. Data stores / state
+
+There is **no backend database** in this repository. No SQL, MongoDB, Redis or server-side persistence client exists.
+
+The browser stores the authenticated session in:
+
+```text
+sessionStorage["pacco.session"]
+```
+
+The stored record is defined by `BrowserSession` and contains:
+
+- `accessToken`
+- `role`
+- `expiresAt`
+- optional `expiresRaw`
+
+Important persistence rules:
+
+- `role` is lower-cased on write;
+- an unknown role is retained rather than converted into `user` or `admin`;
+- `expiresAt` comes from the JWT `exp` claim;
+- malformed persisted records fail closed;
+- inaccessible browser storage is treated as no usable session;
+- password is never persisted;
+- refresh token is never persisted.
+
+`localStorage` is not used by application code.
+
+**Migration tool:** not applicable — browser storage contains one session record and no persistent domain data.
+
+## 7. Messaging / async / events
+
+`Pacco.Web` has **no RabbitMQ integration**.
+
+It publishes no Pacco commands directly, subscribes to no events, owns no exchange or queue, and has no inbox/outbox.
+
+Platform interaction is synchronous HTTP through the API Gateway.
+
+### Browser-local telemetry events
+
+Login events:
+
+- `login.viewed`
+- `login.validation_blocked`
+- `login.submitted`
+- `login.duplicate_suppressed`
+- `login.succeeded`
+- `login.failed`
+
+Landing events:
+
+- `landing.viewed`
+- `landing.blocked_unauthenticated`
+- `landing.session_expired`
+- `landing.logout`
+
+The telemetry types deliberately do not provide fields for password, access token, refresh token, raw backend error reason or raw role.
+
+**Important:** no runtime sink is installed by `main.tsx` or `AppShell.tsx`. With no sink, `Telemetry.emit()` discards the event.
+
+Browser-generated correlation IDs remain client-local and are deliberately not propagated to the Gateway as HTTP headers.
+
+## 8. APIs exposed / consumed
+
+**Exposed:** none. `Pacco.Web` is a browser SPA and does not expose a backend API.
+
+**Consumed:**
+
+| Method | Gateway route | Purpose |
 |---|---|---|
-| 1 | Primary purpose | **Unverifiable — Missing Source Evidence.** No code, no documentation, no configuration |
-| 2 | Main runtime / service type | **Unverifiable — Missing Source Evidence.** No runtime is present. There is no application, no process definition and no container image |
-| 3 | Key entrypoints | **None.** There is no executable file, no manifest, and no script in the repository |
-| 4 | Important modules / packages | **None.** No dependency manifest of any kind exists — no `*.csproj`, `package.json`, `requirements.txt`, `go.mod` or equivalent |
-| 5 | External integrations | **None observable.** No configuration file, no client code, no environment definition |
-| 6 | Data stores / state | **None observable.** No database configuration, no ORM or query mechanism, no migration tool, no table or collection names, and therefore no cross-domain coupling to assess |
-| 7 | Messaging / async / events | **None observable.** No broker configuration, no message definitions. This repository has **no entry in the platform message catalogue** (`Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json` lists eight exchanges and none belongs to it). Payload fields: not applicable — there are no messages |
-| 8 | APIs exposed / consumed | **None.** No routes are defined here, and no sibling repository or gateway configuration references this repository as a downstream or a caller |
-| 9 | Deployment / runtime clues | **None.** No `Dockerfile`, no `.travis.yml`, no `scripts/`, and no entry in `Pacco/services.yml`, `Pacco/prod-services.yml`, `Pacco/compose/services.yml` or `Pacco/compose/services-local.yml`. No port is allocated to it in the platform's 5000–5009 block |
-| 10 | Security / auth clues | **None observable.** No JWT configuration, no certificate, no Vault section, no ACL. Note that the API gateway's CORS policy (`allowedOrigins: ['*']` with `allowCredentials: true`) would apply to any browser client — including one that might eventually live here — but that is a fact about `Pacco.APIGateway`, not evidence about this repository |
-| 11 | Observability / logging / tracing | **None observable.** No logging, metrics or tracing configuration |
-| 12 | Architecture decisions and feature flags | **No files containing architecture decisions exist.** **Feature flag system: none detected** — consistent with the rest of the platform, where a workspace-wide search for LaunchDarkly, Unleash, Flagsmith, Split, `featureFlag`, `feature_flag` and `featureToggle` returned zero matches. **No flag keys exist** |
-| 13 | Open questions / ambiguities | Whether a Pacco web client exists elsewhere; whether this repository is a placeholder for planned work or an abandoned one; and why it is in the discovery scope but absent from the platform README's clone list. Carried into the Open Questions table below |
-| 14 | Frontend stack | **No frontend assets detected — checked:** the entire repository. Specifically, no `public/`, `public/js/`, `src/`, `resources/js/`, `static/`, `assets/`, `web/` or `wwwroot/` directory exists; there is no `package.json`, no bundler or framework configuration, and no view templates of any kind. The repository contains exactly one tracked file, `README.md`. **This is a substantive finding rather than an absence of investigation**: it means the only frontend code anywhere in the Pacco workspace is the SignalR diagnostic page in `Pacco.Services.Operations/src/Pacco.Services.Operations.Api/wwwroot/ui/`, so the platform as cloned has no customer-facing web client |
+| `POST` | `/identity/sign-in` | Authenticate the user |
+
+Request body:
+
+```json
+{
+  "email": "<identifier>",
+  "password": "<password>"
+}
+```
+
+The browser requires `accessToken` and `role` from a successful response. `expires`, if supplied, is retained only for diagnostics. `refreshToken` is deliberately not read or stored.
+
+Browser-side validation is limited to identifier non-empty after trimming and password non-empty after trimming. The field is labelled **Email or Username**, but the Gateway request property is named `email`; no username-resolution logic exists in this repository.
+
+## 9. Deployment / runtime clues
+
+- `vite.config.ts` serves the application locally from `localhost:5173`.
+- `strictPort: true` prevents Vite from silently selecting another port.
+- The same port is used by Vite preview.
+- Build output is `dist/`.
+- Source maps are disabled.
+- Runtime configuration is loaded from `public/pacco-config.js` before the application bundle.
+- `src/config/devServerOrigin.ts` is the source of truth for the local browser origin.
+- `tests/compose/devServerPort.test.ts` verifies that the chosen browser port does not collide with ports published by the Pacco Docker Compose backend.
+- Port `3000` is deliberately avoided because Pacco Compose uses it for Grafana.
+
+No application-level Dockerfile, Kubernetes manifest, nginx configuration, cloud hosting configuration, production deployment pipeline or Dev/QA/Staging/Production frontend origin matrix exists in the root application repository.
+
+A Dockerfile and GitHub workflow do exist inside the generated Playwright automation package under `tests/automation/13652/typescript-playwright/`, but those belong to the test suite rather than to the Pacco.Web application deployment.
+
+**CI observation:** the Playwright workflow is located at `tests/automation/13652/typescript-playwright/.github/workflows/test-automation-13652.yml` rather than repository-root `.github/workflows/`. **Needs validation** if automatic GitHub Actions execution is expected.
+
+## 10. Security / auth clues
+
+### Authentication boundary
+
+Authentication is performed through the Gateway:
+
+```text
+Browser
+  → Pacco.Web
+  → POST /identity/sign-in
+  → API Gateway
+  → Identity service
+```
+
+The sign-in request carries no cookie/ambient credential mode.
+
+### Password handling
+
+The password exists in Login component state while the user enters it and is passed as an argument to the sign-in operation.
+
+It is not written to browser storage, telemetry, diagnostics, URLs, accessibility attributes or hidden DOM elements. It is cleared after a settled submission.
+
+### Access token
+
+The access token is stored in the browser session. `src/session/jwt.ts` decodes the JWT payload only to read `exp`; it does **not** verify the JWT signature and does not make an authorisation decision.
+
+### Refresh token
+
+The browser deliberately does not retain the refresh token. There is no refresh-token field in `BrowserSession`, no refresh route, no renewal timer and no retry-on-401 token refresh.
+
+### Route protection
+
+`RequireSession.tsx` reads the current browser session, denies absent/unusable sessions, evaluates expiry on every guard decision, clears an expired session before redirecting, and returns the protected route only for a live session.
+
+The guard is a browser navigation control, not the platform's authorisation boundary.
+
+### Role handling
+
+`roleDecision.ts` is the only application module that interprets role values.
+
+```text
+admin → Admin presentation
+everything else → standard presentation
+```
+
+Unknown or unsupported role values cannot accidentally receive the Admin presentation.
+
+### Logout
+
+Logout consists of:
+
+```text
+SessionStore.clear()
+→ landing.logout telemetry event
+→ navigate /login
+```
+
+No revoke or Logout network call is made.
+
+**Security limitation:** clearing the browser session does not invalidate an already-issued access token at the platform level. A copied token can remain usable until its own expiry.
+
+### Error-data handling
+
+The browser does not display backend `reason` strings. For HTTP 400, it reads only `code`.
+
+Recognised codes `invalid_credentials` and `invalid_email` deliberately map to the same user-facing message:
+
+```text
+The email or password you entered is incorrect.
+```
+
+Other failures map to closed client-owned messages.
+
+## 11. Observability / logging / tracing
+
+### Diagnostics
+
+`src/platform/diagnostics.ts` sends developer diagnostics to `console.warn`. The diagnostic model contains only `stage`, `classification` and `correlationId`; no password, identifier, request body, token or backend reason can be passed through the diagnostic API.
+
+### Telemetry
+
+Typed Login and Landing telemetry exists in `src/platform/telemetry.ts`. No external analytics sink is configured by the normal application bootstrap, so events are discarded unless a sink is installed.
+
+### Correlation
+
+`src/platform/correlation.ts` generates a browser-local correlation ID using `crypto.randomUUID()` when available. Correlation is **not propagated to the Gateway**.
+
+### Tracing
+
+No frontend OpenTelemetry, Jaeger, Application Insights, Datadog, New Relic or equivalent tracing SDK is configured.
+
+## 12. Architecture-decision files and feature flags
+
+| File | Decision it records |
+|---|---|
+| `src/AppShell.tsx` | Browser configuration is read once and one Gateway client is created |
+| `src/Router.tsx` | Current route vocabulary and grouped authenticated-route guard |
+| `src/config/appConfig.ts` | One Gateway URL and sign-in timeout; runtime-injected configuration |
+| `src/config/devServerOrigin.ts` | Exact local browser origin is `http://localhost:5173` |
+| `src/gateway/gatewayClient.ts` | Browser reaches Pacco only through the API Gateway |
+| `src/features/login/useSignIn.ts` | Sign-in state machine, submit lock and sole successful session-write path |
+| `src/session/sessionStore.ts` | Browser session is tab-scoped `sessionStorage` state |
+| `src/session/jwt.ts` | Browser lifetime comes from JWT `exp` |
+| `src/session/errorMapper.ts`, `messageRegistry.ts` | Failure presentation is client-owned and backend reason text is not rendered |
+| `src/features/welcome/RequireSession.tsx` | Protected routes require a live session |
+| `src/features/welcome/roleDecision.ts` | Admin is an explicit allow-list |
+| `src/features/welcome/LogoutAction.tsx` | Logout is local browser-session discard only |
+| `tailwind.config.js`, `src/index.css` | Current design-token foundation is approximated from supplied static references |
+
+**Feature flag system:** **none detected.** No LaunchDarkly, Unleash, Flagsmith, Split or in-house runtime feature-toggle mechanism appears in `package.json` or the application source. There are therefore **no flag keys to list**.
+
+## 13. Open questions / ambiguities
+
+1. Whether Login truly supports **Username**. The field is labelled `Email or Username`, but `gatewayClient.ts` sends a property named `email` and there is no username-resolution logic in this repository.
+2. Where the typed Login/Landing telemetry is intended to be sent. The event abstraction exists, but no production sink is installed.
+3. Whether the nested Playwright GitHub Actions workflow is meant to execute automatically; it is not under repository-root `.github/workflows/`.
+4. What the non-local hosting/deployment model for `Pacco.Web` will be.
+5. When the approved style assets named by the architecture will replace the currently approximated Tailwind design tokens.
+6. When authenticated business APIs will be added to the Gateway client. The browser stores an access token today, but the current Welcome page makes no authenticated API request.
+7. Whether `README.md` will be refreshed now that wave-2 Welcome/Landing and Logout are implemented.
+
+## 14. Frontend stack
+
+**Frontend assets are present and constitute the primary purpose of this repository.**
+
+### Framework
+
+- React 19
+- React DOM
+- React Router
+- TypeScript
+- Vite
+- Tailwind CSS
+
+### Main browser features
+
+Login:
+
+- Pacco branded Login screen;
+- Email/Username field;
+- password field;
+- password show/hide control;
+- required-field validation;
+- in-flight submit lock;
+- processing state;
+- authentication failure messages;
+- session-expiry notice;
+- post-login navigation.
+
+Landing:
+
+- protected `/welcome` route;
+- Admin presentation: `Welcome to Admin Area`;
+- standard presentation: `Welcome`;
+- role indicator;
+- Logout;
+- role allow-list;
+- session-expiry redirect.
+
+### Accessibility
+
+The repository contains visible label associations, `aria-invalid`, `aria-describedby`, `role="alert"`, `role="status"`, password-toggle accessible labels, focus movement after route transition, keyboard-operable controls, visible focus styles, and responsive behaviour.
+
+Jest includes `jest-axe` tests for Login and Welcome. The Playwright suite adds browser-level accessibility, keyboard, zoom and contrast test cases.
+
+### Styling
+
+`tailwind.config.js` contains semantic Pacco design tokens for brand, ink, surfaces, borders, danger, notices, decorative arcs, radii, card shadow and layout widths.
+
+The source explicitly labels the current design foundation as **approximated**, because the expected canonical `STYLE_README.md` and `pacco-material-you.css` assets are not present in the analysed workspace.
+
+### Design references
+
+Committed reference files include:
+
+- `docs/design-reference/01_pacco-logo-1.png`
+- `docs/design-reference/02_login-page-ux.png`
+- `docs/design-reference/03_welcome-page-ux.png`
+
+Application image assets include:
+
+- `src/assets/office-background.png`
+- `src/assets/pacco-logo.png`
+- `src/assets/pacco-mark.png`
+- `src/assets/pacco-wordmark.png`
 
 ---
 
 ## Evidence
 
-| Fact | Evidence |
+| Fact | File |
 |---|---|
-| The repository contains exactly one tracked file | Directory listing of the clone root: `README.md` and `.git/` only |
-| The README asserts nothing | `README.md` — single line `# Pacco.Web` |
-| The repository has one commit | `git log` → `b3bf026 Initial commit` |
-| No projects, no build, no deployment definition | Absence of `*.csproj`, `*.sln`, `Dockerfile`, `.travis.yml`, `scripts/`, `package.json` in the clone |
-| Not in the platform clone list | `../hianshul100_Pacco/README.md` |
-| Not in any deployment manifest | `../hianshul100_Pacco/services.yml`, `../hianshul100_Pacco/prod-services.yml`, `../hianshul100_Pacco/compose/services.yml`, `../hianshul100_Pacco/compose/services-local.yml` |
-| Not routed at the platform edge | `../hianshul100_Pacco.APIGateway/src/Pacco.APIGateway/ntrada.yml`, `ntrada.docker.yml`, `ntrada-async.yml`, `ntrada-async.docker.yml` |
-| Not in the platform message catalogue | `../hianshul100_Pacco.Services.Operations/src/Pacco.Services.Operations.Api/messages.json` |
-| In scope per the backlog | `.attachments/01_product_backlog_20260903_170135_37cf143b.xlsx`, issue 12998 |
+| Browser bootstrap | `src/main.tsx` |
+| Application composition and Gateway-client construction | `src/AppShell.tsx` |
+| Browser route table | `src/Router.tsx`, `src/routes.ts` |
+| Runtime Gateway configuration | `public/pacco-config.js`, `src/config/appConfig.ts` |
+| Local browser origin | `src/config/devServerOrigin.ts`, `vite.config.ts` |
+| Sign-in HTTP contract | `src/gateway/gatewayClient.ts` |
+| Login page flow | `src/features/login/LoginRoute.tsx`, `useSignIn.ts` |
+| Login presentation | `src/features/login/LoginCard.tsx`, `IdentifierField.tsx`, `PasswordField.tsx` |
+| Browser session model | `src/session/browserSession.ts` |
+| Session persistence and liveness | `src/session/sessionStore.ts` |
+| JWT expiry decoding | `src/session/jwt.ts` |
+| Closed failure mapping | `src/session/errorMapper.ts`, `messageRegistry.ts` |
+| Protected route | `src/features/welcome/RequireSession.tsx` |
+| Role-aware Landing | `src/features/welcome/WelcomeRoute.tsx`, `WelcomeCard.tsx`, `roleDecision.ts` |
+| Client-side Logout | `src/features/welcome/LogoutAction.tsx` |
+| Browser-local telemetry | `src/platform/telemetry.ts` |
+| Browser-local correlation | `src/platform/correlation.ts` |
+| Redacted diagnostics | `src/platform/diagnostics.ts` |
+| Design tokens | `tailwind.config.js`, `src/index.css` |
+| Unit/integration/accessibility/security tests | `tests/` |
+| Browser automation | `tests/automation/13652/typescript-playwright/` |
+| CORS browser verification | `scripts/cors-browser-check.mjs` |
+| Edge conformance | `scripts/edge-conformance-check.mjs` |
+| Visual fidelity | `scripts/visual-fidelity-check.mjs` |
+| Design approximation record | `docs/DESIGN_APPROXIMATION.md` |
+| CORS verification record | `docs/CORS_VERIFICATION.md` |
+| Build and package versions | `package.json` |
 
 ---
 
 ## Assumptions, Blockers & Open Questions
 
 > [!IMPORTANT]
-> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** (a human must decide or confirm it before this work can safely proceed) or **[handled later by <stage>]** (a named later stage owns and will prove it) — read the tags first to see what, if anything, is yours to act on.
+> This document contains unresolved items that require attention before or during implementation. Review and resolve before merging downstream artifacts. Each item below is tagged **[ACTION NOW]** or **[handled later by <stage>]** where appropriate.
 
 ### Assumptions
 
 | # | Assumption | Rationale | Impact if Wrong | Validation Path |
 |---|------------|-----------|-----------------|-----------------|
-| A1 | The clone provided for this discovery reflects the repository's real contents on the analysed branch | The working tree and `git log` agree: one commit, one file. Nothing suggests a partial or shallow clone | If content exists on another branch or was never pushed to this remote, an entire component of the platform is missing from this inventory | Check the repository's other branches and its remote directly |
-| A2 | No other repository in the workspace depends on this one | No sibling repository, configuration file, compose stack, process manifest or gateway route references `Pacco.Web` in any form | If a dependency exists that this search did not surface, some part of the platform would be broken or incomplete without it | Search any deployment or client configuration held outside this workspace |
-| A3 | The repository name is not evidence of its intended purpose | A name is not a specification, and nothing in the workspace corroborates a web client | Recording a purpose inferred from the name alone would put an unverified component into the architecture picture | Ask the platform owner what this repository was created for |
+| A1 | The API Gateway remains the only allowed platform endpoint for browser code | `GatewayClient` contains one Gateway URL and no backend service URL; this is reinforced by tests | A future feature could bypass edge authentication, routing and CORS assumptions | Keep future browser network operations inside the Gateway client and retain static checks |
+| A2 | The `role` returned by the sign-in `AuthDto` is the authoritative input for the current Landing presentation | No `/identity/me` request exists; `useSignIn` stores the response role and `roleDecision.ts` consumes it | A different authoritative identity source could make the Landing presentation stale or incorrect | Confirm with Identity/Gateway owners before adding richer role-dependent UI |
+| A3 | Logout is intentionally a browser-only session discard | `LogoutAction.tsx` makes no network request and source/tests explicitly preserve the already-issued token | If server-side revocation is required, current Logout does not satisfy it | Confirm expected Logout semantics with platform security owner |
 
 ### Blockers
 
 | # | Blocker | Blocks | Owner | Resolution Path | Target Date |
 |---|---------|--------|-------|-----------------|-------------|
-| B1 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** No Pacco web client exists in any repository, given or withheld, and this is not an abandoned placeholder. It is the platform's client repository, and it stays in scope. The inventory is therefore not missing a customer-facing surface, and the gateway has no unexamined browser consumer. The repository still holds no code, so nothing about its internals can be analysed and this summary stays `Unverifiable — Missing Source Evidence` until code lands | — | Platform owner | — | Closed |
+| B1 | **[handled later by deployment architecture]** No Dev/QA/Staging/Production frontend hosting model exists | Deploying Pacco.Web outside local development | Platform/DevOps | Define hosting, environment configuration, DNS and deployment pipeline | TBD |
+| B2 | **[ACTION NOW if visual foundation must be considered final]** Approved Pacco style assets named by the architecture are absent; current tokens are explicitly approximated | Treating current Tailwind tokens as the canonical Pacco design system | UX / Frontend architecture | Supply the canonical style assets or formally approve the current design-token set | TBD |
+| B3 | **[ACTION NOW if Playwright CI is expected]** The generated GitHub Actions workflow is nested below `tests/automation/...` rather than repository-root `.github/workflows/` | Automatic execution of the Playwright suite by GitHub Actions | Test automation / DevOps | Wire the suite into repository-level CI | TBD |
 
 ### Open Questions
 
 | # | Question | Why It Matters | Proposed Answer (if any) | Decision Owner |
 |---|----------|----------------|--------------------------|----------------|
-| Q1 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021`).** Planned, and to be built here. This is a gap to fill, not a repository to retire. Work item 13652 (`DO1`, `DO2`) is the first delivery into it: a Login screen and a role-aware Welcome/Landing screen | — | — | Platform owner |
-| Q2 | **[ACTION NOW]** Why is this repository in the discovery scope but absent from the platform README's clone list? | The two sources disagree about what constitutes the Pacco platform. Until that is settled, the boundary of this inventory rests on the backlog rather than on anything the code confirms | The backlog scope may be broader than the platform README, or the README may simply be out of date | Platform owner |
-| Q3 | **RESOLVED 2026-09-22 by `architecture_evolution_generation` (`ADR-021` §5 rules 3 and 4).** The access path is `Browser → Pacco.Web → local API Gateway at http://localhost:5000 → services in Docker Compose`. The client is configured with that one gateway URL and with no per-service URL, so it cannot inherit the SignalR harness's direct-to-service addressing. The wildcard origin is replaced by the exact `Pacco.Web` local origin in all four `ntrada*.yml` files with `allowCredentials: true` retained. The gateway's sync-versus-async mode does not gate this: `POST /identity/sign-in` is an identical anonymous downstream proxy in both. Two follow-ons remain open — the exact local origin is not yet fixed, and which configuration file each environment loads is still unrecorded (`ADR-021` B1 and B2) | — | — | Platform architect |
+| Q1 | **[ACTION NOW]** Does Pacco authentication support Username as well as Email? | The UI explicitly says `Email or Username`, but the request contract is `{ email, password }` and no username resolution exists in this client | Either confirm the Identity endpoint accepts username values in `email`, or change the visible label to Email | Product + Identity owner |
+| Q2 | **[handled later by observability architecture]** Where should `login.*` and `landing.*` telemetry be sent? | The client defines useful typed telemetry but installs no runtime sink, so events disappear in normal execution | Connect the abstraction to the selected browser observability/analytics platform | Platform architect |
+| Q3 | **[ACTION NOW]** Should `README.md` be updated after wave 2? | It still says `/welcome` is empty and Logout is future work even though both are implemented | Yes — align the runbook with the current code | Pacco.Web owner |
+| Q4 | **[handled later by deployment architecture]** What hosts Pacco.Web outside local development? | No production deployment artefact or environment-specific origin exists | Define when non-local frontend environments are introduced | Platform/DevOps |
+| Q5 | **[handled later by frontend architecture]** How should future authenticated business API calls attach the access token? | The access token is persisted today, but the current `GatewayClient` only performs anonymous sign-in and never sends `Authorization: Bearer ...` | Extend the single Gateway-client boundary when the first authenticated business surface is implemented | Frontend architect |
